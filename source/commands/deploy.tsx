@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, Box, Text} from 'ink';
+import {render, Box, Text, useInput} from 'ink';
 import {type Command} from './types.js';
 import {StatusIndicator} from '../components/StatusIndicator.js';
 import {deployApp, deployProduction} from '../utils/sitevision-api.js';
@@ -19,6 +19,7 @@ interface DeployScreenProps {
 	production: boolean;
 	activate: boolean;
 	signingPassword?: string;
+	onBack?: () => void;
 }
 
 type DeployStatus = 'deploying' | 'success' | 'error';
@@ -30,7 +31,7 @@ interface DeployState {
 	error?: string;
 }
 
-function DeployScreen({
+export function DeployScreen({
 	projectRoot,
 	manifest,
 	devProperties,
@@ -38,10 +39,17 @@ function DeployScreen({
 	production,
 	activate,
 	signingPassword,
+	onBack,
 }: DeployScreenProps) {
 	const [state, setState] = React.useState<DeployState>({
 		status: 'deploying',
 		message: production ? 'Deploying to production...' : 'Deploying to dev...',
+	});
+
+	useInput((input, key) => {
+		if (onBack && (key.escape || input === 'q') && state.status !== 'deploying') {
+			onBack();
+		}
 	});
 
 	React.useEffect(() => {
@@ -162,6 +170,12 @@ function DeployScreen({
 			{state.status === 'error' && state.error && (
 				<Box flexDirection="column" marginTop={1}>
 					<Text color="red">{state.error}</Text>
+				</Box>
+			)}
+
+			{onBack && state.status !== 'deploying' && (
+				<Box marginTop={1}>
+					<Text dimColor>Press q or Esc to return to menu</Text>
 				</Box>
 			)}
 		</Box>

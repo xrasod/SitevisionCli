@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, Box, Text} from 'ink';
+import {render, Box, Text, useInput} from 'ink';
 import {type Command} from './types.js';
 import {StatusIndicator} from '../components/StatusIndicator.js';
 import {signApp} from '../utils/sitevision-api.js';
@@ -16,6 +16,7 @@ interface SignScreenProps {
 	manifest: SitevisionManifest;
 	devProperties: DevProperties;
 	password: string;
+	onBack?: () => void;
 }
 
 type SignStatus = 'signing' | 'success' | 'error';
@@ -28,10 +29,16 @@ interface SignState {
 	error?: string;
 }
 
-function SignScreen({projectRoot, manifest, devProperties, password}: SignScreenProps) {
+export function SignScreen({projectRoot, manifest, devProperties, password, onBack}: SignScreenProps) {
 	const [state, setState] = React.useState<SignState>({
 		status: 'signing',
 		message: 'Signing app via developer.sitevision.se...',
+	});
+
+	useInput((input, key) => {
+		if (onBack && (key.escape || input === 'q') && state.status !== 'signing') {
+			onBack();
+		}
 	});
 
 	React.useEffect(() => {
@@ -110,6 +117,12 @@ function SignScreen({projectRoot, manifest, devProperties, password}: SignScreen
 			{state.status === 'error' && state.error && (
 				<Box flexDirection="column" marginTop={1}>
 					<Text color="red">{state.error}</Text>
+				</Box>
+			)}
+
+			{onBack && state.status !== 'signing' && (
+				<Box marginTop={1}>
+					<Text dimColor>Press q or Esc to return to menu</Text>
 				</Box>
 			)}
 		</Box>

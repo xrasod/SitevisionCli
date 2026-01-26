@@ -13,7 +13,13 @@ export function ProcessOutputComponent({runner}: Props) {
 
 	useEffect(() => {
 		const handleOutput = (output: ProcessOutput) => {
-			setOutputs((prev) => [...prev, output]);
+			setOutputs(prev => {
+				const newOutputs = [...prev, output];
+				if (newOutputs.length > 100) {
+					return newOutputs.slice(newOutputs.length - 100);
+				}
+				return newOutputs;
+			});
 		};
 
 		const handleExit = (code: number) => {

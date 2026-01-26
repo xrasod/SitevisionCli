@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, Box, Text} from 'ink';
+import {render, Box, Text, useInput} from 'ink';
 import {type Command} from './types.js';
 import {StatusIndicator} from '../components/StatusIndicator.js';
 import {WebpackRunner} from '../utils/webpack-runner.js';
@@ -22,6 +22,7 @@ interface BuildScreenProps {
 	projectRoot: string;
 	manifest: SitevisionManifest;
 	createZip?: boolean;
+	onBack?: () => void;
 }
 
 type BuildStatus = 'cleaning' | 'building' | 'copying' | 'zipping' | 'success' | 'error';
@@ -35,10 +36,16 @@ interface BuildState {
 	error?: string;
 }
 
-function BuildScreen({projectRoot, manifest, createZip = true}: BuildScreenProps) {
+export function BuildScreen({projectRoot, manifest, createZip = true, onBack}: BuildScreenProps) {
 	const [state, setState] = React.useState<BuildState>({
 		status: 'cleaning',
 		message: 'Cleaning build directory...',
+	});
+
+	useInput((input, key) => {
+		if (onBack && (key.escape || input === 'q') && (state.status === 'success' || state.status === 'error')) {
+			onBack();
+		}
 	});
 
 	const isBundled = isBundledApp(manifest);
@@ -212,6 +219,12 @@ function BuildScreen({projectRoot, manifest, createZip = true}: BuildScreenProps
 			{state.status === 'error' && state.error && (
 				<Box flexDirection="column" marginTop={1}>
 					<Text color="red">{state.error}</Text>
+				</Box>
+			)}
+
+			{onBack && (state.status === 'success' || state.status === 'error') && (
+				<Box marginTop={1}>
+					<Text dimColor>Press q or Esc to return to menu</Text>
 				</Box>
 			)}
 		</Box>

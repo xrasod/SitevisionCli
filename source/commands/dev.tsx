@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, Box, Text, useApp} from 'ink';
+import {render, Box, Text, useApp, useInput} from 'ink';
 import {type Command} from './types.js';
 import {StatusIndicator} from '../components/StatusIndicator.js';
 import {WebpackRunner} from '../utils/webpack-runner.js';
@@ -25,6 +25,7 @@ interface DevScreenProps {
 	devProperties: DevProperties;
 	signed: boolean;
 	signingCredentials?: SigningCredentials;
+	onBack?: () => void;
 }
 
 type DevStatus = 'initializing' | 'watching' | 'building' | 'signing' | 'deploying' | 'ready' | 'error';
@@ -38,12 +39,13 @@ interface DevState {
 	webpackReady: boolean;
 }
 
-function DevScreen({
+export function DevScreen({
 	projectRoot,
 	manifest,
 	devProperties,
 	signed,
 	signingCredentials,
+	onBack,
 }: DevScreenProps) {
 	const {exit} = useApp();
 	const [state, setState] = React.useState<DevState>({
@@ -51,6 +53,12 @@ function DevScreen({
 		message: 'Starting webpack watch...',
 		buildCount: 0,
 		webpackReady: false,
+	});
+
+	useInput((input, key) => {
+		if (onBack && (key.escape || input === 'q')) {
+			onBack();
+		}
 	});
 
 	const webpackRunnerRef = React.useRef<WebpackRunner | null>(null);
@@ -315,7 +323,11 @@ function DevScreen({
 			)}
 
 			<Box marginTop={1}>
-				<Text dimColor>Press Ctrl+C to stop</Text>
+				{onBack ? (
+					<Text dimColor>Press q or Esc to return to menu (Ctrl+C to stop process)</Text>
+				) : (
+					<Text dimColor>Press Ctrl+C to stop</Text>
+				)}
 			</Box>
 		</Box>
 	);

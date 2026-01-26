@@ -36,31 +36,37 @@ export class ProcessRunner extends EventEmitter {
 
 			// Only capture output if not in interactive mode
 			if (!this.interactive) {
-				this.process.stdout?.on('data', (data) => {
+				this.process.stdout?.on('data', data => {
 					const output: ProcessOutput = {
 						type: 'stdout',
 						data: data.toString(),
 					};
 					this.output.push(output);
+					if (this.output.length > 1000) {
+						this.output.shift();
+					}
 					this.emit('output', output);
 				});
 
-				this.process.stderr?.on('data', (data) => {
+				this.process.stderr?.on('data', data => {
 					const output: ProcessOutput = {
 						type: 'stderr',
 						data: data.toString(),
 					};
 					this.output.push(output);
+					if (this.output.length > 1000) {
+						this.output.shift();
+					}
 					this.emit('output', output);
 				});
 			}
 
-			this.process.on('error', (error) => {
+			this.process.on('error', error => {
 				this.emit('error', error);
 				reject(error);
 			});
 
-			this.process.on('close', (code) => {
+			this.process.on('close', code => {
 				const exitCode = code ?? 0;
 				this.emit('exit', exitCode);
 
@@ -110,6 +116,12 @@ export function runNpmScript(
 	projectRoot?: string,
 	customEnv?: Record<string, string>,
 ): ProcessRunner {
-	const runner = new ProcessRunner('npm', ['run', scriptName, ...args], projectRoot, false, customEnv);
+	const runner = new ProcessRunner(
+		'npm',
+		['run', scriptName, ...args],
+		projectRoot,
+		false,
+		customEnv,
+	);
 	return runner;
 }
