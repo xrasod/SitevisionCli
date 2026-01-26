@@ -8,6 +8,7 @@ import {DevScreen} from './commands/dev.js';
 import {BuildScreen} from './commands/build.js';
 import {DeployScreen} from './commands/deploy.js';
 import {SignScreen} from './commands/sign.js';
+import {SigningPropertiesForm} from './components/SigningPropertiesForm.js';
 
 type Props = {
 	project: ProjectInfo;
@@ -21,7 +22,8 @@ type AppState =
 	| 'dev'
 	| 'build'
 	| 'deploy'
-	| 'sign';
+	| 'sign'
+	| 'setup-signing';
 
 export default function App({project}: Props) {
 	const [state, setState] = useState<AppState>('setup');
@@ -43,6 +45,9 @@ export default function App({project}: Props) {
 		switch (command) {
 			case 'info':
 				setState('info');
+				break;
+			case 'setup-signing':
+				setState('setup-signing');
 				break;
 			case 'dev':
 				setState('dev');
@@ -108,11 +113,11 @@ export default function App({project}: Props) {
 				signed={currentCommand === 'dev-signed'}
 				onBack={() => setState('menu')}
 				signingCredentials={
-					currentCommand === 'dev-signed'
+					currentCommand === 'dev-signed' && project.devProperties?.signingUsername
 						? {
-								username: project.devProperties!.signingUsername!,
+								username: project.devProperties.signingUsername,
 								password: signingPassword,
-								certificateName: project.devProperties!.certificateName,
+								certificateName: project.devProperties.certificateName,
 						  }
 						: undefined
 				}
@@ -153,6 +158,21 @@ export default function App({project}: Props) {
 				production={currentCommand === 'deploy-production'}
 				activate={currentCommand === 'deploy-production'}
 				onBack={() => setState('menu')}
+			/>
+		);
+	}
+
+	if (state === 'setup-signing') {
+		return (
+			<SigningPropertiesForm
+				projectRoot={project.root}
+				onComplete={() => {
+					// We can't easily update project info here without full reload,
+					// but since we are just returning to menu, it's fine.
+					// The user might need to restart CLI or we implement a reload mechanism.
+					setState('menu');
+				}}
+				onCancel={() => setState('menu')}
 			/>
 		);
 	}

@@ -309,11 +309,13 @@ export function DevScreen({
 			)}
 
 			{/* Target info */}
-			<Box marginLeft={2} marginBottom={1}>
-				<Text dimColor>
-					Target: {devProperties.domain}/{devProperties.siteName}/{devProperties.addonName}
-				</Text>
-			</Box>
+			{devProperties && (
+				<Box marginLeft={2} marginBottom={1}>
+					<Text dimColor>
+						Target: {devProperties.domain}/{devProperties.siteName}/{devProperties.addonName}
+					</Text>
+				</Box>
+			)}
 
 			{/* Error display */}
 			{state.status === 'error' && state.error && (

@@ -134,6 +134,10 @@ export interface PackageJson {
 	dependencies?: Record<string, string>;
 	devDependencies?: Record<string, string>;
 	sitevision_scripts_properties?: SitevisionScriptsProperties;
+	developmentDomain?: string;
+	productionDomain?: string;
+	addonName?: string;
+	siteName?: string;
 }
 
 // =============================================================================

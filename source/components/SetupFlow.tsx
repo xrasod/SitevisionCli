@@ -1,9 +1,11 @@
 import React, {useState, useEffect} from 'react';
-import {Box, Text, useInput, useApp} from 'ink';
+import {Box, Text, useInput} from 'ink';
 import {type ProjectInfo, getAppType} from '../utils/project-detection.js';
 import {ProcessRunner} from '../utils/process-runner.js';
 import {ProcessOutputComponent} from './ProcessOutput.js';
 import {StatusIndicator} from './StatusIndicator.js';
+import {DevPropertiesForm} from './DevPropertiesForm.js';
+import {SigningPropertiesForm} from './SigningPropertiesForm.js';
 
 interface Props {
 	project: ProjectInfo;
@@ -16,13 +18,14 @@ type SetupStep =
 	| 'running-npm-install'
 	| 'check-dev-properties'
 	| 'confirm-dev-setup'
+	| 'setup-dev-properties'
 	| 'check-signing-properties'
 	| 'confirm-signing-setup'
+	| 'setup-signing-properties'
 	| 'show-info'
 	| 'complete';
 
 export function SetupFlow({project, onComplete}: Props) {
-	const {exit} = useApp();
 	const [step, setStep] = useState<SetupStep>('check-node-modules');
 	const [runner, setRunner] = useState<any>(null);
 	const [commandStatus, setCommandStatus] = useState<'running' | 'success' | 'error'>('running');
@@ -52,7 +55,7 @@ export function SetupFlow({project, onComplete}: Props) {
 			// Auto-advance to menu after displaying info
 			onComplete();
 		}
-	}, [step, project.hasNodeModules, project.hasDevProperties, project.hasSigningProperties, onComplete]);
+	}, [step, project, onComplete]); // Removed specific props from dependency array to allow re-check after updates
 
 	useInput((input) => {
 		if (step === 'confirm-npm-install') {
@@ -65,8 +68,8 @@ export function SetupFlow({project, onComplete}: Props) {
 				newRunner.on('exit', (code: number) => {
 					if (code === 0) {
 						setCommandStatus('success');
-						// Reload project info would be needed here
-						// For now, just move forward
+						// Force project info refresh would be ideal here
+						// For now, assume success and move on
 						setTimeout(() => setStep('check-dev-properties'), 1000);
 					} else {
 						setCommandStatus('error');
@@ -79,40 +82,51 @@ export function SetupFlow({project, onComplete}: Props) {
 			}
 		} else if (step === 'confirm-dev-setup') {
 			if (input === 'y' || input === 'Y') {
-				// Exit Ink completely to allow interactive input
-				exit();
-
-				// Run setup-dev-properties directly
-				const newRunner = new ProcessRunner('npm', ['run', 'setup-dev-properties'], project.root, true);
-				newRunner.run().then(() => {
-					console.log('\nSetup complete! Run "svc" again to continue.');
-					process.exit(0);
-				}).catch(() => {
-					console.log('\nSetup failed. Please try again.');
-					process.exit(1);
-				});
+				setStep('setup-dev-properties');
 			} else if (input === 'n' || input === 'N') {
 				setStep('check-signing-properties');
 			}
 		} else if (step === 'confirm-signing-setup') {
 			if (input === 'y' || input === 'Y') {
-				// Exit Ink completely to allow interactive input
-				exit();
-
-				// Run svc setup-signing command directly
-				const newRunner = new ProcessRunner('svc', ['setup-signing'], project.root, true);
-				newRunner.run().then(() => {
-					console.log('\nRun "svc" again to continue.');
-					process.exit(0);
-				}).catch(() => {
-					console.log('\nSigning setup failed. Please try again.');
-					process.exit(1);
-				});
+				setStep('setup-signing-properties');
 			} else if (input === 'n' || input === 'N') {
 				setStep('show-info');
 			}
 		}
 	});
+
+	// Setup Dev Properties Form
+	if (step === 'setup-dev-properties') {
+		return (
+			<DevPropertiesForm
+				projectRoot={project.root}
+				initialProperties={project.devProperties}
+				packageJson={project.packageJson}
+				onComplete={() => {
+					// Manually update project state locally if possible, or just proceed
+					// Since we can't easily update 'project' prop from here without reloading,
+					// we just move to next step. The file is written.
+					project.hasDevProperties = true; // Optimization/Hack to pass check
+					setStep('check-signing-properties');
+				}}
+				onCancel={() => setStep('check-signing-properties')}
+			/>
+		);
+	}
+
+	// Setup Signing Properties Form
+	if (step === 'setup-signing-properties') {
+		return (
+			<SigningPropertiesForm
+				projectRoot={project.root}
+				onComplete={() => {
+					project.hasSigningProperties = true; // Optimization/Hack
+					setStep('show-info');
+				}}
+				onCancel={() => setStep('show-info')}
+			/>
+		);
+	}
 
 	// Running npm install
 	if (step === 'running-npm-install') {
