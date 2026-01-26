@@ -1,5 +1,5 @@
-import React, {useState} from 'react';
-import {Box, Text} from 'ink';
+import React, {useState, useEffect} from 'react';
+import {Box, Text, useApp} from 'ink';
 import {type ProjectInfo} from './utils/project-detection.js';
 import {MainMenu} from './components/MainMenu.js';
 import {InfoScreen} from './components/InfoScreen.js';
@@ -7,14 +7,16 @@ import {SetupFlow} from './components/SetupFlow.js';
 import {runNpmScript} from './utils/process-runner.js';
 import {ProcessOutputComponent} from './components/ProcessOutput.js';
 import {StatusIndicator} from './components/StatusIndicator.js';
+import {promptPassword} from './utils/password-prompt.js';
 
 type Props = {
 	project: ProjectInfo;
 };
 
-type AppState = 'setup' | 'menu' | 'running' | 'info';
+type AppState = 'setup' | 'menu' | 'running' | 'info' | 'signing-prompt';
 
 export default function App({project}: Props) {
+	const {exit} = useApp();
 	const [state, setState] = useState<AppState>('setup');
 	const [currentCommand, setCurrentCommand] = useState<string>('');
 	const [runner, setRunner] = useState<any>(null);
@@ -22,7 +24,69 @@ export default function App({project}: Props) {
 		'running' | 'success' | 'error'
 	>('running');
 
+	// Handle signing password prompt
+	useEffect(() => {
+		if (state === 'signing-prompt') {
+			// Exit Ink temporarily to prompt for password
+			exit();
+
+			const signingUsername = project.devProperties?.signingUsername || '';
+			const certificateName = project.devProperties?.certificateName || '';
+
+			console.log('\n\x1b[36m\x1b[1mSigning Credentials\x1b[0m');
+			console.log(`Username: ${signingUsername}\n`);
+
+			promptPassword('Password: ').then((password) => {
+				if (!password) {
+					console.log('\x1b[31mPassword is required for signing\x1b[0m');
+					process.exit(1);
+				}
+
+				// Set env vars and continue
+				const env: Record<string, string> = {
+					SIGNING_USERNAME: signingUsername,
+					SIGNING_PASSWORD: password,
+				};
+				if (certificateName) {
+					env['SIGNING_CERTIFICATE_NAME'] = certificateName;
+				}
+
+				// Re-import and run the dev-signed script with env vars
+				const {ProcessRunner} = require('./utils/process-runner.js');
+				const newRunner = new ProcessRunner('npm', ['run', 'dev-signed'], project.root, false, env);
+
+				newRunner.on('exit', (code: number) => {
+					process.exit(code);
+				});
+
+				newRunner.on('output', (output: {type: string; data: string}) => {
+					if (output.type === 'stdout') {
+						process.stdout.write(output.data);
+					} else {
+						process.stderr.write(output.data);
+					}
+				});
+
+				console.log('\n\x1b[36mStarting dev-signed...\x1b[0m\n');
+				newRunner.run().catch((err: Error) => {
+					console.error('Failed to start:', err);
+					process.exit(1);
+				});
+			});
+		}
+	}, [state, project, exit]);
+
 	const handleCommandSelect = (command: string) => {
+		// Handle dev-signed specially - need to prompt for password first
+		if (command === 'dev-signed') {
+			if (!project.hasSigningProperties) {
+				console.log('\x1b[31mSigning credentials not configured. Run svc setup-signing first.\x1b[0m');
+				return;
+			}
+			setState('signing-prompt');
+			return;
+		}
+
 		setCurrentCommand(command);
 		setCommandStatus('running');
 		setState('running');
@@ -34,9 +98,6 @@ export default function App({project}: Props) {
 		switch (command) {
 			case 'dev':
 				scriptName = 'dev';
-				break;
-			case 'dev-signed':
-				scriptName = 'dev-signed';
 				break;
 			case 'build':
 				scriptName = 'build';
@@ -80,6 +141,11 @@ export default function App({project}: Props) {
 
 	if (state === 'info') {
 		return <InfoScreen project={project} onBack={() => setState('menu')} />;
+	}
+
+	if (state === 'signing-prompt') {
+		// Handled by useEffect - will exit Ink and prompt for password
+		return null;
 	}
 
 	return (

@@ -7,25 +7,7 @@ import * as properties from '../util/properties.js';
 import chalk from 'chalk';
 import { getFullAppId } from './util/id.js';
 
-(function () {
-  var questions = [
-    {
-      name: 'username',
-      message: 'Username for developer.sitevision.se',
-      validate: (input) => (input.length ? true : 'Please enter your username'),
-    },
-    {
-      name: 'password',
-      type: 'password',
-      message: 'Password for developer.sitevision.se',
-      validate: (input) => (input.length ? true : 'Please enter your password'),
-    },
-    {
-      name: 'certificateName',
-      message: 'Certificate name for signing (blank for default)',
-    },
-  ];
-
+(async function () {
   const manifest = properties.getManifest();
   const appId = getFullAppId(manifest.id);
   const fileName = appId + '.zip';
@@ -36,62 +18,90 @@ import { getFullAppId } from './util/id.js';
     return;
   }
 
-  inquirer.prompt(questions).then(async (answers) => {
+  // Check for environment variables first (set by CLI for automated signing)
+  let username = process.env.SIGNING_USERNAME;
+  let password = process.env.SIGNING_PASSWORD;
+  let certificateName = process.env.SIGNING_CERTIFICATE_NAME || '';
+
+  // If credentials not in env, prompt interactively
+  if (!username || !password) {
+    const questions = [
+      {
+        name: 'username',
+        message: 'Username for developer.sitevision.se',
+        validate: (input) => (input.length ? true : 'Please enter your username'),
+      },
+      {
+        name: 'password',
+        type: 'password',
+        message: 'Password for developer.sitevision.se',
+        validate: (input) => (input.length ? true : 'Please enter your password'),
+      },
+      {
+        name: 'certificateName',
+        message: 'Certificate name for signing (blank for default)',
+      },
+    ];
+
+    const answers = await inquirer.prompt(questions);
     if (!answers.username || !answers.password) {
       console.log(chalk.red('Invalid user name or password'));
-      return null;
+      return;
     }
+    username = answers.username;
+    password = answers.password;
+    certificateName = answers.certificateName || '';
+  }
 
-    let url = `https://developer.sitevision.se/rest-api/appsigner/signapp`;
+  let url = `https://developer.sitevision.se/rest-api/appsigner/signapp`;
 
-    if (answers.certificateName) {
-      url += '?certificateName=' + answers.certificateName;
-    }
+  if (certificateName) {
+    url += '?certificateName=' + certificateName;
+  }
 
-    const formData = new FormData();
-    formData.append('file', fs.createReadStream(zipPath), {
-      filename: fileName,
-      contentType: 'application/octet-stream',
+  const formData = new FormData();
+  formData.append('file', fs.createReadStream(zipPath), {
+    filename: fileName,
+    contentType: 'application/octet-stream',
+  });
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+      headers: formData.getHeaders({
+        Authorization: `Basic ${Buffer.from(
+          username + ':' + password
+        ).toString('base64')}`,
+      }),
     });
 
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        body: formData,
-        headers: formData.getHeaders({
-          Authorization: `Basic ${Buffer.from(
-            answers.username + ':' + answers.password
-          ).toString('base64')}`,
-        }),
+    if (response.ok) {
+      const signedFileNameAndPath = path.join(
+        properties.DIST_DIR_PATH,
+        `${appId}-signed.zip`
+      );
+
+      const writer = fs.createWriteStream(signedFileNameAndPath, {
+        autoClose: true,
       });
+      response.body.pipe(writer);
 
-      if (response.ok) {
-        const signedFileNameAndPath = path.join(
-          properties.DIST_DIR_PATH,
-          `${appId}-signed.zip`
-        );
-
-        const writer = fs.createWriteStream(signedFileNameAndPath, {
-          autoClose: true,
-        });
-        response.body.pipe(writer);
-
-        return console.log(
-          `${chalk.green(
-            'Signing successful, created:'
-          )} ${signedFileNameAndPath}`
-        );
-      }
-
-      if (response.status === 401) {
-        console.log(
-          `${chalk.red(
-            'Signing failed:'
-          )} Unauthorized, check username and password`
-        );
-      }
-    } catch (err) {
-      console.log(`${chalk.red('Signing failed with error:')} ${err}`);
+      return console.log(
+        `${chalk.green(
+          'Signing successful, created:'
+        )} ${signedFileNameAndPath}`
+      );
     }
-  });
+
+    if (response.status === 401) {
+      console.log(
+        `${chalk.red(
+          'Signing failed:'
+        )} Unauthorized, check username and password`
+      );
+    }
+  } catch (err) {
+    console.log(`${chalk.red('Signing failed with error:')} ${err}`);
+  }
 })();

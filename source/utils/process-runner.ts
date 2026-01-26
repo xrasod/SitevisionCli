@@ -20,6 +20,7 @@ export class ProcessRunner extends EventEmitter {
 		private args: string[] = [],
 		private cwd?: string,
 		private interactive: boolean = false,
+		private customEnv?: Record<string, string>,
 	) {
 		super();
 	}
@@ -28,7 +29,7 @@ export class ProcessRunner extends EventEmitter {
 		return new Promise((resolve, reject) => {
 			this.process = spawn(this.command, this.args, {
 				cwd: this.cwd || process.cwd(),
-				env: process.env,
+				env: {...process.env, ...this.customEnv},
 				shell: true,
 				stdio: this.interactive ? 'inherit' : 'pipe',
 			});
@@ -107,7 +108,8 @@ export function runNpmScript(
 	scriptName: string,
 	args: string[] = [],
 	projectRoot?: string,
+	customEnv?: Record<string, string>,
 ): ProcessRunner {
-	const runner = new ProcessRunner('npm', ['run', scriptName, ...args], projectRoot);
+	const runner = new ProcessRunner('npm', ['run', scriptName, ...args], projectRoot, false, customEnv);
 	return runner;
 }

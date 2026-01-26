@@ -16,12 +16,16 @@ export interface DevProperties {
 	username: string;
 	password: string;
 	useHTTPForDevDeploy?: boolean;
+	// Signing properties for developer.sitevision.se (stored on disk)
+	signingUsername?: string;
+	certificateName?: string;
 }
 
 export interface ProjectInfo {
 	root: string;
 	manifest: SitevisionManifest;
 	hasDevProperties: boolean;
+	hasSigningProperties: boolean;
 	devProperties?: DevProperties;
 	packageJson: any;
 	hasSitevisionScripts: boolean;
@@ -94,10 +98,14 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
 			}
 		}
 
+		// Check if signing properties are configured (only username is stored, password is entered at runtime)
+		const hasSigningProperties = Boolean(devProperties?.signingUsername);
+
 		return {
 			root: cwd,
 			manifest,
 			hasDevProperties,
+			hasSigningProperties,
 			devProperties,
 			packageJson,
 			hasSitevisionScripts,

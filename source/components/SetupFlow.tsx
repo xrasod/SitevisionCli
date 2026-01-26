@@ -16,6 +16,8 @@ type SetupStep =
 	| 'running-npm-install'
 	| 'check-dev-properties'
 	| 'confirm-dev-setup'
+	| 'check-signing-properties'
+	| 'confirm-signing-setup'
 	| 'show-info'
 	| 'complete';
 
@@ -36,14 +38,23 @@ export function SetupFlow({project, onComplete}: Props) {
 			}
 		} else if (step === 'check-dev-properties') {
 			if (project.hasDevProperties) {
-				setStep('show-info');
+				setStep('check-signing-properties');
 			} else {
 				setStep('confirm-dev-setup');
 			}
+		} else if (step === 'check-signing-properties') {
+			if (project.hasSigningProperties) {
+				setStep('show-info');
+			} else {
+				setStep('confirm-signing-setup');
+			}
+		} else if (step === 'show-info') {
+			// Auto-advance to menu after displaying info
+			onComplete();
 		}
-	}, [step, project.hasNodeModules, project.hasDevProperties]);
+	}, [step, project.hasNodeModules, project.hasDevProperties, project.hasSigningProperties, onComplete]);
 
-	useInput((input, key) => {
+	useInput((input) => {
 		if (step === 'confirm-npm-install') {
 			if (input === 'y' || input === 'Y') {
 				setStep('running-npm-install');
@@ -81,11 +92,24 @@ export function SetupFlow({project, onComplete}: Props) {
 					process.exit(1);
 				});
 			} else if (input === 'n' || input === 'N') {
-				setStep('show-info');
+				setStep('check-signing-properties');
 			}
-		} else if (step === 'show-info') {
-			if (key.return || input === ' ') {
-				onComplete();
+		} else if (step === 'confirm-signing-setup') {
+			if (input === 'y' || input === 'Y') {
+				// Exit Ink completely to allow interactive input
+				exit();
+
+				// Run svc setup-signing command directly
+				const newRunner = new ProcessRunner('svc', ['setup-signing'], project.root, true);
+				newRunner.run().then(() => {
+					console.log('\nRun "svc" again to continue.');
+					process.exit(0);
+				}).catch(() => {
+					console.log('\nSigning setup failed. Please try again.');
+					process.exit(1);
+				});
+			} else if (input === 'n' || input === 'N') {
+				setStep('show-info');
 			}
 		}
 	});
@@ -134,6 +158,26 @@ export function SetupFlow({project, onComplete}: Props) {
 				</Box>
 				<Box marginBottom={1}>
 					<Text>Would you like to set up dev properties? (y/n)</Text>
+				</Box>
+			</Box>
+		);
+	}
+
+	// Confirm signing setup
+	if (step === 'confirm-signing-setup') {
+		return (
+			<Box flexDirection="column" padding={1}>
+				<Box marginBottom={1}>
+					<Text bold color="cyan">Sitevision CLI</Text>
+				</Box>
+				<Box marginBottom={1}>
+					<Text color="yellow">⚠ signing credentials not configured</Text>
+				</Box>
+				<Box marginBottom={1}>
+					<Text>Signing credentials are required for signing apps on developer.sitevision.se</Text>
+				</Box>
+				<Box marginBottom={1}>
+					<Text>Would you like to set up signing credentials? (y/n)</Text>
 				</Box>
 			</Box>
 		);
@@ -213,9 +257,6 @@ export function SetupFlow({project, onComplete}: Props) {
 					<Text dimColor>{project.root}</Text>
 				</Box>
 
-				<Box marginTop={2}>
-					<Text dimColor>Press Enter to continue to menu</Text>
-				</Box>
 			</Box>
 		);
 	}
