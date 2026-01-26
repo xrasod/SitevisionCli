@@ -180,7 +180,7 @@ export function buildAddonEndpointUrl(
 ): string {
 	const baseUrl = buildApiBaseUrl(domain, siteName, useHTTP);
 	const endpoints = getApiEndpoints(appType);
-	return `${baseUrl}/${endpoints.addon}`;
+	return `${baseUrl}/Addon%20Repository/${endpoints.addon}`;
 }
 
 /**
@@ -195,7 +195,7 @@ export function buildImportEndpointUrl(
 ): string {
 	const baseUrl = buildApiBaseUrl(domain, siteName, useHTTP);
 	const endpoints = getApiEndpoints(appType);
-	return `${baseUrl}/${endpoints.addon}/${encodeURIComponent(addonName)}/${endpoints.import}`;
+	return `${baseUrl}/Addon%20Repository/${encodeURIComponent(addonName)}/${endpoints.import}`;
 }
 
 // =============================================================================

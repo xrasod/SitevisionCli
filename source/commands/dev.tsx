@@ -26,6 +26,7 @@ interface DevScreenProps {
 	signed: boolean;
 	signingCredentials?: SigningCredentials;
 	onBack?: () => void;
+	onRetryCredentials?: () => void;
 }
 
 type DevStatus = 'initializing' | 'watching' | 'building' | 'signing' | 'deploying' | 'ready' | 'error';
@@ -46,6 +47,7 @@ export function DevScreen({
 	signed,
 	signingCredentials,
 	onBack,
+	onRetryCredentials,
 }: DevScreenProps) {
 	const {exit} = useApp();
 	const [state, setState] = React.useState<DevState>({
@@ -58,6 +60,9 @@ export function DevScreen({
 	useInput((input, key) => {
 		if (onBack && (key.escape || input === 'q')) {
 			onBack();
+		}
+		if (onRetryCredentials && state.status === 'error' && input === 'r') {
+			onRetryCredentials();
 		}
 	});
 
@@ -308,6 +313,13 @@ export function DevScreen({
 				</Box>
 			)}
 
+			{/* App info */}
+			<Box marginLeft={2} marginBottom={1}>
+				<Text dimColor>
+					{manifest.name} v{manifest.version}
+				</Text>
+			</Box>
+
 			{/* Target info */}
 			{devProperties && (
 				<Box marginLeft={2} marginBottom={1}>
@@ -324,7 +336,10 @@ export function DevScreen({
 				</Box>
 			)}
 
-			<Box marginTop={1}>
+			<Box marginTop={1} flexDirection="column">
+				{state.status === 'error' && onRetryCredentials && (
+					<Text dimColor>Press r to retry with new credentials</Text>
+				)}
 				{onBack ? (
 					<Text dimColor>Press q or Esc to return to menu (Ctrl+C to stop process)</Text>
 				) : (
@@ -367,7 +382,7 @@ export const devCommand: Command = {
 			}
 
 			console.log('');
-			const password = await promptPassword('Signing password: ');
+			const password = await promptPassword('Signing password (developer.sitevision.se): ');
 
 			if (!password) {
 				console.log('\x1b[31mError: Password is required for signed mode\x1b[0m');

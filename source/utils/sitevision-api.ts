@@ -26,7 +26,6 @@ import type {
 import {
 	buildImportEndpointUrl,
 	buildAddonEndpointUrl,
-	getApiEndpoints,
 } from './project-detection.js';
 
 // =============================================================================
@@ -460,11 +459,10 @@ export async function createAddon(
 export async function activateApp(
 	executableId: string,
 	config: DeployConfig,
-	appType: SimpleAppType,
+	_appType: SimpleAppType,
 ): Promise<ActivationResponse> {
-	const endpoints = getApiEndpoints(appType);
 	const protocol = config.useHTTP ? 'http' : 'https';
-	const url = `${protocol}://${config.domain}/rest-api/1/0/${encodeURIComponent(config.siteName)}/${endpoints.addon}/${encodeURIComponent(config.addonName)}/activateCustomModuleExecutable`;
+	const url = `${protocol}://${config.domain}/rest-api/1/0/${encodeURIComponent(config.siteName)}/Addon%20Repository/${encodeURIComponent(config.addonName)}/activateCustomModuleExecutable`;
 
 	const body = JSON.stringify({
 		executableId,

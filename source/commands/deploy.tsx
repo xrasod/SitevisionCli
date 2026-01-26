@@ -20,6 +20,7 @@ interface DeployScreenProps {
 	activate: boolean;
 	signingPassword?: string;
 	onBack?: () => void;
+	onRetryCredentials?: () => void;
 }
 
 type DeployStatus = 'deploying' | 'success' | 'error';
@@ -40,6 +41,7 @@ export function DeployScreen({
 	activate,
 	signingPassword,
 	onBack,
+	onRetryCredentials,
 }: DeployScreenProps) {
 	const [state, setState] = React.useState<DeployState>({
 		status: 'deploying',
@@ -47,8 +49,13 @@ export function DeployScreen({
 	});
 
 	useInput((input, key) => {
-		if (onBack && (key.escape || input === 'q') && state.status !== 'deploying') {
-			onBack();
+		if (state.status !== 'deploying') {
+			if (onBack && (key.escape || input === 'q')) {
+				onBack();
+			}
+			if (onRetryCredentials && state.status === 'error' && input === 'r') {
+				onRetryCredentials();
+			}
 		}
 	});
 
@@ -173,9 +180,14 @@ export function DeployScreen({
 				</Box>
 			)}
 
-			{onBack && state.status !== 'deploying' && (
-				<Box marginTop={1}>
-					<Text dimColor>Press q or Esc to return to menu</Text>
+			{state.status !== 'deploying' && (
+				<Box marginTop={1} flexDirection="column">
+					{state.status === 'error' && onRetryCredentials && (
+						<Text dimColor>Press r to retry with new credentials</Text>
+					)}
+					{onBack && (
+						<Text dimColor>Press q or Esc to return to menu</Text>
+					)}
 				</Box>
 			)}
 		</Box>

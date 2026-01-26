@@ -25,10 +25,13 @@ const STEPS: {id: Step; label: string}[] = [
 
 export function DevPropertiesForm({projectRoot, initialProperties, packageJson, onComplete, onCancel}: Props) {
 	const [stepIndex, setStepIndex] = useState(0);
-	const [properties, setProperties] = useState<Partial<DevProperties>>(initialProperties || {
-		domain: packageJson.developmentDomain || '',
-		addonName: packageJson.addonName || '',
-		siteName: packageJson.siteName || '',
+	const [properties, setProperties] = useState<Partial<DevProperties>>(() => {
+		const defaults = {
+			domain: packageJson.developmentDomain || '',
+			addonName: packageJson.addonName || '',
+			siteName: packageJson.siteName || '',
+		};
+		return {...defaults, ...initialProperties};
 	});
 
 	const currentStep = STEPS[stepIndex];

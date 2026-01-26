@@ -17,6 +17,7 @@ interface SignScreenProps {
 	devProperties: DevProperties;
 	password: string;
 	onBack?: () => void;
+	onRetryCredentials?: () => void;
 }
 
 type SignStatus = 'signing' | 'success' | 'error';
@@ -29,15 +30,20 @@ interface SignState {
 	error?: string;
 }
 
-export function SignScreen({projectRoot, manifest, devProperties, password, onBack}: SignScreenProps) {
+export function SignScreen({projectRoot, manifest, devProperties, password, onBack, onRetryCredentials}: SignScreenProps) {
 	const [state, setState] = React.useState<SignState>({
 		status: 'signing',
 		message: 'Signing app via developer.sitevision.se...',
 	});
 
 	useInput((input, key) => {
-		if (onBack && (key.escape || input === 'q') && state.status !== 'signing') {
-			onBack();
+		if (state.status !== 'signing') {
+			if (onBack && (key.escape || input === 'q')) {
+				onBack();
+			}
+			if (onRetryCredentials && state.status === 'error' && input === 'r') {
+				onRetryCredentials();
+			}
 		}
 	});
 
@@ -120,9 +126,14 @@ export function SignScreen({projectRoot, manifest, devProperties, password, onBa
 				</Box>
 			)}
 
-			{onBack && state.status !== 'signing' && (
-				<Box marginTop={1}>
-					<Text dimColor>Press q or Esc to return to menu</Text>
+			{state.status !== 'signing' && (
+				<Box marginTop={1} flexDirection="column">
+					{state.status === 'error' && onRetryCredentials && (
+						<Text dimColor>Press r to retry with new credentials</Text>
+					)}
+					{onBack && (
+						<Text dimColor>Press q or Esc to return to menu</Text>
+					)}
 				</Box>
 			)}
 		</Box>
@@ -143,7 +154,7 @@ export const signCommand: Command = {
 
 		// Prompt for password
 		console.log('');
-		const password = await promptPassword('Signing password: ');
+		const password = await promptPassword('Signing password (developer.sitevision.se: ');
 
 		if (!password) {
 			console.log('\x1b[31mError: Password is required\x1b[0m');

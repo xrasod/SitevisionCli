@@ -18,7 +18,8 @@ type AppState =
 	| 'setup'
 	| 'menu'
 	| 'info'
-	| 'password-input'
+	| 'dev-password-input'
+	| 'signing-password-input'
 	| 'dev'
 	| 'build'
 	| 'deploy'
@@ -29,8 +30,33 @@ export default function App({project}: Props) {
 	const [state, setState] = useState<AppState>('setup');
 	const [currentCommand, setCurrentCommand] = useState<string>('');
 	const [signingPassword, setSigningPassword] = useState<string>('');
+	const [devPassword, setDevPassword] = useState<string>('');
 
-	const handlePasswordSubmit = (password: string) => {
+	// Check if dev password is available (either from file or session)
+	const hasDevPassword = Boolean(project.devProperties?.password || devPassword);
+
+	// Get effective dev properties with session password if needed
+	const getEffectiveDevProperties = () => {
+		if (!project.devProperties) return undefined;
+		if (project.devProperties.password) return project.devProperties;
+		return {...project.devProperties, password: devPassword};
+	};
+
+	const handleDevPasswordSubmit = (password: string) => {
+		setDevPassword(password);
+		// Continue to the intended command
+		if (currentCommand === 'dev' || currentCommand === 'dev-signed') {
+			if (currentCommand === 'dev-signed' && !signingPassword) {
+				setState('signing-password-input');
+			} else {
+				setState('dev');
+			}
+		} else if (currentCommand.startsWith('deploy')) {
+			setState('deploy');
+		}
+	};
+
+	const handleSigningPasswordSubmit = (password: string) => {
 		setSigningPassword(password);
 		if (currentCommand === 'dev-signed') {
 			setState('dev');
@@ -50,26 +76,57 @@ export default function App({project}: Props) {
 				setState('setup-signing');
 				break;
 			case 'dev':
-				setState('dev');
+				if (!project.hasDevProperties || !project.devProperties) {
+					console.log(
+						'\x1b[31mDevelopment properties not configured. Create a .dev_properties.json file first.\x1b[0m',
+					);
+					return;
+				}
+				if (!hasDevPassword) {
+					setState('dev-password-input');
+				} else {
+					setState('dev');
+				}
 				break;
 			case 'dev-signed':
-			case 'sign':
+				if (!project.hasDevProperties || !project.devProperties) {
+					console.log(
+						'\x1b[31mDevelopment properties not configured. Create a .dev_properties.json file first.\x1b[0m',
+					);
+					return;
+				}
 				if (!project.hasSigningProperties) {
-					// This should ideally be handled by a UI alert, but for now we'll just log
 					console.log(
 						'\x1b[31mSigning credentials not configured. Run svc setup-signing first.\x1b[0m',
 					);
 					return;
 				}
-
-				if (signingPassword) {
-					if (command === 'dev-signed') {
-						setState('dev');
-					} else {
-						setState('sign');
-					}
+				// Need both dev password and signing password
+				if (!hasDevPassword) {
+					setState('dev-password-input');
+				} else if (!signingPassword) {
+					setState('signing-password-input');
 				} else {
-					setState('password-input');
+					setState('dev');
+				}
+				break;
+			case 'sign':
+				if (!project.hasDevProperties || !project.devProperties) {
+					console.log(
+						'\x1b[31mDevelopment properties not configured. Create a .dev_properties.json file first.\x1b[0m',
+					);
+					return;
+				}
+				if (!project.hasSigningProperties) {
+					console.log(
+						'\x1b[31mSigning credentials not configured. Run svc setup-signing first.\x1b[0m',
+					);
+					return;
+				}
+				if (signingPassword) {
+					setState('sign');
+				} else {
+					setState('signing-password-input');
 				}
 				break;
 			case 'build':
@@ -78,7 +135,17 @@ export default function App({project}: Props) {
 			case 'deploy':
 			case 'deploy-force':
 			case 'deploy-production':
-				setState('deploy');
+				if (!project.hasDevProperties || !project.devProperties) {
+					console.log(
+						'\x1b[31mDevelopment properties not configured. Create a .dev_properties.json file first.\x1b[0m',
+					);
+					return;
+				}
+				if (!hasDevPassword) {
+					setState('dev-password-input');
+				} else {
+					setState('deploy');
+				}
 				break;
 		}
 	};
@@ -95,10 +162,23 @@ export default function App({project}: Props) {
 		return <InfoScreen project={project} onBack={() => setState('menu')} />;
 	}
 
-	if (state === 'password-input') {
+	if (state === 'dev-password-input') {
 		return (
 			<PasswordInput
-				onSubmit={handlePasswordSubmit}
+				key="dev-password"
+				label="Enter Development Password (usually Sitevision Cloud Password)"
+				onSubmit={handleDevPasswordSubmit}
+				onCancel={() => setState('menu')}
+			/>
+		);
+	}
+
+	if (state === 'signing-password-input') {
+		return (
+			<PasswordInput
+				key="signing-password"
+				label="Enter Signing Password (developer.sitevision.se)"
+				onSubmit={handleSigningPasswordSubmit}
 				onCancel={() => setState('menu')}
 			/>
 		);
@@ -109,9 +189,16 @@ export default function App({project}: Props) {
 			<DevScreen
 				projectRoot={project.root}
 				manifest={project.manifest}
-				devProperties={project.devProperties!}
+				devProperties={getEffectiveDevProperties()!}
 				signed={currentCommand === 'dev-signed'}
 				onBack={() => setState('menu')}
+				onRetryCredentials={() => {
+					setDevPassword('');
+					if (currentCommand === 'dev-signed') {
+						setSigningPassword('');
+					}
+					setState('dev-password-input');
+				}}
 				signingCredentials={
 					currentCommand === 'dev-signed' && project.devProperties?.signingUsername
 						? {
@@ -144,6 +231,10 @@ export default function App({project}: Props) {
 				devProperties={project.devProperties!}
 				password={signingPassword}
 				onBack={() => setState('menu')}
+				onRetryCredentials={() => {
+					setSigningPassword('');
+					setState('signing-password-input');
+				}}
 			/>
 		);
 	}
@@ -153,11 +244,15 @@ export default function App({project}: Props) {
 			<DeployScreen
 				projectRoot={project.root}
 				manifest={project.manifest}
-				devProperties={project.devProperties!}
+				devProperties={getEffectiveDevProperties()!}
 				force={currentCommand === 'deploy-force'}
 				production={currentCommand === 'deploy-production'}
 				activate={currentCommand === 'deploy-production'}
 				onBack={() => setState('menu')}
+				onRetryCredentials={() => {
+					setDevPassword('');
+					setState('dev-password-input');
+				}}
 			/>
 		);
 	}
