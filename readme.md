@@ -1,16 +1,18 @@
 # Sitevision CLI
 
-A modern TUI (Terminal User Interface) wrapper for Sitevision development tools. Built with [Ink](https://github.com/vadimdemedes/ink) for a beautiful command-line experience.
+A modern TUI (Terminal User Interface) for Sitevision app development. Built with [Ink](https://github.com/vadimdemedes/ink) for a beautiful command-line experience.
 
 ## Features
 
-- 🎨 **Interactive Menu** - Full-screen TUI with arrow key navigation
-- 🚀 **Smart wrapper** - Layers on top of existing sitevision-scripts
-- 📦 **Project detection** - Automatically detects Sitevision projects
-- ⚡ **Enhanced workflows** - Combined commands like dev with auto-signing
-- 🎯 **Live feedback** - Real-time status updates and progress indicators
-- ⌨️  **Two modes** - Interactive menu OR direct command execution
-- 🔧 **Automatic setup** - Checks and offers to install dependencies and configure dev properties on startup
+- **Interactive Menu** - Full-screen TUI with arrow key navigation
+- **Standalone CLI** - No dependency on sitevision-scripts, handles everything natively
+- **Project Detection** - Automatically detects Sitevision projects
+- **Webpack Integration** - Built-in webpack bundling for development and production
+- **App Signing** - Sign apps via developer.sitevision.se for production deployment
+- **Live Feedback** - Real-time status updates and progress indicators
+- **Two Modes** - Interactive menu OR direct command execution
+- **Automatic Setup** - Guided setup for dev properties and signing credentials
+- **Secure Credentials** - Passwords can be entered per-session (not stored on disk)
 
 ## Install
 
@@ -20,7 +22,7 @@ npm install --global @sitevision/cli
 
 ## Usage
 
-The CLI must be run inside a Sitevision project directory. It wraps the underlying `sitevision-scripts` commands with a better UI.
+The CLI must be run inside a Sitevision project directory (containing a `manifest.json`).
 
 ### Interactive Mode
 
@@ -36,15 +38,16 @@ On first run (or if setup is incomplete), the CLI will:
 3. Display project information
 4. Show the main menu
 
-Use arrow keys (↑↓) to navigate and Enter to select a command:
-- 🚀 Dev - Start development server
-- 🔐 Dev (Signed) - Development with automatic signing
-- 🔨 Build - Build for production
-- 📦 Deploy - Deploy to dev server
-- 🚢 Deploy (Force) - Force deploy
-- 🌍 Deploy Production - Deploy to production
-- ℹ️  Info - Show project info
-- ❌ Exit
+Use arrow keys to navigate and Enter to select:
+- **Dev** - Start development server with watch mode
+- **Dev (Signed)** - Development with automatic signing before each deploy
+- **Build** - Build for production
+- **Sign** - Sign the app for production deployment
+- **Deploy** - Deploy to dev server
+- **Deploy (Force)** - Force deploy (overwrite existing)
+- **Deploy Production** - Deploy signed app to production
+- **Info** - Show project info
+- **Exit**
 
 ### Direct Commands
 
@@ -53,7 +56,7 @@ You can also run commands directly:
 #### Development
 
 ```bash
-# Start development server
+# Start development server with watch mode
 svc dev
 
 # Start development server with automatic signing
@@ -67,6 +70,13 @@ svc dev --signed
 svc build
 ```
 
+#### Signing
+
+```bash
+# Sign the app for production deployment
+svc sign
+```
+
 #### Deployment
 
 ```bash
@@ -76,8 +86,15 @@ svc deploy
 # Force deploy (overwrite existing)
 svc deploy --force
 
-# Deploy to production
+# Deploy to production (requires signed app)
 svc deploy --production
+```
+
+#### Setup
+
+```bash
+# Configure signing credentials
+svc setup-signing
 ```
 
 #### Project Info
@@ -87,32 +104,78 @@ svc deploy --production
 svc info
 ```
 
+## Configuration
+
+### Development Properties (`.dev_properties.json`)
+
+Create this file in your project root for deployment configuration:
+
+```json
+{
+  "domain": "your-site.sitevision.se",
+  "siteName": "YourSite",
+  "addonName": "your-addon",
+  "username": "your-email@example.com",
+  "password": "",
+  "useHTTPForDevDeploy": false,
+  "signingUsername": "your-developer-account@example.com",
+  "certificateName": "optional-certificate-name"
+}
+```
+
+**Note:** You can leave `password` empty - the CLI will prompt for it securely at runtime and store it in session memory only.
+
+### Signing Credentials
+
+Signing credentials are used to sign apps via developer.sitevision.se:
+- `signingUsername` - Your developer.sitevision.se account
+- `certificateName` - Optional, if you have multiple certificates
+
+The signing password is never stored on disk - it's prompted for each session.
+
 ## Architecture
 
-This CLI is designed as a layer on top of the existing `sitevision-scripts` commands:
+This CLI is a standalone tool that handles all Sitevision development tasks natively:
 
-- **Project Detection** - Validates Sitevision project structure
-- **Command Routing** - Maps CLI commands to npm scripts
-- **Process Management** - Spawns and manages child processes
-- **TUI Components** - Rich terminal UI with Ink
+- **Webpack Bundling** - Uses webpack directly for building bundled apps
+- **REST API Integration** - Communicates directly with Sitevision REST APIs
+- **App Signing** - Signs apps via developer.sitevision.se API
+- **TUI Components** - Rich terminal UI built with Ink
 
 ### Directory Structure
 
 ```
 source/
-├── cli.tsx                 # Main entry point
-├── commands/               # Command implementations
-│   ├── types.ts           # Command type definitions
-│   ├── dev.tsx            # Development command
-│   ├── build.tsx          # Build command
-│   ├── deploy.tsx         # Deploy command
-│   └── info.tsx           # Info command
-├── components/            # Reusable UI components
-│   ├── ProcessOutput.tsx  # Process output display
-│   └── StatusIndicator.tsx # Status/progress indicator
-└── utils/                 # Utility modules
-    ├── project-detection.ts # Project validation
-    └── process-runner.ts    # Process spawning
+├── cli.tsx                    # CLI entry point and argument parsing
+├── app.tsx                    # Main app component and state management
+├── commands/                  # Command implementations
+│   ├── types.ts              # Command type definitions
+│   ├── index.ts              # Command exports
+│   ├── dev.tsx               # Development server with watch mode
+│   ├── build.tsx             # Production build
+│   ├── deploy.tsx            # Deployment to dev/production
+│   ├── sign.tsx              # App signing
+│   ├── setup-signing.tsx     # Signing credentials setup
+│   └── info.tsx              # Project info display
+├── components/               # Reusable UI components
+│   ├── MainMenu.tsx          # Interactive main menu
+│   ├── SetupFlow.tsx         # Initial setup wizard
+│   ├── DevPropertiesForm.tsx # Dev properties configuration
+│   ├── SigningPropertiesForm.tsx # Signing setup form
+│   ├── PasswordInput.tsx     # Secure password input
+│   ├── TextInput.tsx         # Text input component
+│   ├── InfoScreen.tsx        # Project info display
+│   ├── StatusIndicator.tsx   # Status/progress indicator
+│   └── ProcessOutput.tsx     # Process output display
+├── types/                    # TypeScript type definitions
+│   └── index.ts              # Shared types
+└── utils/                    # Utility modules
+    ├── project-detection.ts  # Project validation and paths
+    ├── sitevision-api.ts     # Sitevision REST API client
+    ├── webpack-runner.ts     # Webpack integration
+    ├── zip.ts                # Zip file utilities
+    ├── process-runner.ts     # Process spawning
+    └── password-prompt.ts    # Password prompting
 ```
 
 ## Development
@@ -126,9 +189,6 @@ npm run build
 
 # Watch mode
 npm run dev
-
-# Test
-npm test
 ```
 
 ## License
