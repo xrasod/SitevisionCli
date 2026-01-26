@@ -35,6 +35,11 @@ export function MainMenu({project, onSelect}: Props) {
 			description: 'Build the application for production',
 		},
 		{
+			label: '✍️  Sign',
+			value: 'sign',
+			description: 'Sign the app for production deployment',
+		},
+		{
 			label: '📦 Deploy',
 			value: 'deploy',
 			description: 'Deploy to development server',

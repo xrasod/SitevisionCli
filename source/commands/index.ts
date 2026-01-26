@@ -4,10 +4,12 @@ import {buildCommand} from './build.js';
 import {deployCommand} from './deploy.js';
 import {infoCommand} from './info.js';
 import {setupSigningCommand} from './setup-signing.js';
+import {signCommand} from './sign.js';
 
 export const commands: Command[] = [
 	devCommand,
 	buildCommand,
+	signCommand,
 	deployCommand,
 	infoCommand,
 	setupSigningCommand,

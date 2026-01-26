@@ -77,13 +77,23 @@ export default function App({project}: Props) {
 	}, [state, project, exit]);
 
 	const handleCommandSelect = (command: string) => {
-		// Handle dev-signed specially - need to prompt for password first
-		if (command === 'dev-signed') {
+		// Handle commands that need password prompts specially
+		if (command === 'dev-signed' || command === 'sign') {
 			if (!project.hasSigningProperties) {
 				console.log('\x1b[31mSigning credentials not configured. Run svc setup-signing first.\x1b[0m');
 				return;
 			}
-			setState('signing-prompt');
+			// Exit Ink and run the command via CLI
+			exit();
+			const {spawn} = require('child_process');
+			const svcCommand = command === 'sign' ? ['sign'] : ['dev', '--signed'];
+			const child = spawn('svc', svcCommand, {
+				cwd: project.root,
+				stdio: 'inherit',
+			});
+			child.on('exit', (code: number) => {
+				process.exit(code || 0);
+			});
 			return;
 		}
 
