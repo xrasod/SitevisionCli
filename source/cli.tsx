@@ -3,9 +3,17 @@ import React from 'react';
 import {render} from 'ink';
 import {Text, Box} from 'ink';
 import meow from 'meow';
+import {readFileSync} from 'node:fs';
+import updateNotifier from 'update-notifier';
 import App from './app.js';
 import {getCommand} from './commands/index.js';
 import {requireProject} from './utils/project-detection.js';
+
+// Check for updates
+const pkg = JSON.parse(
+	readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+);
+updateNotifier({pkg}).notify();
 
 const cli = meow(
 	`
