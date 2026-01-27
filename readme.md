@@ -1,11 +1,14 @@
 # Sitevision CLI
 
-A modern TUI (Terminal User Interface) for Sitevision app development. Built with [Ink](https://github.com/vadimdemedes/ink) for a beautiful command-line experience.
+This CLI was largely built on the back of the [sitevision-scripts](https://github.com/sitevision/sitevision-scripts) project.
+However, these scripts have some limitations:
+- Clunky for use with environments requiring signed packages
+- Clunkly management of credentials and unsecure handling of credentials
+- No type safety
 
 ## Features
 
 - **Interactive Menu** - Full-screen TUI with arrow key navigation
-- **Standalone CLI** - No dependency on sitevision-scripts, handles everything natively
 - **Project Detection** - Automatically detects Sitevision projects
 - **Webpack Integration** - Built-in webpack bundling for development and production
 - **App Signing** - Sign apps via developer.sitevision.se for production deployment
@@ -135,12 +138,9 @@ The signing password is never stored on disk - it's prompted for each session.
 
 ## Architecture
 
-This CLI is a standalone tool that handles all Sitevision development tasks natively:
 
-- **Webpack Bundling** - Uses webpack directly for building bundled apps
-- **REST API Integration** - Communicates directly with Sitevision REST APIs
-- **App Signing** - Signs apps via developer.sitevision.se API
-- **TUI Components** - Rich terminal UI built with Ink
+
+
 
 ### Directory Structure
 
