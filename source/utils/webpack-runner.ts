@@ -8,7 +8,6 @@
 import path from 'path';
 import fs from 'fs';
 import {createRequire} from 'module';
-import {EventEmitter} from 'events';
 import type {BuildOptions, BuildResult} from '../types/index.js';
 import {copyChunksToResources} from './zip.js';
 
@@ -79,14 +78,7 @@ type WebpackConfigFactory = (options: {
 // WEBPACK RUNNER CLASS
 // =============================================================================
 
-/**
- * Events emitted by WebpackRunner:
- * - 'compile': Emitted when compilation starts
- * - 'done': Emitted when compilation completes successfully
- * - 'error': Emitted when compilation fails
- * - 'warning': Emitted when compilation has warnings
- */
-export class WebpackRunner extends EventEmitter {
+export class WebpackRunner {
 	private webpack: WebpackModule | null = null;
 	private config: WebpackConfig | null = null;
 	private compiler: WebpackCompiler | null = null;
@@ -95,9 +87,7 @@ export class WebpackRunner extends EventEmitter {
 	constructor(
 		private projectRoot: string,
 		private options: BuildOptions,
-	) {
-		super();
-	}
+	) {}
 
 	/**
 	 * Initialize webpack by loading it from the project's node_modules
@@ -211,19 +201,15 @@ export class WebpackRunner extends EventEmitter {
 		}
 
 		return new Promise((resolve, reject) => {
-			this.emit('compile');
-
 			this.compiler = this.webpack!(this.config!);
 			this.compiler.run((err, stats) => {
 				if (err) {
-					this.emit('error', err);
 					reject(err);
 					return;
 				}
 
 				if (!stats) {
 					const error = new Error('No stats returned from webpack');
-					this.emit('error', error);
 					reject(error);
 					return;
 				}
@@ -240,13 +226,6 @@ export class WebpackRunner extends EventEmitter {
 					}
 				}
 
-				if (stats.hasErrors()) {
-					this.emit('error', new Error(stats.toString({colors: false})));
-				} else if (stats.hasWarnings()) {
-					this.emit('warning', stats.toString({colors: false}));
-				}
-
-				this.emit('done', result);
 				resolve(result);
 			});
 		});
@@ -274,7 +253,6 @@ export class WebpackRunner extends EventEmitter {
 				},
 				(err, stats) => {
 					if (err) {
-						this.emit('error', err);
 						callback?.({
 							success: false,
 							errors: [err.message],
@@ -297,13 +275,6 @@ export class WebpackRunner extends EventEmitter {
 						}
 					}
 
-					if (stats.hasErrors()) {
-						this.emit('error', new Error(stats.toString({colors: false})));
-					} else if (stats.hasWarnings()) {
-						this.emit('warning', stats.toString({colors: false}));
-					}
-
-					this.emit('done', result);
 					callback?.(result);
 				},
 			);
