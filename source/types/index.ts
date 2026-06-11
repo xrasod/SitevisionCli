@@ -19,15 +19,28 @@ export type AppType = 'WebApp' | 'Widget' | 'RESTApp';
 export type SimpleAppType = 'web' | 'widget' | 'rest';
 
 /**
+ * Sitevision manifest name/description — plain string or localized {en, sv, ...} object
+ */
+export type LocalizedString = string | Record<string, string>;
+
+/**
+ * Extract a display string from a LocalizedString, preferring Swedish then English.
+ */
+export function resolveLocalizedString(value: LocalizedString): string {
+	if (typeof value === 'string') return value;
+	return value['sv'] ?? value['en'] ?? Object.values(value)[0] ?? '';
+}
+
+/**
  * Sitevision app manifest (manifest.json)
  */
 export interface SitevisionManifest {
 	id: string;
-	name: string;
+	name: LocalizedString;
 	version: string;
 	type: AppType;
 	bundled?: boolean;
-	description?: string;
+	description?: LocalizedString;
 	author?: string;
 	helpUrl?: string;
 	license?: string;

@@ -3,6 +3,7 @@ import {render} from 'ink';
 import {Box, Text} from 'ink';
 import {type Command} from './types.js';
 import {getAppType} from '../utils/project-detection.js';
+import {resolveLocalizedString} from '../types/index.js';
 
 interface InfoScreenProps {
 	project: any;
@@ -22,7 +23,7 @@ function InfoScreen({project}: InfoScreenProps) {
 			<Box flexDirection="column" marginLeft={2}>
 				<Box>
 					<Text bold>Name: </Text>
-					<Text>{project.manifest.name}</Text>
+					<Text>{resolveLocalizedString(project.manifest.name)}</Text>
 				</Box>
 				<Box>
 					<Text bold>ID: </Text>

@@ -18,6 +18,7 @@ import {
 	getSignedZipPath,
 } from '../utils/project-detection.js';
 import type {SitevisionManifest, DevProperties, BuildResult, SigningCredentials} from '../types/index.js';
+import {resolveLocalizedString} from '../types/index.js';
 
 interface DevScreenProps {
 	projectRoot: string;
@@ -316,7 +317,7 @@ export function DevScreen({
 			{/* App info */}
 			<Box marginLeft={2} marginBottom={1}>
 				<Text dimColor>
-					{manifest.name} v{manifest.version}
+					{resolveLocalizedString(manifest.name)} v{manifest.version}
 				</Text>
 			</Box>
 

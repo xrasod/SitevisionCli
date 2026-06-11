@@ -1,6 +1,7 @@
 import React from 'react';
 import {Box, Text, useInput} from 'ink';
 import {type ProjectInfo, getAppType} from '../utils/project-detection.js';
+import {resolveLocalizedString} from '../types/index.js';
 
 interface Props {
 	project: ProjectInfo;
@@ -27,7 +28,7 @@ export function InfoScreen({project, onBack}: Props) {
 			<Box flexDirection="column" marginLeft={2}>
 				<Box>
 					<Text bold>Name: </Text>
-					<Text>{project.manifest.name}</Text>
+					<Text>{resolveLocalizedString(project.manifest.name)}</Text>
 				</Box>
 				<Box>
 					<Text bold>ID: </Text>
