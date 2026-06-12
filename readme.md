@@ -134,6 +134,43 @@ Signing credentials are used to sign apps via developer.sitevision.se:
 
 The signing password is never stored on disk - it's prompted for each session.
 
+## Local Development
+
+### One-time setup
+
+Build the TypeScript and register a global symlink so `svc` resolves to your local repo instead of the published package:
+
+```bash
+npm run build
+npm link
+```
+
+### Development workflow
+
+Open two terminals:
+
+**Terminal 1** — keep the compiler running in watch mode in the CLI repo:
+
+```bash
+npm run dev
+```
+
+Every time you save a `.ts`/`.tsx` file, `tsc` recompiles `dist/` automatically.
+
+**Terminal 2** — in a Sitevision project directory, run `svc` to test your changes:
+
+```bash
+cd /path/to/your/sitevision-webapp
+svc
+```
+
+### Restore the published version
+
+```bash
+npm unlink -g sitevision-cli
+npm install -g sitevision-cli
+```
+
 ## License
 
 MIT

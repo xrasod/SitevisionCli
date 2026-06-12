@@ -1,6 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import {Box, Text, useInput} from 'ink';
 import {type ProjectInfo, getAppType} from '../utils/project-detection.js';
+import {resolveLocalizedString} from '../types/index.js';
 import {ProcessRunner} from '../utils/process-runner.js';
 import {ProcessOutputComponent} from './ProcessOutput.js';
 import {StatusIndicator} from './StatusIndicator.js';
@@ -208,7 +209,7 @@ export function SetupFlow({project, onComplete}: Props) {
 				<Box flexDirection="column" marginLeft={2}>
 					<Box>
 						<Text bold>Name: </Text>
-						<Text>{project.manifest.name}</Text>
+						<Text>{resolveLocalizedString(project.manifest.name)}</Text>
 					</Box>
 					<Box>
 						<Text bold>ID: </Text>

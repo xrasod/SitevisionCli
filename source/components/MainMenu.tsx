@@ -1,7 +1,7 @@
 import React, {useState} from 'react';
 import {Box, Text, useInput} from 'ink';
-import {type ProjectInfo} from '../utils/project-detection.js';
-import {getAppType} from '../utils/project-detection.js';
+import {type ProjectInfo, getAppType} from '../utils/project-detection.js';
+import {resolveLocalizedString} from '../types/index.js';
 
 interface MenuItem {
 	label: string;
@@ -95,7 +95,7 @@ export function MainMenu({project, onSelect}: Props) {
 			<Box flexDirection="column" marginLeft={2} marginBottom={1}>
 				<Box>
 					<Text bold>Name: </Text>
-					<Text>{project.manifest.name}</Text>
+					<Text>{resolveLocalizedString(project.manifest.name)}</Text>
 				</Box>
 				<Box>
 					<Text bold>ID: </Text>
