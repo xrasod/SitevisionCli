@@ -3,7 +3,8 @@ import {render, Box, Text, useInput} from 'ink';
 import {type Command} from './types.js';
 import {StatusIndicator} from '../components/StatusIndicator.js';
 import {signApp} from '../utils/sitevision-api.js';
-import {promptPassword} from '../utils/password-prompt.js';
+import {promptPassword, promptYesNo} from '../utils/password-prompt.js';
+import {getSigningPassword, setSigningPassword} from '../utils/keychain.js';
 import {
 	getZipPath,
 	getSignedZipPath,
@@ -152,13 +153,28 @@ export const signCommand: Command = {
 			return;
 		}
 
-		// Prompt for password
-		console.log('');
-		const password = await promptPassword('Signing password (developer.sitevision.se: ');
+		const signingUsername = project.devProperties.signingUsername;
+
+		// Try keychain first, then env var, then prompt
+		let password = getSigningPassword(signingUsername) || process.env['SITEVISION_SIGNING_PASSWORD'] || '';
+		let promptedManually = false;
+
+		if (!password) {
+			console.log('');
+			password = await promptPassword('Signing password (developer.sitevision.se): ');
+			promptedManually = true;
+		}
 
 		if (!password) {
 			console.log('\x1b[31mError: Password is required\x1b[0m');
 			return;
+		}
+
+		if (promptedManually) {
+			const remember = await promptYesNo('Save password to OS keychain? (y/N): ');
+			if (remember) {
+				setSigningPassword(signingUsername, password);
+			}
 		}
 
 		const {waitUntilExit} = render(

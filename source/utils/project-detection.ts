@@ -3,29 +3,16 @@ import path from 'path';
 import type {
 	SitevisionManifest,
 	DevProperties,
+	ProjectInfo,
 	ProjectPaths,
 	SimpleAppType,
 	PackageJson,
 	ApiEndpoints,
 } from '../types/index.js';
+import {getDeployPassword, setDeployPassword} from './keychain.js';
 
 // Re-export types for backward compatibility
-export type {SitevisionManifest, DevProperties} from '../types/index.js';
-
-/**
- * Project information with paths
- */
-export interface ProjectInfo {
-	root: string;
-	manifest: SitevisionManifest;
-	hasDevProperties: boolean;
-	hasSigningProperties: boolean;
-	devProperties?: DevProperties;
-	packageJson: PackageJson;
-	hasSitevisionScripts: boolean;
-	hasNodeModules: boolean;
-	paths: ProjectPaths;
-}
+export type {SitevisionManifest, DevProperties, ProjectInfo} from '../types/index.js';
 
 // =============================================================================
 // PATH UTILITIES
@@ -251,11 +238,27 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
 		const devPropertiesPath = findDevPropertiesPath(cwd);
 		let devProperties: DevProperties | undefined;
 		let hasDevProperties = false;
+		let hasLegacyPassword = false;
 
 		if (devPropertiesPath) {
 			hasDevProperties = true;
 			try {
-				devProperties = JSON.parse(fs.readFileSync(devPropertiesPath, 'utf-8')) as DevProperties;
+				const parsed = JSON.parse(fs.readFileSync(devPropertiesPath, 'utf-8')) as DevProperties & {password?: string};
+				hasLegacyPassword = typeof parsed.password === 'string' && parsed.password.length > 0;
+				devProperties = parsed;
+
+				// Resolve deploy password: env var > keychain (file is legacy-only)
+				if (!hasLegacyPassword && devProperties.domain && devProperties.username) {
+					const envPassword = process.env['SITEVISION_DEPLOY_PASSWORD'];
+					if (envPassword) {
+						devProperties.password = envPassword;
+					} else {
+						const stored = getDeployPassword(devProperties.domain, devProperties.username);
+						if (stored) {
+							devProperties.password = stored;
+						}
+					}
+				}
 			} catch {
 				// Invalid dev properties file
 			}
@@ -272,6 +275,7 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
 			manifest,
 			hasDevProperties,
 			hasSigningProperties,
+			hasLegacyPassword,
 			devProperties,
 			packageJson,
 			hasSitevisionScripts,
@@ -341,11 +345,33 @@ export function readDevProperties(projectRoot: string): DevProperties | null {
 }
 
 /**
- * Write dev properties to file
+ * Write dev properties to file. The `password` field is never persisted —
+ * it is held in the OS keychain instead.
  */
 export function writeDevProperties(projectRoot: string, properties: DevProperties): void {
 	const devPropertiesPath = findDevPropertiesPath(projectRoot) || getDefaultDevPropertiesPath(projectRoot);
-	fs.writeFileSync(devPropertiesPath, JSON.stringify(properties, null, 2));
+	const {password: _password, ...persisted} = properties;
+	fs.writeFileSync(devPropertiesPath, JSON.stringify(persisted, null, 2));
+}
+
+/**
+ * Move a plaintext password from .dev_properties.json into the OS keychain and
+ * strip it from the file. Returns true if the password was migrated.
+ *
+ * The in-memory `project.devProperties.password` is intentionally left intact
+ * so the current invocation can keep using it; only the on-disk copy is removed.
+ */
+export function migrateLegacyPassword(project: ProjectInfo): boolean {
+	if (!project.hasLegacyPassword || !project.devProperties) return false;
+	const {domain, username, password} = project.devProperties;
+	if (!domain || !username || !password) return false;
+
+	if (!setDeployPassword(domain, username, password)) return false;
+
+	// writeDevProperties strips `password` defensively; keep the in-memory value.
+	writeDevProperties(project.root, project.devProperties);
+	project.hasLegacyPassword = false;
+	return true;
 }
 
 /**

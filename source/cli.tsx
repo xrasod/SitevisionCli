@@ -4,16 +4,15 @@ import {render} from 'ink';
 import {Text, Box} from 'ink';
 import meow from 'meow';
 import {readFileSync} from 'node:fs';
-import updateNotifier from 'update-notifier';
 import App from './app.js';
 import {getCommand} from './commands/index.js';
-import {requireProject} from './utils/project-detection.js';
+import {requireProject, migrateLegacyPassword} from './utils/project-detection.js';
+import {promptYesNo} from './utils/password-prompt.js';
+import {checkForUpdate} from './utils/version-check.js';
 
-// Check for updates
 const pkg = JSON.parse(
 	readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
 );
-updateNotifier({pkg}).notify();
 
 const cli = meow(
 	`
@@ -64,6 +63,15 @@ const cli = meow(
 const [commandName, ...args] = cli.input;
 
 async function main() {
+	// Show the CLI version on startup, and check npm for a newer release.
+	console.log(`\x1b[36msvc v${pkg.version}\x1b[0m`);
+	const latestVersion = await checkForUpdate(pkg.name, pkg.version);
+	if (latestVersion) {
+		console.log(
+			`\x1b[33m  ↑ update available: ${pkg.version} → ${latestVersion}  (run: npm i -g ${pkg.name})\x1b[0m`,
+		);
+	}
+
 	// Check if we're in a Sitevision project
 	const project = (() => {
 		try {
@@ -100,6 +108,22 @@ async function main() {
 			</Box>,
 		);
 		process.exit(1);
+	}
+
+	// Offer to migrate a legacy plaintext password into the OS keychain.
+	// Interactive `svc` handles this in SetupFlow; this covers direct commands
+	// (svc deploy/dev/sign/…). Skip on non-TTY stdin (e.g. CI) where prompting
+	// would fail — the plaintext password is still used for this run.
+	if (project.hasLegacyPassword && process.stdin.isTTY) {
+		console.log('\n\x1b[33m⚠ Plaintext password found in .dev_properties.json\x1b[0m');
+		const move = await promptYesNo('Move it to the OS keychain and remove it from the file? (y/N): ');
+		if (move) {
+			if (migrateLegacyPassword(project)) {
+				console.log('\x1b[32m✓ Password moved to keychain.\x1b[0m\n');
+			} else {
+				console.log('\x1b[31mCould not access keychain; leaving the file unchanged.\x1b[0m\n');
+			}
+		}
 	}
 
 	// Execute the command

@@ -3,6 +3,7 @@ import {Box, Text, useInput} from 'ink';
 import {TextInput} from './TextInput.js';
 import type {DevProperties, PackageJson} from '../types/index.js';
 import {writeDevProperties} from '../utils/project-detection.js';
+import {setDeployPassword, deleteDeployPassword} from '../utils/keychain.js';
 
 interface Props {
 	projectRoot: string;
@@ -43,8 +44,15 @@ export function DevPropertiesForm({projectRoot, initialProperties, packageJson, 
 		if (stepIndex < STEPS.length - 1) {
 			setStepIndex(stepIndex + 1);
 		} else {
-			// Save and finish
-			writeDevProperties(projectRoot, newProperties as DevProperties);
+			const finalProperties = newProperties as DevProperties;
+			const {password, domain, username} = finalProperties;
+			if (password && domain && username) {
+				setDeployPassword(domain, username, password);
+			} else if (domain && username) {
+				// Empty password — clear any stale keychain entry so deploy falls through to prompt
+				deleteDeployPassword(domain, username);
+			}
+			writeDevProperties(projectRoot, finalProperties);
 			onComplete();
 		}
 	};
@@ -96,7 +104,7 @@ export function DevPropertiesForm({projectRoot, initialProperties, packageJson, 
 				return (
 					<TextInput
 						key="password"
-						label="Password (Optional - leave empty to prompt on each run)"
+						label="Password (saved in OS keychain — leave empty to prompt on each run)"
 						type="password"
 						defaultValue={properties.password}
 						onSubmit={(value: string) => handleNext('password', value)}

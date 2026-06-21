@@ -1,6 +1,6 @@
 import React, {useState, useEffect} from 'react';
 import {Box, Text, useInput} from 'ink';
-import {type ProjectInfo, getAppType} from '../utils/project-detection.js';
+import {type ProjectInfo, getAppType, migrateLegacyPassword} from '../utils/project-detection.js';
 import {ProcessRunner} from '../utils/process-runner.js';
 import {ProcessOutputComponent} from './ProcessOutput.js';
 import {StatusIndicator} from './StatusIndicator.js';
@@ -19,6 +19,7 @@ type SetupStep =
 	| 'check-dev-properties'
 	| 'confirm-dev-setup'
 	| 'setup-dev-properties'
+	| 'confirm-password-migration'
 	| 'check-signing-properties'
 	| 'confirm-signing-setup'
 	| 'setup-signing-properties'
@@ -41,7 +42,11 @@ export function SetupFlow({project, onComplete}: Props) {
 			}
 		} else if (step === 'check-dev-properties') {
 			if (project.hasDevProperties) {
-				setStep('check-signing-properties');
+				if (project.hasLegacyPassword) {
+					setStep('confirm-password-migration');
+				} else {
+					setStep('check-signing-properties');
+				}
 			} else {
 				setStep('confirm-dev-setup');
 			}
@@ -83,6 +88,13 @@ export function SetupFlow({project, onComplete}: Props) {
 		} else if (step === 'confirm-dev-setup') {
 			if (input === 'y' || input === 'Y') {
 				setStep('setup-dev-properties');
+			} else if (input === 'n' || input === 'N') {
+				setStep('check-signing-properties');
+			}
+		} else if (step === 'confirm-password-migration') {
+			if (input === 'y' || input === 'Y') {
+				migrateLegacyPassword(project);
+				setStep('check-signing-properties');
 			} else if (input === 'n' || input === 'N') {
 				setStep('check-signing-properties');
 			}
@@ -172,6 +184,24 @@ export function SetupFlow({project, onComplete}: Props) {
 				</Box>
 				<Box marginBottom={1}>
 					<Text>Would you like to set up dev properties? (y/n)</Text>
+				</Box>
+			</Box>
+		);
+	}
+
+	// Confirm legacy password migration
+	if (step === 'confirm-password-migration') {
+		return (
+			<Box flexDirection="column" padding={1}>
+				<Box marginBottom={1}>
+					<Text bold color="cyan">Sitevision CLI</Text>
+				</Box>
+				<Box marginBottom={1}>
+					<Text color="yellow">⚠ Plaintext password found in .dev_properties.json</Text>
+				</Box>
+				<Box marginBottom={1} flexDirection="column">
+					<Text>Move it to the OS keychain and remove it from the file? (y/n)</Text>
+					<Text dimColor>Recommended — storing passwords in project files is insecure.</Text>
 				</Box>
 			</Box>
 		);

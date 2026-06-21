@@ -9,6 +9,7 @@ import {BuildScreen} from './commands/build.js';
 import {DeployScreen} from './commands/deploy.js';
 import {SignScreen} from './commands/sign.js';
 import {SigningPropertiesForm} from './components/SigningPropertiesForm.js';
+import {setDeployPassword as saveDeployPassword, setSigningPassword as saveSigningPassword} from './utils/keychain.js';
 
 type Props = {
 	project: ProjectInfo;
@@ -42,8 +43,11 @@ export default function App({project}: Props) {
 		return {...project.devProperties, password: devPassword};
 	};
 
-	const handleDevPasswordSubmit = (password: string) => {
+	const handleDevPasswordSubmit = (password: string, remember: boolean) => {
 		setDevPassword(password);
+		if (remember && project.devProperties?.domain && project.devProperties.username && password) {
+			saveDeployPassword(project.devProperties.domain, project.devProperties.username, password);
+		}
 		// Continue to the intended command
 		if (currentCommand === 'dev' || currentCommand === 'dev-signed') {
 			if (currentCommand === 'dev-signed' && !signingPassword) {
@@ -56,8 +60,11 @@ export default function App({project}: Props) {
 		}
 	};
 
-	const handleSigningPasswordSubmit = (password: string) => {
+	const handleSigningPasswordSubmit = (password: string, remember: boolean) => {
 		setSigningPassword(password);
+		if (remember && project.devProperties?.signingUsername && password) {
+			saveSigningPassword(project.devProperties.signingUsername, password);
+		}
 		if (currentCommand === 'dev-signed') {
 			setState('dev');
 		} else {
@@ -167,6 +174,7 @@ export default function App({project}: Props) {
 			<PasswordInput
 				key="dev-password"
 				label="Enter Development Password (usually Sitevision Cloud Password)"
+				showRememberOption={Boolean(project.devProperties?.domain && project.devProperties?.username)}
 				onSubmit={handleDevPasswordSubmit}
 				onCancel={() => setState('menu')}
 			/>
@@ -178,6 +186,7 @@ export default function App({project}: Props) {
 			<PasswordInput
 				key="signing-password"
 				label="Enter Signing Password (developer.sitevision.se)"
+				showRememberOption={Boolean(project.devProperties?.signingUsername)}
 				onSubmit={handleSigningPasswordSubmit}
 				onCancel={() => setState('menu')}
 			/>
@@ -194,6 +203,7 @@ export default function App({project}: Props) {
 				onBack={() => setState('menu')}
 				onRetryCredentials={() => {
 					setDevPassword('');
+					if (project.devProperties) project.devProperties.password = undefined;
 					if (currentCommand === 'dev-signed') {
 						setSigningPassword('');
 					}
@@ -251,6 +261,7 @@ export default function App({project}: Props) {
 				onBack={() => setState('menu')}
 				onRetryCredentials={() => {
 					setDevPassword('');
+					if (project.devProperties) project.devProperties.password = undefined;
 					setState('dev-password-input');
 				}}
 			/>

@@ -3,8 +3,9 @@ import {render, Box, Text, useApp, useInput} from 'ink';
 import {type Command} from './types.js';
 import {StatusIndicator} from '../components/StatusIndicator.js';
 import {WebpackRunner} from '../utils/webpack-runner.js';
-import {promptPassword} from '../utils/password-prompt.js';
+import {promptPassword, promptYesNo} from '../utils/password-prompt.js';
 import {signApp, deployApp} from '../utils/sitevision-api.js';
+import {getSigningPassword, setSigningPassword, setDeployPassword} from '../utils/keychain.js';
 import {
 	copyStaticToBuild,
 	createBuildZip,
@@ -129,7 +130,7 @@ export function DevScreen({
 					siteName: devProperties.siteName,
 					addonName: devProperties.addonName,
 					username: devProperties.username,
-					password: devProperties.password,
+					password: devProperties.password!,
 					useHTTP: devProperties.useHTTPForDevDeploy,
 				},
 				appType,
@@ -366,14 +367,30 @@ export const devCommand: Command = {
 		// Check if dev properties are configured
 		if (!project.hasDevProperties || !project.devProperties) {
 			console.log('\n\x1b[33mDeployment credentials not configured.\x1b[0m');
-			console.log('Create a .dev_properties.json file with domain, siteName, addonName, username, and password.\n');
+			console.log('Create a .dev_properties.json file with domain, siteName, addonName, and username, then run setup.\n');
 			return;
+		}
+
+		// Resolve deploy password (already loaded from keychain/env in detectProject — prompt if missing)
+		if (!project.devProperties.password) {
+			const {domain, username} = project.devProperties;
+			console.log('');
+			const pw = await promptPassword(`Deploy password for ${username}@${domain}: `);
+			if (!pw) {
+				console.log('\x1b[31mError: Password is required\x1b[0m');
+				return;
+			}
+			const remember = await promptYesNo('Save password to OS keychain? (y/N): ');
+			if (remember && domain && username) {
+				setDeployPassword(domain, username, pw);
+			}
+			project.devProperties.password = pw;
 		}
 
 		const signed = Boolean(flags['signed']);
 		let signingCredentials: SigningCredentials | undefined;
 
-		// If signed mode, prompt for signing password
+		// If signed mode, resolve signing password (keychain → env → prompt)
 		if (signed) {
 			if (!project.hasSigningProperties || !project.devProperties.signingUsername) {
 				console.log('\n\x1b[33mSigning credentials not configured.\x1b[0m');
@@ -381,16 +398,30 @@ export const devCommand: Command = {
 				return;
 			}
 
-			console.log('');
-			const password = await promptPassword('Signing password (developer.sitevision.se): ');
+			const signingUsername = project.devProperties.signingUsername;
+			let password = getSigningPassword(signingUsername) || process.env['SITEVISION_SIGNING_PASSWORD'] || '';
+			let promptedManually = false;
+
+			if (!password) {
+				console.log('');
+				password = await promptPassword('Signing password (developer.sitevision.se): ');
+				promptedManually = true;
+			}
 
 			if (!password) {
 				console.log('\x1b[31mError: Password is required for signed mode\x1b[0m');
 				return;
 			}
 
+			if (promptedManually) {
+				const remember = await promptYesNo('Save password to OS keychain? (y/N): ');
+				if (remember) {
+					setSigningPassword(signingUsername, password);
+				}
+			}
+
 			signingCredentials = {
-				username: project.devProperties.signingUsername,
+				username: signingUsername,
 				password,
 				certificateName: project.devProperties.certificateName,
 			};

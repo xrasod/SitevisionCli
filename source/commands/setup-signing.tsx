@@ -75,8 +75,9 @@ export const setupSigningCommand: Command = {
 
 			rl.close();
 
-			// Update dev properties (remove any stored password from old config)
-			const {signingPassword: _removed, ...cleanedProperties} = existingProperties as Record<string, unknown> & {signingPassword?: unknown};
+			// Update dev properties (strip any plaintext passwords — they live in the keychain)
+			const {signingPassword: _signingRemoved, password: _passwordRemoved, ...cleanedProperties} =
+				existingProperties as Record<string, unknown> & {signingPassword?: unknown; password?: unknown};
 			const updatedProperties = {
 				...cleanedProperties,
 				signingUsername,

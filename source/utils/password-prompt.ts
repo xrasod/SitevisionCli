@@ -1,4 +1,31 @@
 /**
+ * Prompt for a yes/no answer. Returns true for y/Y, false otherwise (incl. empty / Enter).
+ */
+export function promptYesNo(prompt: string): Promise<boolean> {
+	return new Promise((resolve) => {
+		process.stdout.write(prompt);
+		const stdin = process.stdin;
+		stdin.setRawMode(true);
+		stdin.resume();
+		stdin.setEncoding('utf8');
+
+		const onData = (data: string) => {
+			const char = data[0] || '';
+			stdin.setRawMode(false);
+			stdin.removeListener('data', onData);
+			stdin.pause();
+			process.stdout.write(`${char}\n`);
+			if (char.charCodeAt(0) === 3) {
+				process.exit();
+			}
+			resolve(char === 'y' || char === 'Y');
+		};
+
+		stdin.on('data', onData);
+	});
+}
+
+/**
  * Prompt for password input with masked display
  */
 export function promptPassword(prompt: string): Promise<string> {

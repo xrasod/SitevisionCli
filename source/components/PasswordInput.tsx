@@ -3,21 +3,28 @@ import {Box, Text, useInput} from 'ink';
 
 interface Props {
 	label?: string;
-	onSubmit: (password: string) => void;
+	showRememberOption?: boolean;
+	onSubmit: (password: string, remember: boolean) => void;
 	onCancel: () => void;
 }
 
-export function PasswordInput({label = 'Enter Signing Password', onSubmit, onCancel}: Props) {
+export function PasswordInput({label = 'Enter Signing Password', showRememberOption = false, onSubmit, onCancel}: Props) {
 	const [password, setPassword] = useState('');
+	const [remember, setRemember] = useState(false);
 
 	useInput((input, key) => {
 		if (key.return) {
-			onSubmit(password);
+			onSubmit(password, remember);
 			return;
 		}
 
 		if (key.escape) {
 			onCancel();
+			return;
+		}
+
+		if (key.tab && showRememberOption) {
+			setRemember((prev) => !prev);
 			return;
 		}
 
@@ -40,6 +47,13 @@ export function PasswordInput({label = 'Enter Signing Password', onSubmit, onCan
 			<Box borderStyle="round" borderColor="cyan" paddingX={1}>
 				<Text>{'*'.repeat(password.length)}</Text>
 			</Box>
+			{showRememberOption && (
+				<Box marginTop={1}>
+					<Text dimColor>Save to OS keychain: </Text>
+					<Text color={remember ? 'green' : 'gray'}>[{remember ? 'x' : ' '}]</Text>
+					<Text dimColor> (Tab to toggle)</Text>
+				</Box>
+			)}
 			<Box marginTop={1}>
 				<Text dimColor>Press Enter to submit, Esc to cancel</Text>
 			</Box>

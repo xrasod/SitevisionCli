@@ -39,16 +39,19 @@ export interface SitevisionManifest {
 // =============================================================================
 
 /**
- * Development properties stored in .dev_properties.json
+ * Development properties.
+ *
+ * Persisted fields live in .dev_properties.json. `password` is runtime-only:
+ * resolved from the OS keychain (or a legacy plaintext file during migration)
+ * and never written back to disk.
  */
 export interface DevProperties {
 	domain: string;
 	siteName: string;
 	addonName: string;
 	username: string;
-	password: string;
+	password?: string;
 	useHTTPForDevDeploy?: boolean;
-	// Signing properties (stored on disk - password NOT stored)
 	signingUsername?: string;
 	certificateName?: string;
 }
@@ -102,6 +105,7 @@ export interface ProjectInfo {
 	manifest: SitevisionManifest;
 	hasDevProperties: boolean;
 	hasSigningProperties: boolean;
+	hasLegacyPassword: boolean;
 	devProperties?: DevProperties;
 	packageJson: PackageJson;
 	hasSitevisionScripts: boolean;

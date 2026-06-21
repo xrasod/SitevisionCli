@@ -12,7 +12,7 @@ However, these scripts have some limitations:
 - **Project Detection** - Automatically detects Sitevision projects
 - **Two Modes** - Interactive menu OR direct command execution
 - **Automatic Setup** - Guided setup for dev properties and signing credentials
-- **Secure Credentials** - Passwords can be entered per-session (not stored on disk)
+- **Secure Credentials** - Passwords live in the OS keychain (macOS Keychain / Windows Credential Manager / Linux libsecret), never on disk
 
 ## Install
 
@@ -117,14 +117,29 @@ Create this file in your project root for deployment configuration:
   "siteName": "YourSite",
   "addonName": "your-addon",
   "username": "your-email@example.com",
-  "password": "",
   "useHTTPForDevDeploy": false,
   "signingUsername": "your-developer-account@example.com",
   "certificateName": "optional-certificate-name"
 }
 ```
 
-**Note:** You can leave `password` empty - the CLI will prompt for it securely at runtime and store it in session memory only.
+### Password storage
+
+Passwords are stored in the OS-native secret store (macOS Keychain, Windows
+Credential Manager, Linux libsecret) under the `sitevision-cli` service —
+never in `.dev_properties.json`. Run `svc` and complete the setup form (or
+enter the password when prompted at deploy/sign time and toggle "save to
+keychain") to populate it.
+
+If an existing `.dev_properties.json` contains a plaintext `password` field,
+the CLI offers to migrate it to the keychain on next launch and strip the
+field from the file. The migration prompt only appears in interactive mode
+(plain `svc`) — if you only ever invoke commands directly (`svc deploy`,
+`svc dev`), run `svc` once to migrate.
+
+For CI / headless use, set `SITEVISION_DEPLOY_PASSWORD` and/or
+`SITEVISION_SIGNING_PASSWORD` — these take precedence over the keychain and
+are never written anywhere.
 
 ### Signing Credentials
 
@@ -132,7 +147,8 @@ Signing credentials are used to sign apps via developer.sitevision.se:
 - `signingUsername` - Your developer.sitevision.se account
 - `certificateName` - Optional, if you have multiple certificates
 
-The signing password is never stored on disk - it's prompted for each session.
+The signing password is prompted on first use, with an option to save it to
+the OS keychain for future runs.
 
 ## License
 
