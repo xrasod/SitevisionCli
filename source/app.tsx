@@ -29,6 +29,7 @@ type AppState =
 	| 'signing-password-input'
 	| 'signing-password-choice'
 	| 'dev'
+	| 'watch'
 	| 'build'
 	| 'deploy'
 	| 'sign'
@@ -51,6 +52,14 @@ export default function App({project}: Props) {
 		[signingUsername],
 	);
 
+	// Map a signing-capable command to the screen it lands on once the signing
+	// password is resolved.
+	const signedDestination = (command = currentCommand): AppState => {
+		if (command === 'dev-signed') return 'dev';
+		if (command === 'watch-signed') return 'watch';
+		return 'sign';
+	};
+
 	// Decide the next step once a signing password is needed: proceed if we already
 	// have one this session, offer the keychain choice if one is saved, otherwise
 	// prompt for manual entry.
@@ -61,7 +70,7 @@ export default function App({project}: Props) {
 			isRetry: signingRetry,
 		});
 		if (step === 'proceed') {
-			setState(command === 'dev-signed' ? 'dev' : 'sign');
+			setState(signedDestination(command));
 		} else if (step === 'choice') {
 			setState('signing-password-choice');
 		} else {
@@ -111,7 +120,7 @@ export default function App({project}: Props) {
 		if (storedSigningPassword) {
 			setSigningPassword(storedSigningPassword);
 		}
-		setState(currentCommand === 'dev-signed' ? 'dev' : 'sign');
+		setState(signedDestination());
 	};
 
 	const handleEnterNewSigning = () => {
@@ -123,11 +132,7 @@ export default function App({project}: Props) {
 		if (remember && project.devProperties?.signingUsername && password) {
 			saveSigningPassword(project.devProperties.signingUsername, password);
 		}
-		if (currentCommand === 'dev-signed') {
-			setState('dev');
-		} else {
-			setState('sign');
-		}
+		setState(signedDestination());
 	};
 
 	const handleCommandSelect = (command: string) => {
@@ -174,6 +179,25 @@ export default function App({project}: Props) {
 				} else {
 					routeToSigningStep(command);
 				}
+				break;
+			case 'watch':
+				// Build/sign-only: no deploy and no signing, so no credentials needed.
+				setState('watch');
+				break;
+			case 'watch-signed':
+				if (!project.hasDevProperties || !project.devProperties) {
+					console.log(
+						'\x1b[31mDevelopment properties not configured. Create a .dev_properties.json file first.\x1b[0m',
+					);
+					return;
+				}
+				if (!project.hasSigningProperties) {
+					console.log(
+						'\x1b[31mSigning credentials not configured. Run svc setup-signing first.\x1b[0m',
+					);
+					return;
+				}
+				routeToSigningStep(command);
 				break;
 			case 'sign':
 				if (!project.hasDevProperties || !project.devProperties) {
@@ -287,6 +311,39 @@ export default function App({project}: Props) {
 				signingCredentials={
 					currentCommand === 'dev-signed' &&
 					project.devProperties?.signingUsername
+						? {
+								username: project.devProperties.signingUsername,
+								password: signingPassword,
+								certificateName: project.devProperties.certificateName,
+							}
+						: undefined
+				}
+			/>
+		);
+	}
+
+	if (state === 'watch') {
+		const watchSigned = currentCommand === 'watch-signed';
+		return (
+			<DevScreen
+				projectRoot={project.root}
+				manifest={project.manifest}
+				devProperties={project.devProperties}
+				signed={watchSigned}
+				deploy={false}
+				onBack={() => setState('menu')}
+				onRetryCredentials={
+					watchSigned
+						? () => {
+								setSigningPassword('');
+								// The saved password may be what failed — don't re-offer it.
+								setSigningRetry(true);
+								routeToSigningStep('watch-signed');
+							}
+						: undefined
+				}
+				signingCredentials={
+					watchSigned && project.devProperties?.signingUsername
 						? {
 								username: project.devProperties.signingUsername,
 								password: signingPassword,

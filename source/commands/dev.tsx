@@ -33,8 +33,11 @@ import type {
 interface DevScreenProps {
 	projectRoot: string;
 	manifest: SitevisionManifest;
-	devProperties: DevProperties;
+	devProperties?: DevProperties;
 	signed: boolean;
+	// When false, build (and sign, if enabled) on each change but skip deploy.
+	// Powers the `watch` command. Defaults to true (the `dev` command).
+	deploy?: boolean;
 	signingCredentials?: SigningCredentials;
 	onBack?: () => void;
 	onRetryCredentials?: () => void;
@@ -64,6 +67,7 @@ export function DevScreen({
 	manifest,
 	devProperties,
 	signed,
+	deploy = true,
 	signingCredentials,
 	onBack,
 	onRetryCredentials,
@@ -125,6 +129,21 @@ export function DevScreen({
 					deployZipPath = signedZipPath;
 				}
 
+				// Watch/build-only mode: stop after building (and signing).
+				if (!deploy || !devProperties) {
+					setState(prev => ({
+						...prev,
+						status: 'ready',
+						message: signed
+							? 'Signed. Watching for changes...'
+							: 'Built. Watching for changes...',
+						buildCount: prev.buildCount + 1,
+						lastBuildTime: buildTime,
+						error: undefined,
+					}));
+					return;
+				}
+
 				// Deploy
 				setState(prev => ({
 					...prev,
@@ -175,7 +194,7 @@ export function DevScreen({
 				}));
 			}
 		},
-		[projectRoot, manifest, devProperties, signed, signingCredentials],
+		[projectRoot, manifest, devProperties, signed, deploy, signingCredentials],
 	);
 
 	// In-house webpack path: copy static, zip, then sign + deploy.
@@ -490,7 +509,7 @@ export function DevScreen({
 			</Box>
 
 			{/* Target info */}
-			{devProperties && (
+			{deploy && devProperties && (
 				<Box marginLeft={2} marginBottom={1}>
 					<Text dimColor>
 						Target: {devProperties.domain}/{devProperties.siteName}/

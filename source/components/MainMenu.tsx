@@ -30,6 +30,16 @@ export function MainMenu({project, onSelect}: Props) {
 			description: 'Development with automatic signing',
 		},
 		{
+			label: '👀 Watch',
+			value: 'watch',
+			description: 'Rebuild on change without deploying',
+		},
+		{
+			label: '👀 Watch (Signed)',
+			value: 'watch-signed',
+			description: 'Rebuild and sign on change without deploying',
+		},
+		{
 			label: '🔨 Build',
 			value: 'build',
 			description: 'Build the application for production',

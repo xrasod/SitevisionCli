@@ -1,5 +1,6 @@
 import {type Command} from './types.js';
 import {devCommand} from './dev.js';
+import {watchCommand} from './watch.js';
 import {buildCommand} from './build.js';
 import {deployCommand} from './deploy.js';
 import {infoCommand} from './info.js';
@@ -8,6 +9,7 @@ import {signCommand} from './sign.js';
 
 export const commands: Command[] = [
 	devCommand,
+	watchCommand,
 	buildCommand,
 	signCommand,
 	deployCommand,

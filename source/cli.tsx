@@ -39,7 +39,9 @@ const cli = meow(
 
 	Commands
 	  dev           Start development server with watch mode
+	  watch         Watch and rebuild (optionally signing) without deploying
 	  build         Build the application for production
+	  sign          Sign the app for production deployment
 	  deploy        Deploy the application
 	  info          Show project information
 
@@ -51,6 +53,8 @@ const cli = meow(
 	  $ svc                     # Interactive menu
 	  $ svc dev
 	  $ svc dev --signed
+	  $ svc watch
+	  $ svc watch --signed
 	  $ svc build
 	  $ svc deploy --force
 	  $ svc deploy --production
