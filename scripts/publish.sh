@@ -14,6 +14,11 @@
 # graduates it to the stable 0.4.0.
 #
 # The argument is any npm "version" keyword (default: patch).
+#
+# Retry-safe: the version is bumped in package.json/package-lock.json *without*
+# a git commit or tag, and is reverted automatically if the build or publish
+# fails. The commit + tag are created only after a successful publish — so a
+# failed run leaves the tree untouched and you can simply re-run it.
 
 set -euo pipefail
 
@@ -22,10 +27,16 @@ cd "$(dirname "$0")/.."
 
 BUMP="${1:-patch}"
 
-# npm version requires a clean tree to create its commit/tag; fail early with a
-# clearer message so a half-finished change never gets published.
+# Fail early on a dirty tree so the automatic revert (git checkout) below can't
+# clobber unrelated edits.
 if [[ -n "$(git status --porcelain)" ]]; then
 	echo "✗ Working tree is not clean — commit or stash your changes first." >&2
+	exit 1
+fi
+
+# Fail fast on the common "not logged in" case before touching any files.
+if ! npm whoami >/dev/null 2>&1; then
+	echo "✗ Not logged in to npm — run 'npm login' first." >&2
 	exit 1
 fi
 
@@ -37,18 +48,32 @@ if [[ ! "$reply" =~ ^[Yy]$ ]]; then
 	exit 0
 fi
 
+# Bump the version in package.json + package-lock.json only — no git commit/tag
+# yet (those happen after a successful publish).
 echo "→ Bumping version (${BUMP})…"
-NEW_VERSION="$(npm version "$BUMP" -m "release %s")"
+NEW_VERSION="$(npm version "$BUMP" --no-git-tag-version)"
 
-echo "→ Building…"
+# If anything below fails, undo the bump so a retry starts from the same version.
+rollback() {
+	echo "✗ Failed — reverting version bump (${NEW_VERSION})." >&2
+	git checkout -- package.json package-lock.json
+}
+trap rollback ERR
+
+echo "→ Building ${NEW_VERSION}…"
 npm run build
 
 echo "→ Publishing ${NEW_VERSION} to 'latest'…"
 npm publish
 
+# Published successfully — make the bump permanent in git.
+trap - ERR
+git commit -m "release ${NEW_VERSION}" -- package.json package-lock.json
+git tag "${NEW_VERSION}"
+
 cat <<EOF
 
 ✓ Published ${NEW_VERSION}
-  Install with:  npm i -g sitevision-cli
-  Push the tag:  git push --follow-tags
+  Install with:           npm i -g sitevision-cli
+  Push the commit + tag:  git push --follow-tags
 EOF
