@@ -1,17 +1,20 @@
 import {Fragment, useEffect, useRef, useState} from 'react';
 import {Box, Text} from 'ink';
-import {BIG_LOGO, BIG_LOGO_WIDTH} from '../utils/branding.js';
+import {AUTHOR, BIG_LOGO, BIG_LOGO_WIDTH} from '../utils/branding.js';
 
 interface Props {
 	onDone: () => void;
 }
 
 const FRAME_MS = 45;
-const REVEAL_COLS_PER_FRAME = 9; // how fast the wipe sweeps left → right
-const HOLD_FRAMES = 20; // frames to keep cycling colours once fully revealed
+const SWEEP_COLS_PER_FRAME = 7; // how fast the wipe edge moves left → right
+const BAND = 18; // width of the rainbow zone trailing the sweep edge
+const HOLD_FRAMES = 6; // frames to hold the fully-settled logo before finishing
 
-const REVEAL_FRAMES = Math.ceil(BIG_LOGO_WIDTH / REVEAL_COLS_PER_FRAME);
-const TOTAL_FRAMES = REVEAL_FRAMES + HOLD_FRAMES;
+// The sweep edge runs past the right side by BAND so the rainbow zone trails
+// all the way off, leaving every character settled to the terminal default.
+const SWEEP_FRAMES = Math.ceil((BIG_LOGO_WIDTH + BAND) / SWEEP_COLS_PER_FRAME);
+const TOTAL_FRAMES = SWEEP_FRAMES + HOLD_FRAMES;
 
 // Convert HSL (h in degrees, s/l in 0..1) to a #rrggbb string for ink/chalk.
 function hslToHex(h: number, s: number, l: number): string {
@@ -38,13 +41,16 @@ function buildSpans(
 	line: string,
 	y: number,
 	frame: number,
-	reveal: number,
+	edge: number,
 ): Span[] {
 	const spans: Span[] = [];
 
 	for (const [x, char] of [...line].entries()) {
-		const hidden = x >= reveal;
-		const blank = char === ' ' || hidden;
+		const hidden = x > edge;
+		// Distance behind the sweep edge. Inside BAND → rainbow; past it the
+		// character has "settled" to the terminal default (no colour override).
+		const behind = edge - x;
+		const lit = !hidden && char !== ' ' && behind < BAND;
 
 		// Moving diagonal rainbow: hue depends on column + row + time, quantised
 		// so neighbouring characters share a colour and runs stay long.
@@ -52,12 +58,11 @@ function buildSpans(
 		const row = y * 6;
 		const time = frame * 7;
 		const stepped = Math.round((col + row + time) / 8) * 8;
-		const hue = blank ? undefined : stepped % 360;
+		const hue = stepped % 360;
 		// Shadow characters sit darker than the solid blocks for a bit of depth.
-		const color =
-			hue === undefined
-				? undefined
-				: hslToHex(hue, 0.95, char === '░' ? 0.32 : 0.58);
+		const color = lit
+			? hslToHex(hue, 0.95, char === '░' ? 0.32 : 0.58)
+			: undefined;
 		const text = hidden ? ' ' : char;
 
 		const last = spans.at(-1);
@@ -98,16 +103,13 @@ export function AnimatedLogo({onDone}: Props) {
 		}
 	}, [frame, onDone]);
 
-	const reveal =
-		frame >= REVEAL_FRAMES
-			? BIG_LOGO_WIDTH
-			: (frame + 1) * REVEAL_COLS_PER_FRAME;
+	const edge = (frame + 1) * SWEEP_COLS_PER_FRAME;
 
 	return (
 		<Box flexDirection="column" padding={1}>
 			{BIG_LOGO.map((line, y) => (
 				<Text key={y}>
-					{buildSpans(line, y, frame, reveal).map((span, index) => (
+					{buildSpans(line, y, frame, edge).map((span, index) => (
 						<Fragment key={index}>
 							{span.color ? (
 								<Text color={span.color}>{span.text}</Text>
@@ -118,6 +120,10 @@ export function AnimatedLogo({onDone}: Props) {
 					))}
 				</Text>
 			))}
+			<Box marginTop={1}>
+				<Text dimColor>{'  a tool by '}</Text>
+				<Text bold>{AUTHOR}</Text>
+			</Box>
 		</Box>
 	);
 }
