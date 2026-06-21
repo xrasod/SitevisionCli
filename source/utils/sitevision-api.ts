@@ -67,11 +67,13 @@ function createMultipartFormData(
 	const parts: Buffer[] = [];
 
 	// File part
-	parts.push(Buffer.from(
-		`--${boundary}\r\n` +
-		`Content-Disposition: form-data; name="${fieldName}"; filename="${filename}"\r\n` +
-		`Content-Type: application/octet-stream\r\n\r\n`,
-	));
+	parts.push(
+		Buffer.from(
+			`--${boundary}\r\n` +
+				`Content-Disposition: form-data; name="${fieldName}"; filename="${filename}"\r\n` +
+				`Content-Type: application/octet-stream\r\n\r\n`,
+		),
+	);
 	parts.push(fileContent);
 	parts.push(Buffer.from('\r\n'));
 
@@ -95,7 +97,11 @@ function makeRequest(
 		body?: Buffer;
 		auth?: {username: string; password: string};
 	},
-): Promise<{statusCode: number; body: Buffer; headers: Record<string, string>}> {
+): Promise<{
+	statusCode: number;
+	body: Buffer;
+	headers: Record<string, string>;
+}> {
 	return new Promise((resolve, reject) => {
 		const parsedUrl = new URL(url);
 		const isHttps = parsedUrl.protocol === 'https:';
@@ -120,7 +126,7 @@ function makeRequest(
 			headers,
 		};
 
-		const req = transport.request(requestOptions, (res) => {
+		const req = transport.request(requestOptions, res => {
 			const chunks: Buffer[] = [];
 
 			res.on('data', (chunk: Buffer) => {
@@ -178,7 +184,11 @@ export async function signApp(
 
 	// Create multipart form data
 	const boundary = generateBoundary();
-	const {body, contentType} = createMultipartFormData(zipPath, 'file', boundary);
+	const {body, contentType} = createMultipartFormData(
+		zipPath,
+		'file',
+		boundary,
+	);
 
 	try {
 		const response = await makeRequest(url, {
@@ -269,7 +279,11 @@ export async function deployApp(
 
 	// Create multipart form data
 	const boundary = generateBoundary();
-	const {body, contentType} = createMultipartFormData(zipPath, 'file', boundary);
+	const {body, contentType} = createMultipartFormData(
+		zipPath,
+		'file',
+		boundary,
+	);
 
 	try {
 		const response = await makeRequest(url, {
@@ -349,7 +363,11 @@ export async function deployProduction(
 
 	// If activation requested and we have an executable ID
 	if (config.activate && deployResult.executableId) {
-		const activationResult = await activateApp(deployResult.executableId, config, appType);
+		const activationResult = await activateApp(
+			deployResult.executableId,
+			config,
+			appType,
+		);
 		if (!activationResult.success) {
 			return {
 				success: true,

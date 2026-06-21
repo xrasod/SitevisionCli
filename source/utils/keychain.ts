@@ -35,12 +35,19 @@ function safeDelete(account: string): void {
 	}
 }
 
-export function getDeployPassword(domain: string, username: string): string | null {
+export function getDeployPassword(
+	domain: string,
+	username: string,
+): string | null {
 	if (!domain || !username) return null;
 	return safeGet(deployAccount(domain, username));
 }
 
-export function setDeployPassword(domain: string, username: string, password: string): boolean {
+export function setDeployPassword(
+	domain: string,
+	username: string,
+	password: string,
+): boolean {
 	if (!domain || !username || !password) return false;
 	return safeSet(deployAccount(domain, username), password);
 }
@@ -55,7 +62,10 @@ export function getSigningPassword(username: string): string | null {
 	return safeGet(signingAccount(username));
 }
 
-export function setSigningPassword(username: string, password: string): boolean {
+export function setSigningPassword(
+	username: string,
+	password: string,
+): boolean {
 	if (!username || !password) return false;
 	return safeSet(signingAccount(username), password);
 }

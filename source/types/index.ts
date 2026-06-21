@@ -302,5 +302,5 @@ export interface HttpRequestOptions {
  * Generic result type for operations that can fail
  */
 export type Result<T, E = Error> =
-	| { success: true; data: T }
-	| { success: false; error: E };
+	| {success: true; data: T}
+	| {success: false; error: E};

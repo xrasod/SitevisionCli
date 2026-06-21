@@ -11,7 +11,12 @@ import {
 import {zipExists} from '../utils/zip.js';
 import {promptPassword, promptYesNo} from '../utils/password-prompt.js';
 import {setDeployPassword} from '../utils/keychain.js';
-import type {SitevisionManifest, DevProperties, DeployConfig, ProductionDeployConfig} from '../types/index.js';
+import type {
+	SitevisionManifest,
+	DevProperties,
+	DeployConfig,
+	ProductionDeployConfig,
+} from '../types/index.js';
 
 interface DeployScreenProps {
 	projectRoot: string;
@@ -149,14 +154,28 @@ export function DeployScreen({
 		}
 
 		runDeploy();
-	}, [projectRoot, manifest, devProperties, force, production, activate, signingPassword]);
+	}, [
+		projectRoot,
+		manifest,
+		devProperties,
+		force,
+		production,
+		activate,
+		signingPassword,
+	]);
 
 	return (
 		<Box flexDirection="column" padding={1}>
 			<Box marginBottom={1}>
 				<StatusIndicator
 					status={state.status === 'deploying' ? 'running' : state.status}
-					label={state.status === 'deploying' ? 'Deploying' : state.status === 'success' ? 'Deployed' : 'Failed'}
+					label={
+						state.status === 'deploying'
+							? 'Deploying'
+							: state.status === 'success'
+								? 'Deployed'
+								: 'Failed'
+					}
 					message={state.message}
 				/>
 			</Box>
@@ -187,9 +206,7 @@ export function DeployScreen({
 					{state.status === 'error' && onRetryCredentials && (
 						<Text dimColor>Press r to retry with new credentials</Text>
 					)}
-					{onBack && (
-						<Text dimColor>Press q or Esc to return to menu</Text>
-					)}
+					{onBack && <Text dimColor>Press q or Esc to return to menu</Text>}
 				</Box>
 			)}
 		</Box>
@@ -224,7 +241,9 @@ export const deployCommand: Command = {
 		// Check if dev properties are configured
 		if (!project.hasDevProperties || !project.devProperties) {
 			console.log('\n\x1b[33mDeployment credentials not configured.\x1b[0m');
-			console.log('Create a .dev_properties.json file with domain, siteName, addonName, and username, then run setup.\n');
+			console.log(
+				'Create a .dev_properties.json file with domain, siteName, addonName, and username, then run setup.\n',
+			);
 			return;
 		}
 
@@ -232,12 +251,16 @@ export const deployCommand: Command = {
 		if (!project.devProperties.password) {
 			const {domain, username} = project.devProperties;
 			console.log('');
-			const password = await promptPassword(`Deploy password for ${username}@${domain}: `);
+			const password = await promptPassword(
+				`Deploy password for ${username}@${domain}: `,
+			);
 			if (!password) {
 				console.log('\x1b[31mError: Password is required\x1b[0m');
 				return;
 			}
-			const remember = await promptYesNo('Save password to OS keychain? (y/N): ');
+			const remember = await promptYesNo(
+				'Save password to OS keychain? (y/N): ',
+			);
 			if (remember && domain && username) {
 				setDeployPassword(domain, username, password);
 			}
@@ -250,7 +273,11 @@ export const deployCommand: Command = {
 
 		// For production, we need the signed zip, which requires signing credentials
 		let signingPassword: string | undefined;
-		if (production && project.hasSigningProperties && project.devProperties.signingUsername) {
+		if (
+			production &&
+			project.hasSigningProperties &&
+			project.devProperties.signingUsername
+		) {
 			// We already have a signed zip, no need to prompt for password here
 			// The sign command should have been run separately
 		}

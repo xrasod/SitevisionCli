@@ -5,10 +5,7 @@ import {StatusIndicator} from '../components/StatusIndicator.js';
 import {signApp} from '../utils/sitevision-api.js';
 import {promptPassword, promptYesNo} from '../utils/password-prompt.js';
 import {getSigningPassword, setSigningPassword} from '../utils/keychain.js';
-import {
-	getZipPath,
-	getSignedZipPath,
-} from '../utils/project-detection.js';
+import {getZipPath, getSignedZipPath} from '../utils/project-detection.js';
 import {formatFileSize, getZipSize, zipExists} from '../utils/zip.js';
 import type {SitevisionManifest, DevProperties} from '../types/index.js';
 
@@ -31,7 +28,14 @@ interface SignState {
 	error?: string;
 }
 
-export function SignScreen({projectRoot, manifest, devProperties, password, onBack, onRetryCredentials}: SignScreenProps) {
+export function SignScreen({
+	projectRoot,
+	manifest,
+	devProperties,
+	password,
+	onBack,
+	onRetryCredentials,
+}: SignScreenProps) {
 	const [state, setState] = React.useState<SignState>({
 		status: 'signing',
 		message: 'Signing app via developer.sitevision.se...',
@@ -105,7 +109,13 @@ export function SignScreen({projectRoot, manifest, devProperties, password, onBa
 			<Box marginBottom={1}>
 				<StatusIndicator
 					status={state.status === 'signing' ? 'running' : state.status}
-					label={state.status === 'signing' ? 'Signing' : state.status === 'success' ? 'Signed' : 'Failed'}
+					label={
+						state.status === 'signing'
+							? 'Signing'
+							: state.status === 'success'
+								? 'Signed'
+								: 'Failed'
+					}
 					message={state.message}
 				/>
 			</Box>
@@ -132,9 +142,7 @@ export function SignScreen({projectRoot, manifest, devProperties, password, onBa
 					{state.status === 'error' && onRetryCredentials && (
 						<Text dimColor>Press r to retry with new credentials</Text>
 					)}
-					{onBack && (
-						<Text dimColor>Press q or Esc to return to menu</Text>
-					)}
+					{onBack && <Text dimColor>Press q or Esc to return to menu</Text>}
 				</Box>
 			)}
 		</Box>
@@ -147,21 +155,31 @@ export const signCommand: Command = {
 	requiresProject: true,
 	async execute({project}) {
 		// Check if signing credentials are configured
-		if (!project.hasSigningProperties || !project.devProperties?.signingUsername) {
+		if (
+			!project.hasSigningProperties ||
+			!project.devProperties?.signingUsername
+		) {
 			console.log('\n\x1b[33mSigning credentials not configured.\x1b[0m');
-			console.log('Run \x1b[36msetup-signing\x1b[0m to configure credentials.\n');
+			console.log(
+				'Run \x1b[36msetup-signing\x1b[0m to configure credentials.\n',
+			);
 			return;
 		}
 
 		const signingUsername = project.devProperties.signingUsername;
 
 		// Try keychain first, then env var, then prompt
-		let password = getSigningPassword(signingUsername) || process.env['SITEVISION_SIGNING_PASSWORD'] || '';
+		let password =
+			getSigningPassword(signingUsername) ||
+			process.env['SITEVISION_SIGNING_PASSWORD'] ||
+			'';
 		let promptedManually = false;
 
 		if (!password) {
 			console.log('');
-			password = await promptPassword('Signing password (developer.sitevision.se): ');
+			password = await promptPassword(
+				'Signing password (developer.sitevision.se): ',
+			);
 			promptedManually = true;
 		}
 
@@ -171,7 +189,9 @@ export const signCommand: Command = {
 		}
 
 		if (promptedManually) {
-			const remember = await promptYesNo('Save password to OS keychain? (y/N): ');
+			const remember = await promptYesNo(
+				'Save password to OS keychain? (y/N): ',
+			);
 			if (remember) {
 				setSigningPassword(signingUsername, password);
 			}

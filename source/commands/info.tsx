@@ -1,4 +1,3 @@
-import React from 'react';
 import {render} from 'ink';
 import {Box, Text} from 'ink';
 import {type Command} from './types.js';

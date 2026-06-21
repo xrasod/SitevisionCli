@@ -12,7 +12,11 @@ import type {
 import {getDeployPassword, setDeployPassword} from './keychain.js';
 
 // Re-export types for backward compatibility
-export type {SitevisionManifest, DevProperties, ProjectInfo} from '../types/index.js';
+export type {
+	SitevisionManifest,
+	DevProperties,
+	ProjectInfo,
+} from '../types/index.js';
 
 // =============================================================================
 // PATH UTILITIES
@@ -21,7 +25,11 @@ export type {SitevisionManifest, DevProperties, ProjectInfo} from '../types/inde
 /**
  * Get standard project paths for a given root directory
  */
-export function getProjectPaths(root: string, manifestPath: string, devPropertiesPath: string | null): ProjectPaths {
+export function getProjectPaths(
+	root: string,
+	manifestPath: string,
+	devPropertiesPath: string | null,
+): ProjectPaths {
 	return {
 		root,
 		src: path.join(root, 'src'),
@@ -110,14 +118,20 @@ export function getSignedZipFilename(manifest: SitevisionManifest): string {
 /**
  * Get the full path to the zip file in dist/
  */
-export function getZipPath(projectRoot: string, manifest: SitevisionManifest): string {
+export function getZipPath(
+	projectRoot: string,
+	manifest: SitevisionManifest,
+): string {
 	return path.join(projectRoot, 'dist', getZipFilename(manifest));
 }
 
 /**
  * Get the full path to the signed zip file in dist/
  */
-export function getSignedZipPath(projectRoot: string, manifest: SitevisionManifest): string {
+export function getSignedZipPath(
+	projectRoot: string,
+	manifest: SitevisionManifest,
+): string {
 	return path.join(projectRoot, 'dist', getSignedZipFilename(manifest));
 }
 
@@ -151,7 +165,11 @@ export function getApiEndpoints(appType: SimpleAppType): ApiEndpoints {
 /**
  * Build the base URL for API requests
  */
-export function buildApiBaseUrl(domain: string, siteName: string, useHTTP = false): string {
+export function buildApiBaseUrl(
+	domain: string,
+	siteName: string,
+	useHTTP = false,
+): string {
 	const protocol = useHTTP ? 'http' : 'https';
 	return `${protocol}://${domain}/rest-api/1/0/${encodeURIComponent(siteName)}`;
 }
@@ -207,7 +225,9 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
 		for (const p of manifestPaths) {
 			if (fs.existsSync(p)) {
 				manifestPath = p;
-				manifest = JSON.parse(fs.readFileSync(p, 'utf-8')) as SitevisionManifest;
+				manifest = JSON.parse(
+					fs.readFileSync(p, 'utf-8'),
+				) as SitevisionManifest;
 				break;
 			}
 		}
@@ -222,7 +242,9 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
 			return null;
 		}
 
-		const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as PackageJson;
+		const packageJson = JSON.parse(
+			fs.readFileSync(packageJsonPath, 'utf-8'),
+		) as PackageJson;
 
 		// Check if sitevision-scripts is installed
 		const hasSitevisionScripts = Boolean(
@@ -243,17 +265,27 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
 		if (devPropertiesPath) {
 			hasDevProperties = true;
 			try {
-				const parsed = JSON.parse(fs.readFileSync(devPropertiesPath, 'utf-8')) as DevProperties & {password?: string};
-				hasLegacyPassword = typeof parsed.password === 'string' && parsed.password.length > 0;
+				const parsed = JSON.parse(
+					fs.readFileSync(devPropertiesPath, 'utf-8'),
+				) as DevProperties & {password?: string};
+				hasLegacyPassword =
+					typeof parsed.password === 'string' && parsed.password.length > 0;
 				devProperties = parsed;
 
 				// Resolve deploy password: env var > keychain (file is legacy-only)
-				if (!hasLegacyPassword && devProperties.domain && devProperties.username) {
+				if (
+					!hasLegacyPassword &&
+					devProperties.domain &&
+					devProperties.username
+				) {
 					const envPassword = process.env['SITEVISION_DEPLOY_PASSWORD'];
 					if (envPassword) {
 						devProperties.password = envPassword;
 					} else {
-						const stored = getDeployPassword(devProperties.domain, devProperties.username);
+						const stored = getDeployPassword(
+							devProperties.domain,
+							devProperties.username,
+						);
 						if (stored) {
 							devProperties.password = stored;
 						}
@@ -338,7 +370,9 @@ export function readDevProperties(projectRoot: string): DevProperties | null {
 	}
 
 	try {
-		return JSON.parse(fs.readFileSync(devPropertiesPath, 'utf-8')) as DevProperties;
+		return JSON.parse(
+			fs.readFileSync(devPropertiesPath, 'utf-8'),
+		) as DevProperties;
 	} catch {
 		return null;
 	}
@@ -348,8 +382,13 @@ export function readDevProperties(projectRoot: string): DevProperties | null {
  * Write dev properties to file. The `password` field is never persisted —
  * it is held in the OS keychain instead.
  */
-export function writeDevProperties(projectRoot: string, properties: DevProperties): void {
-	const devPropertiesPath = findDevPropertiesPath(projectRoot) || getDefaultDevPropertiesPath(projectRoot);
+export function writeDevProperties(
+	projectRoot: string,
+	properties: DevProperties,
+): void {
+	const devPropertiesPath =
+		findDevPropertiesPath(projectRoot) ||
+		getDefaultDevPropertiesPath(projectRoot);
 	const {password: _password, ...persisted} = properties;
 	fs.writeFileSync(devPropertiesPath, JSON.stringify(persisted, null, 2));
 }

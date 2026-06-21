@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import {useState} from 'react';
 import {type ProjectInfo} from './utils/project-detection.js';
 import {MainMenu} from './components/MainMenu.js';
 import {InfoScreen} from './components/InfoScreen.js';
@@ -9,7 +9,10 @@ import {BuildScreen} from './commands/build.js';
 import {DeployScreen} from './commands/deploy.js';
 import {SignScreen} from './commands/sign.js';
 import {SigningPropertiesForm} from './components/SigningPropertiesForm.js';
-import {setDeployPassword as saveDeployPassword, setSigningPassword as saveSigningPassword} from './utils/keychain.js';
+import {
+	setDeployPassword as saveDeployPassword,
+	setSigningPassword as saveSigningPassword,
+} from './utils/keychain.js';
 
 type Props = {
 	project: ProjectInfo;
@@ -34,7 +37,9 @@ export default function App({project}: Props) {
 	const [devPassword, setDevPassword] = useState<string>('');
 
 	// Check if dev password is available (either from file or session)
-	const hasDevPassword = Boolean(project.devProperties?.password || devPassword);
+	const hasDevPassword = Boolean(
+		project.devProperties?.password || devPassword,
+	);
 
 	// Get effective dev properties with session password if needed
 	const getEffectiveDevProperties = () => {
@@ -45,8 +50,17 @@ export default function App({project}: Props) {
 
 	const handleDevPasswordSubmit = (password: string, remember: boolean) => {
 		setDevPassword(password);
-		if (remember && project.devProperties?.domain && project.devProperties.username && password) {
-			saveDeployPassword(project.devProperties.domain, project.devProperties.username, password);
+		if (
+			remember &&
+			project.devProperties?.domain &&
+			project.devProperties.username &&
+			password
+		) {
+			saveDeployPassword(
+				project.devProperties.domain,
+				project.devProperties.username,
+				password,
+			);
 		}
 		// Continue to the intended command
 		if (currentCommand === 'dev' || currentCommand === 'dev-signed') {
@@ -174,7 +188,9 @@ export default function App({project}: Props) {
 			<PasswordInput
 				key="dev-password"
 				label="Enter Development Password (usually Sitevision Cloud Password)"
-				showRememberOption={Boolean(project.devProperties?.domain && project.devProperties?.username)}
+				showRememberOption={Boolean(
+					project.devProperties?.domain && project.devProperties?.username,
+				)}
 				onSubmit={handleDevPasswordSubmit}
 				onCancel={() => setState('menu')}
 			/>
@@ -210,12 +226,13 @@ export default function App({project}: Props) {
 					setState('dev-password-input');
 				}}
 				signingCredentials={
-					currentCommand === 'dev-signed' && project.devProperties?.signingUsername
+					currentCommand === 'dev-signed' &&
+					project.devProperties?.signingUsername
 						? {
 								username: project.devProperties.signingUsername,
 								password: signingPassword,
 								certificateName: project.devProperties.certificateName,
-						  }
+							}
 						: undefined
 				}
 			/>
@@ -285,4 +302,3 @@ export default function App({project}: Props) {
 
 	return null;
 }
-

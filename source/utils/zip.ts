@@ -24,7 +24,10 @@ import {ensureDistDir} from './project-detection.js';
  * @param outputPath - Path for the output zip file
  * @returns Promise resolving to the output path
  */
-export async function createZip(sourceDir: string, outputPath: string): Promise<string> {
+export async function createZip(
+	sourceDir: string,
+	outputPath: string,
+): Promise<string> {
 	// Ensure the output directory exists
 	const outputDir = path.dirname(outputPath);
 	if (!fs.existsSync(outputDir)) {
@@ -49,19 +52,17 @@ export async function createZip(sourceDir: string, outputPath: string): Promise<
 			stderr += data.toString();
 		});
 
-		zipProcess.on('error', (error) => {
+		zipProcess.on('error', error => {
 			// If zip command not found, try alternative methods
 			if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
 				// Fall back to tar on systems without zip
-				createZipWithTar(sourceDir, outputPath)
-					.then(resolve)
-					.catch(reject);
+				createZipWithTar(sourceDir, outputPath).then(resolve).catch(reject);
 			} else {
 				reject(new Error(`Zip process error: ${error.message}`));
 			}
 		});
 
-		zipProcess.on('close', (code) => {
+		zipProcess.on('close', code => {
 			if (code === 0) {
 				resolve(outputPath);
 			} else {
@@ -75,7 +76,10 @@ export async function createZip(sourceDir: string, outputPath: string): Promise<
  * Fallback: Create zip using tar (converts to zip format)
  * This is a fallback for systems without the zip command.
  */
-async function createZipWithTar(sourceDir: string, outputPath: string): Promise<string> {
+async function createZipWithTar(
+	sourceDir: string,
+	outputPath: string,
+): Promise<string> {
 	// On Windows without zip, we might need to use PowerShell
 	const isWindows = process.platform === 'win32';
 
@@ -84,13 +88,18 @@ async function createZipWithTar(sourceDir: string, outputPath: string): Promise<
 	}
 
 	// On Unix without zip, this is unlikely but we'll throw an error
-	throw new Error('zip command not found. Please install zip: apt-get install zip (Linux) or brew install zip (macOS)');
+	throw new Error(
+		'zip command not found. Please install zip: apt-get install zip (Linux) or brew install zip (macOS)',
+	);
 }
 
 /**
  * Create zip using PowerShell on Windows
  */
-async function createZipWithPowerShell(sourceDir: string, outputPath: string): Promise<string> {
+async function createZipWithPowerShell(
+	sourceDir: string,
+	outputPath: string,
+): Promise<string> {
 	return new Promise((resolve, reject) => {
 		const absoluteSourceDir = path.resolve(sourceDir);
 		const absoluteOutputPath = path.resolve(outputPath);
@@ -107,11 +116,11 @@ async function createZipWithPowerShell(sourceDir: string, outputPath: string): P
 			stderr += data.toString();
 		});
 
-		psProcess.on('error', (error) => {
+		psProcess.on('error', error => {
 			reject(new Error(`PowerShell error: ${error.message}`));
 		});
 
-		psProcess.on('close', (code) => {
+		psProcess.on('close', code => {
 			if (code === 0) {
 				resolve(absoluteOutputPath);
 			} else {

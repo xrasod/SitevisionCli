@@ -16,7 +16,7 @@ export const commands: Command[] = [
 ];
 
 export function getCommand(name: string): Command | undefined {
-	return commands.find((cmd) => cmd.name === name);
+	return commands.find(cmd => cmd.name === name);
 }
 
 export function getAllCommands(): Command[] {

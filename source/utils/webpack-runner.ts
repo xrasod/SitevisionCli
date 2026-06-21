@@ -35,7 +35,10 @@ interface WebpackConfig {
 
 interface WebpackCompiler {
 	run(callback: WebpackCallback): void;
-	watch(options: WebpackWatchOptions, callback: WebpackCallback): WebpackWatching;
+	watch(
+		options: WebpackWatchOptions,
+		callback: WebpackCallback,
+	): WebpackWatching;
 	close(callback: (err?: Error) => void): void;
 }
 
@@ -83,11 +86,13 @@ export class WebpackRunner {
 	private config: WebpackConfig | null = null;
 	private compiler: WebpackCompiler | null = null;
 	private watcher: WebpackWatching | null = null;
+	private readonly projectRoot: string;
+	private readonly options: BuildOptions;
 
-	constructor(
-		private projectRoot: string,
-		private options: BuildOptions,
-	) {}
+	constructor(projectRoot: string, options: BuildOptions) {
+		this.projectRoot = projectRoot;
+		this.options = options;
+	}
 
 	/**
 	 * Initialize webpack by loading it from the project's node_modules
@@ -108,7 +113,9 @@ export class WebpackRunner {
 
 		try {
 			// Use createRequire to load webpack (CommonJS module) from the project
-			const require = createRequire(path.join(this.projectRoot, 'package.json'));
+			const require = createRequire(
+				path.join(this.projectRoot, 'package.json'),
+			);
 			this.webpack = require('webpack') as WebpackModule;
 		} catch (error) {
 			throw new Error(
@@ -130,7 +137,15 @@ export class WebpackRunner {
 			path.join(this.projectRoot, 'webpack.config.js'),
 			path.join(this.projectRoot, 'webpack.config.mjs'),
 			path.join(this.projectRoot, 'config', 'webpack', 'webpack.config.js'),
-			path.join(this.projectRoot, 'node_modules', '@sitevision', 'sitevision-scripts', 'config', 'webpack', 'webpack.config.js'),
+			path.join(
+				this.projectRoot,
+				'node_modules',
+				'@sitevision',
+				'sitevision-scripts',
+				'config',
+				'webpack',
+				'webpack.config.js',
+			),
 		];
 
 		let configPath: string | null = null;
@@ -149,7 +164,8 @@ export class WebpackRunner {
 
 		try {
 			const configModule = await import(configPath);
-			const configFactory: WebpackConfigFactory = configModule.default || configModule;
+			const configFactory: WebpackConfigFactory =
+				configModule.default || configModule;
 
 			// If it's a function, call it with options
 			if (typeof configFactory === 'function') {
@@ -163,7 +179,8 @@ export class WebpackRunner {
 			}
 
 			// Override mode
-			this.config.mode = this.options.mode === 'development' ? 'development' : 'production';
+			this.config.mode =
+				this.options.mode === 'development' ? 'development' : 'production';
 		} catch (error) {
 			throw new Error(
 				`Failed to load webpack config: ${error instanceof Error ? error.message : String(error)}`,
@@ -180,12 +197,12 @@ export class WebpackRunner {
 		return {
 			success: !stats.hasErrors(),
 			outputPath: this.config?.output?.path,
-			errors: json.errors?.map((e) => e.message) || [],
-			warnings: json.warnings?.map((w) => w.message) || [],
+			errors: json.errors?.map(e => e.message) || [],
+			warnings: json.warnings?.map(w => w.message) || [],
 			stats: {
 				time: json.time || 0,
 				hash: json.hash || '',
-				assets: json.assets?.map((a) => a.name) || [],
+				assets: json.assets?.map(a => a.name) || [],
 			},
 		};
 	}
@@ -243,7 +260,7 @@ export class WebpackRunner {
 			throw new Error('Webpack not initialized');
 		}
 
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			this.compiler = this.webpack!(this.config!);
 
 			this.watcher = this.compiler.watch(
@@ -288,7 +305,7 @@ export class WebpackRunner {
 	 * Stop watching and close the compiler
 	 */
 	async close(): Promise<void> {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			if (this.watcher) {
 				this.watcher.close(() => {
 					this.watcher = null;
@@ -319,9 +336,16 @@ export class WebpackRunner {
 	 */
 	static getWebpackVersion(projectRoot: string): string | null {
 		try {
-			const packageJsonPath = path.join(projectRoot, 'node_modules', 'webpack', 'package.json');
+			const packageJsonPath = path.join(
+				projectRoot,
+				'node_modules',
+				'webpack',
+				'package.json',
+			);
 			if (fs.existsSync(packageJsonPath)) {
-				const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+				const packageJson = JSON.parse(
+					fs.readFileSync(packageJsonPath, 'utf-8'),
+				);
 				return packageJson.version;
 			}
 		} catch {

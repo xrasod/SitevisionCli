@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import {useState} from 'react';
 import {Box, Text, useInput} from 'ink';
 import {TextInput} from './TextInput.js';
 import type {DevProperties, PackageJson} from '../types/index.js';
@@ -13,7 +13,13 @@ interface Props {
 	onCancel: () => void;
 }
 
-type Step = 'domain' | 'siteName' | 'addonName' | 'username' | 'password' | 'useHTTP';
+type Step =
+	| 'domain'
+	| 'siteName'
+	| 'addonName'
+	| 'username'
+	| 'password'
+	| 'useHTTP';
 
 const STEPS: {id: Step; label: string}[] = [
 	{id: 'domain', label: 'Domain'},
@@ -24,7 +30,13 @@ const STEPS: {id: Step; label: string}[] = [
 	{id: 'useHTTP', label: 'Use HTTP'},
 ];
 
-export function DevPropertiesForm({projectRoot, initialProperties, packageJson, onComplete, onCancel}: Props) {
+export function DevPropertiesForm({
+	projectRoot,
+	initialProperties,
+	packageJson,
+	onComplete,
+	onCancel,
+}: Props) {
 	const [stepIndex, setStepIndex] = useState(0);
 	const [properties, setProperties] = useState<Partial<DevProperties>>(() => {
 		const defaults = {
@@ -117,7 +129,9 @@ export function DevPropertiesForm({projectRoot, initialProperties, packageJson, 
 						key="useHTTP"
 						label="Use HTTP for deployment? (y/n)"
 						defaultValue={properties.useHTTPForDevDeploy}
-						onSubmit={(value: boolean) => handleNext('useHTTPForDevDeploy', value)}
+						onSubmit={(value: boolean) =>
+							handleNext('useHTTPForDevDeploy', value)
+						}
 					/>
 				);
 			default:
@@ -128,15 +142,24 @@ export function DevPropertiesForm({projectRoot, initialProperties, packageJson, 
 	return (
 		<Box flexDirection="column" padding={1}>
 			<Box marginBottom={1}>
-				<Text bold color="cyan">Setup Development Properties</Text>
-				<Text> Step {stepIndex + 1} of {STEPS.length}: {currentStep?.label}</Text>
+				<Text bold color="cyan">
+					Setup Development Properties
+				</Text>
+				<Text>
+					{' '}
+					Step {stepIndex + 1} of {STEPS.length}: {currentStep?.label}
+				</Text>
 			</Box>
 
 			{/* Progress Bar */}
 			<Box marginBottom={1}>
 				{STEPS.map((s, i) => (
 					<Box key={s.id} marginRight={1}>
-						<Text color={i === stepIndex ? 'green' : i < stepIndex ? 'green' : 'gray'}>
+						<Text
+							color={
+								i === stepIndex ? 'green' : i < stepIndex ? 'green' : 'gray'
+							}
+						>
 							{i < stepIndex ? '✓' : i === stepIndex ? '●' : '○'}
 						</Text>
 					</Box>
@@ -150,8 +173,16 @@ export function DevPropertiesForm({projectRoot, initialProperties, packageJson, 
 	);
 }
 
-function BooleanInput({label, defaultValue, onSubmit}: {label: string, defaultValue?: boolean, onSubmit: (val: boolean) => void}) {
-	useInput((input) => {
+function BooleanInput({
+	label,
+	defaultValue,
+	onSubmit,
+}: {
+	label: string;
+	defaultValue?: boolean;
+	onSubmit: (val: boolean) => void;
+}) {
+	useInput(input => {
 		if (input === 'y' || input === 'Y') {
 			onSubmit(true);
 		} else if (input === 'n' || input === 'N') {
@@ -164,10 +195,17 @@ function BooleanInput({label, defaultValue, onSubmit}: {label: string, defaultVa
 	return (
 		<Box flexDirection="column">
 			<Box marginBottom={1}>
-				<Text bold color="cyan">{label}</Text>
+				<Text bold color="cyan">
+					{label}
+				</Text>
 			</Box>
 			<Box>
-				<Text dimColor>Press Y for Yes, N for No{defaultValue !== undefined ? ` (Default: ${defaultValue ? 'Yes' : 'No'})` : ''}</Text>
+				<Text dimColor>
+					Press Y for Yes, N for No
+					{defaultValue !== undefined
+						? ` (Default: ${defaultValue ? 'Yes' : 'No'})`
+						: ''}
+				</Text>
 			</Box>
 		</Box>
 	);

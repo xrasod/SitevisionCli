@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import {useState} from 'react';
 import {Box, Text, useInput} from 'ink';
 import {type ProjectInfo} from '../utils/project-detection.js';
 import {PasswordInput} from './PasswordInput.js';

@@ -1,8 +1,11 @@
-import React, {useState} from 'react';
+import {useState} from 'react';
 import {Box, Text} from 'ink';
 import {TextInput} from './TextInput.js';
 import type {DevProperties} from '../types/index.js';
-import {writeDevProperties, readDevProperties} from '../utils/project-detection.js';
+import {
+	writeDevProperties,
+	readDevProperties,
+} from '../utils/project-detection.js';
 
 interface Props {
 	projectRoot: string;
@@ -17,10 +20,16 @@ const STEPS: {id: Step; label: string}[] = [
 	{id: 'certificate', label: 'Certificate Name'},
 ];
 
-export function SigningPropertiesForm({projectRoot, onComplete, onCancel}: Props) {
+export function SigningPropertiesForm({
+	projectRoot,
+	onComplete,
+	onCancel,
+}: Props) {
 	const [stepIndex, setStepIndex] = useState(0);
 	// Read existing properties to preserve other fields
-	const [properties, setProperties] = useState<DevProperties>(() => readDevProperties(projectRoot) || {} as DevProperties);
+	const [properties, setProperties] = useState<DevProperties>(
+		() => readDevProperties(projectRoot) || ({} as DevProperties),
+	);
 
 	const currentStep = STEPS[stepIndex];
 
@@ -68,14 +77,23 @@ export function SigningPropertiesForm({projectRoot, onComplete, onCancel}: Props
 	return (
 		<Box flexDirection="column" padding={1}>
 			<Box marginBottom={1}>
-				<Text bold color="cyan">Setup Signing Properties</Text>
-				<Text> Step {stepIndex + 1} of {STEPS.length}: {currentStep?.label}</Text>
+				<Text bold color="cyan">
+					Setup Signing Properties
+				</Text>
+				<Text>
+					{' '}
+					Step {stepIndex + 1} of {STEPS.length}: {currentStep?.label}
+				</Text>
 			</Box>
 
 			<Box marginBottom={1}>
 				{STEPS.map((s, i) => (
 					<Box key={s.id} marginRight={1}>
-						<Text color={i === stepIndex ? 'green' : i < stepIndex ? 'green' : 'gray'}>
+						<Text
+							color={
+								i === stepIndex ? 'green' : i < stepIndex ? 'green' : 'gray'
+							}
+						>
 							{i < stepIndex ? '✓' : i === stepIndex ? '●' : '○'}
 						</Text>
 					</Box>

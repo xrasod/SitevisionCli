@@ -5,12 +5,12 @@ import {StatusIndicator} from '../components/StatusIndicator.js';
 import {WebpackRunner} from '../utils/webpack-runner.js';
 import {promptPassword, promptYesNo} from '../utils/password-prompt.js';
 import {signApp, deployApp} from '../utils/sitevision-api.js';
-import {getSigningPassword, setSigningPassword, setDeployPassword} from '../utils/keychain.js';
 import {
-	copyStaticToBuild,
-	createBuildZip,
-	cleanBuild,
-} from '../utils/zip.js';
+	getSigningPassword,
+	setSigningPassword,
+	setDeployPassword,
+} from '../utils/keychain.js';
+import {copyStaticToBuild, createBuildZip, cleanBuild} from '../utils/zip.js';
 import {
 	isBundledApp,
 	getAppType,
@@ -18,7 +18,12 @@ import {
 	getZipPath,
 	getSignedZipPath,
 } from '../utils/project-detection.js';
-import type {SitevisionManifest, DevProperties, BuildResult, SigningCredentials} from '../types/index.js';
+import type {
+	SitevisionManifest,
+	DevProperties,
+	BuildResult,
+	SigningCredentials,
+} from '../types/index.js';
 
 interface DevScreenProps {
 	projectRoot: string;
@@ -30,7 +35,14 @@ interface DevScreenProps {
 	onRetryCredentials?: () => void;
 }
 
-type DevStatus = 'initializing' | 'watching' | 'building' | 'signing' | 'deploying' | 'ready' | 'error';
+type DevStatus =
+	| 'initializing'
+	| 'watching'
+	| 'building'
+	| 'signing'
+	| 'deploying'
+	| 'ready'
+	| 'error';
 
 interface DevState {
 	status: DevStatus;
@@ -69,102 +81,109 @@ export function DevScreen({
 
 	const webpackRunnerRef = React.useRef<WebpackRunner | null>(null);
 
-	const handleBuildComplete = React.useCallback(async (result: BuildResult) => {
-		if (!result.success) {
-			setState(prev => ({
-				...prev,
-				status: 'error',
-				message: result.errors?.join('\n') || 'Build failed',
-				error: result.errors?.join('\n'),
-			}));
-			return;
-		}
-
-		try {
-			// Copy static files
-			copyStaticToBuild(projectRoot);
-
-			// Create zip
-			const appId = getFullAppId(manifest.id);
-			await createBuildZip(projectRoot, appId);
-			const zipPath = getZipPath(projectRoot, manifest);
-
-			let deployZipPath = zipPath;
-
-			// Sign if needed
-			if (signed && signingCredentials) {
-				setState(prev => ({
-					...prev,
-					status: 'signing',
-					message: 'Signing app...',
-				}));
-
-				const signedZipPath = getSignedZipPath(projectRoot, manifest);
-				const signResult = await signApp(zipPath, signingCredentials, signedZipPath);
-
-				if (!signResult.success) {
-					setState(prev => ({
-						...prev,
-						status: 'error',
-						message: `Signing failed: ${signResult.error}`,
-						error: signResult.error,
-					}));
-					return;
-				}
-
-				deployZipPath = signedZipPath;
-			}
-
-			// Deploy
-			setState(prev => ({
-				...prev,
-				status: 'deploying',
-				message: 'Deploying to dev...',
-			}));
-
-			const appType = getAppType(manifest);
-			const deployResult = await deployApp(
-				deployZipPath,
-				{
-					domain: devProperties.domain,
-					siteName: devProperties.siteName,
-					addonName: devProperties.addonName,
-					username: devProperties.username,
-					password: devProperties.password!,
-					useHTTP: devProperties.useHTTPForDevDeploy,
-				},
-				appType,
-				true, // force
-			);
-
-			if (!deployResult.success) {
+	const handleBuildComplete = React.useCallback(
+		async (result: BuildResult) => {
+			if (!result.success) {
 				setState(prev => ({
 					...prev,
 					status: 'error',
-					message: `Deploy failed: ${deployResult.error}`,
-					error: deployResult.error,
+					message: result.errors?.join('\n') || 'Build failed',
+					error: result.errors?.join('\n'),
 				}));
 				return;
 			}
 
-			// Success - back to watching
-			setState(prev => ({
-				...prev,
-				status: 'ready',
-				message: 'Deployed. Watching for changes...',
-				buildCount: prev.buildCount + 1,
-				lastBuildTime: result.stats?.time,
-				error: undefined,
-			}));
-		} catch (error) {
-			setState(prev => ({
-				...prev,
-				status: 'error',
-				message: error instanceof Error ? error.message : String(error),
-				error: error instanceof Error ? error.message : String(error),
-			}));
-		}
-	}, [projectRoot, manifest, devProperties, signed, signingCredentials]);
+			try {
+				// Copy static files
+				copyStaticToBuild(projectRoot);
+
+				// Create zip
+				const appId = getFullAppId(manifest.id);
+				await createBuildZip(projectRoot, appId);
+				const zipPath = getZipPath(projectRoot, manifest);
+
+				let deployZipPath = zipPath;
+
+				// Sign if needed
+				if (signed && signingCredentials) {
+					setState(prev => ({
+						...prev,
+						status: 'signing',
+						message: 'Signing app...',
+					}));
+
+					const signedZipPath = getSignedZipPath(projectRoot, manifest);
+					const signResult = await signApp(
+						zipPath,
+						signingCredentials,
+						signedZipPath,
+					);
+
+					if (!signResult.success) {
+						setState(prev => ({
+							...prev,
+							status: 'error',
+							message: `Signing failed: ${signResult.error}`,
+							error: signResult.error,
+						}));
+						return;
+					}
+
+					deployZipPath = signedZipPath;
+				}
+
+				// Deploy
+				setState(prev => ({
+					...prev,
+					status: 'deploying',
+					message: 'Deploying to dev...',
+				}));
+
+				const appType = getAppType(manifest);
+				const deployResult = await deployApp(
+					deployZipPath,
+					{
+						domain: devProperties.domain,
+						siteName: devProperties.siteName,
+						addonName: devProperties.addonName,
+						username: devProperties.username,
+						password: devProperties.password!,
+						useHTTP: devProperties.useHTTPForDevDeploy,
+					},
+					appType,
+					true, // force
+				);
+
+				if (!deployResult.success) {
+					setState(prev => ({
+						...prev,
+						status: 'error',
+						message: `Deploy failed: ${deployResult.error}`,
+						error: deployResult.error,
+					}));
+					return;
+				}
+
+				// Success - back to watching
+				setState(prev => ({
+					...prev,
+					status: 'ready',
+					message: 'Deployed. Watching for changes...',
+					buildCount: prev.buildCount + 1,
+					lastBuildTime: result.stats?.time,
+					error: undefined,
+				}));
+			} catch (error) {
+				setState(prev => ({
+					...prev,
+					status: 'error',
+					message: error instanceof Error ? error.message : String(error),
+					error: error instanceof Error ? error.message : String(error),
+				}));
+			}
+		},
+		[projectRoot, manifest, devProperties, signed, signingCredentials],
+	);
 
 	React.useEffect(() => {
 		const isBundled = isBundledApp(manifest);
@@ -308,7 +327,9 @@ export function DevScreen({
 				<Box marginLeft={2} marginBottom={1}>
 					<Text dimColor>
 						Builds: {state.buildCount}
-						{state.lastBuildTime ? ` | Last build: ${state.lastBuildTime}ms` : ''}
+						{state.lastBuildTime
+							? ` | Last build: ${state.lastBuildTime}ms`
+							: ''}
 						{signed ? ' | Signed mode' : ''}
 					</Text>
 				</Box>
@@ -325,7 +346,8 @@ export function DevScreen({
 			{devProperties && (
 				<Box marginLeft={2} marginBottom={1}>
 					<Text dimColor>
-						Target: {devProperties.domain}/{devProperties.siteName}/{devProperties.addonName}
+						Target: {devProperties.domain}/{devProperties.siteName}/
+						{devProperties.addonName}
 					</Text>
 				</Box>
 			)}
@@ -342,7 +364,9 @@ export function DevScreen({
 					<Text dimColor>Press r to retry with new credentials</Text>
 				)}
 				{onBack ? (
-					<Text dimColor>Press q or Esc to return to menu (Ctrl+C to stop process)</Text>
+					<Text dimColor>
+						Press q or Esc to return to menu (Ctrl+C to stop process)
+					</Text>
 				) : (
 					<Text dimColor>Press Ctrl+C to stop</Text>
 				)}
@@ -367,7 +391,9 @@ export const devCommand: Command = {
 		// Check if dev properties are configured
 		if (!project.hasDevProperties || !project.devProperties) {
 			console.log('\n\x1b[33mDeployment credentials not configured.\x1b[0m');
-			console.log('Create a .dev_properties.json file with domain, siteName, addonName, and username, then run setup.\n');
+			console.log(
+				'Create a .dev_properties.json file with domain, siteName, addonName, and username, then run setup.\n',
+			);
 			return;
 		}
 
@@ -375,12 +401,16 @@ export const devCommand: Command = {
 		if (!project.devProperties.password) {
 			const {domain, username} = project.devProperties;
 			console.log('');
-			const pw = await promptPassword(`Deploy password for ${username}@${domain}: `);
+			const pw = await promptPassword(
+				`Deploy password for ${username}@${domain}: `,
+			);
 			if (!pw) {
 				console.log('\x1b[31mError: Password is required\x1b[0m');
 				return;
 			}
-			const remember = await promptYesNo('Save password to OS keychain? (y/N): ');
+			const remember = await promptYesNo(
+				'Save password to OS keychain? (y/N): ',
+			);
 			if (remember && domain && username) {
 				setDeployPassword(domain, username, pw);
 			}
@@ -392,29 +422,43 @@ export const devCommand: Command = {
 
 		// If signed mode, resolve signing password (keychain → env → prompt)
 		if (signed) {
-			if (!project.hasSigningProperties || !project.devProperties.signingUsername) {
+			if (
+				!project.hasSigningProperties ||
+				!project.devProperties.signingUsername
+			) {
 				console.log('\n\x1b[33mSigning credentials not configured.\x1b[0m');
-				console.log('Run \x1b[36msetup-signing\x1b[0m to configure credentials.\n');
+				console.log(
+					'Run \x1b[36msetup-signing\x1b[0m to configure credentials.\n',
+				);
 				return;
 			}
 
 			const signingUsername = project.devProperties.signingUsername;
-			let password = getSigningPassword(signingUsername) || process.env['SITEVISION_SIGNING_PASSWORD'] || '';
+			let password =
+				getSigningPassword(signingUsername) ||
+				process.env['SITEVISION_SIGNING_PASSWORD'] ||
+				'';
 			let promptedManually = false;
 
 			if (!password) {
 				console.log('');
-				password = await promptPassword('Signing password (developer.sitevision.se): ');
+				password = await promptPassword(
+					'Signing password (developer.sitevision.se): ',
+				);
 				promptedManually = true;
 			}
 
 			if (!password) {
-				console.log('\x1b[31mError: Password is required for signed mode\x1b[0m');
+				console.log(
+					'\x1b[31mError: Password is required for signed mode\x1b[0m',
+				);
 				return;
 			}
 
 			if (promptedManually) {
-				const remember = await promptYesNo('Save password to OS keychain? (y/N): ');
+				const remember = await promptYesNo(
+					'Save password to OS keychain? (y/N): ',
+				);
 				if (remember) {
 					setSigningPassword(signingUsername, password);
 				}

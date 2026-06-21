@@ -1,6 +1,10 @@
-import React, {useState, useEffect} from 'react';
+import {useState, useEffect} from 'react';
 import {Box, Text, useInput} from 'ink';
-import {type ProjectInfo, getAppType, migrateLegacyPassword} from '../utils/project-detection.js';
+import {
+	type ProjectInfo,
+	getAppType,
+	migrateLegacyPassword,
+} from '../utils/project-detection.js';
 import {ProcessRunner} from '../utils/process-runner.js';
 import {ProcessOutputComponent} from './ProcessOutput.js';
 import {StatusIndicator} from './StatusIndicator.js';
@@ -29,7 +33,9 @@ type SetupStep =
 export function SetupFlow({project, onComplete}: Props) {
 	const [step, setStep] = useState<SetupStep>('check-node-modules');
 	const [runner, setRunner] = useState<any>(null);
-	const [commandStatus, setCommandStatus] = useState<'running' | 'success' | 'error'>('running');
+	const [commandStatus, setCommandStatus] = useState<
+		'running' | 'success' | 'error'
+	>('running');
 	const appType = getAppType(project.manifest);
 
 	// Auto-advance through checks
@@ -62,7 +68,7 @@ export function SetupFlow({project, onComplete}: Props) {
 		}
 	}, [step, project, onComplete]); // Removed specific props from dependency array to allow re-check after updates
 
-	useInput((input) => {
+	useInput(input => {
 		if (step === 'confirm-npm-install') {
 			if (input === 'y' || input === 'Y') {
 				setStep('running-npm-install');
@@ -160,7 +166,9 @@ export function SetupFlow({project, onComplete}: Props) {
 		return (
 			<Box flexDirection="column" padding={1}>
 				<Box marginBottom={1}>
-					<Text bold color="cyan">Sitevision CLI</Text>
+					<Text bold color="cyan">
+						Sitevision CLI
+					</Text>
 				</Box>
 				<Box marginBottom={1}>
 					<Text color="yellow">⚠ node_modules not found</Text>
@@ -177,7 +185,9 @@ export function SetupFlow({project, onComplete}: Props) {
 		return (
 			<Box flexDirection="column" padding={1}>
 				<Box marginBottom={1}>
-					<Text bold color="cyan">Sitevision CLI</Text>
+					<Text bold color="cyan">
+						Sitevision CLI
+					</Text>
 				</Box>
 				<Box marginBottom={1}>
 					<Text color="yellow">⚠ dev properties not configured</Text>
@@ -194,14 +204,22 @@ export function SetupFlow({project, onComplete}: Props) {
 		return (
 			<Box flexDirection="column" padding={1}>
 				<Box marginBottom={1}>
-					<Text bold color="cyan">Sitevision CLI</Text>
+					<Text bold color="cyan">
+						Sitevision CLI
+					</Text>
 				</Box>
 				<Box marginBottom={1}>
-					<Text color="yellow">⚠ Plaintext password found in .dev_properties.json</Text>
+					<Text color="yellow">
+						⚠ Plaintext password found in .dev_properties.json
+					</Text>
 				</Box>
 				<Box marginBottom={1} flexDirection="column">
-					<Text>Move it to the OS keychain and remove it from the file? (y/n)</Text>
-					<Text dimColor>Recommended — storing passwords in project files is insecure.</Text>
+					<Text>
+						Move it to the OS keychain and remove it from the file? (y/n)
+					</Text>
+					<Text dimColor>
+						Recommended — storing passwords in project files is insecure.
+					</Text>
 				</Box>
 			</Box>
 		);
@@ -212,13 +230,18 @@ export function SetupFlow({project, onComplete}: Props) {
 		return (
 			<Box flexDirection="column" padding={1}>
 				<Box marginBottom={1}>
-					<Text bold color="cyan">Sitevision CLI</Text>
+					<Text bold color="cyan">
+						Sitevision CLI
+					</Text>
 				</Box>
 				<Box marginBottom={1}>
 					<Text color="yellow">⚠ signing credentials not configured</Text>
 				</Box>
 				<Box marginBottom={1}>
-					<Text>Signing credentials are required for signing apps on developer.sitevision.se</Text>
+					<Text>
+						Signing credentials are required for signing apps on
+						developer.sitevision.se
+					</Text>
 				</Box>
 				<Box marginBottom={1}>
 					<Text>Would you like to set up signing credentials? (y/n)</Text>
@@ -232,7 +255,9 @@ export function SetupFlow({project, onComplete}: Props) {
 		return (
 			<Box flexDirection="column" padding={1}>
 				<Box marginBottom={1}>
-					<Text bold color="cyan">Sitevision Project Information</Text>
+					<Text bold color="cyan">
+						Sitevision Project Information
+					</Text>
 				</Box>
 
 				<Box flexDirection="column" marginLeft={2}>
@@ -262,7 +287,9 @@ export function SetupFlow({project, onComplete}: Props) {
 				{project.hasDevProperties && project.devProperties && (
 					<>
 						<Box marginTop={1} marginBottom={1}>
-							<Text bold color="cyan">Development Configuration</Text>
+							<Text bold color="cyan">
+								Development Configuration
+							</Text>
 						</Box>
 
 						<Box flexDirection="column" marginLeft={2}>
@@ -284,7 +311,9 @@ export function SetupFlow({project, onComplete}: Props) {
 							</Box>
 							<Box>
 								<Text bold>Use HTTP: </Text>
-								<Text>{project.devProperties.useHTTPForDevDeploy ? 'Yes' : 'No'}</Text>
+								<Text>
+									{project.devProperties.useHTTPForDevDeploy ? 'Yes' : 'No'}
+								</Text>
 							</Box>
 						</Box>
 					</>
@@ -300,7 +329,6 @@ export function SetupFlow({project, onComplete}: Props) {
 					<Text bold>Project Root: </Text>
 					<Text dimColor>{project.root}</Text>
 				</Box>
-
 			</Box>
 		);
 	}

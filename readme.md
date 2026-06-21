@@ -2,6 +2,7 @@
 
 This CLI was largely built on the back of the [sitevision-scripts](https://github.com/sitevision/sitevision-scripts) project.
 However, these scripts have some limitations:
+
 - Clunky for use with environments requiring signed packages
 - Clunkly management of credentials and unsecure handling of credentials
 - No type safety
@@ -33,6 +34,7 @@ svc
 ```
 
 On first run (or if setup is incomplete), the CLI will:
+
 1. Check if `node_modules` exists and offer to run `npm install` if missing
 2. Check if dev properties are configured and offer to set them up if missing
 3. Check if you have setup signing credentials and offer to do so if missing
@@ -40,6 +42,7 @@ On first run (or if setup is incomplete), the CLI will:
 5. Show the main menu
 
 Use arrow keys to navigate and Enter to select:
+
 - **Dev** - Start development server with watch mode
 - **Dev (Signed)** - Development with automatic signing before each deploy
 - **Build** - Build a dist bundle
@@ -113,13 +116,13 @@ Create this file in your project root for deployment configuration:
 
 ```json
 {
-  "domain": "your-site.sitevision.se",
-  "siteName": "YourSite",
-  "addonName": "your-addon",
-  "username": "your-email@example.com",
-  "useHTTPForDevDeploy": false,
-  "signingUsername": "your-developer-account@example.com",
-  "certificateName": "optional-certificate-name"
+	"domain": "your-site.sitevision.se",
+	"siteName": "YourSite",
+	"addonName": "your-addon",
+	"username": "your-email@example.com",
+	"useHTTPForDevDeploy": false,
+	"signingUsername": "your-developer-account@example.com",
+	"certificateName": "optional-certificate-name"
 }
 ```
 
@@ -144,6 +147,7 @@ are never written anywhere.
 ### Signing Credentials
 
 Signing credentials are used to sign apps via developer.sitevision.se:
+
 - `signingUsername` - Your developer.sitevision.se account
 - `certificateName` - Optional, if you have multiple certificates
 

@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import {useState} from 'react';
 import {Box, Text, useInput} from 'ink';
 import {type ProjectInfo} from '../utils/project-detection.js';
 import {getAppType} from '../utils/project-detection.js';
@@ -68,11 +68,11 @@ export function MainMenu({project, onSelect}: Props) {
 
 	useInput((input, key) => {
 		if (key.upArrow) {
-			setSelectedIndex((prev) => (prev > 0 ? prev - 1 : items.length - 1));
+			setSelectedIndex(prev => (prev > 0 ? prev - 1 : items.length - 1));
 		}
 
 		if (key.downArrow) {
-			setSelectedIndex((prev) => (prev < items.length - 1 ? prev + 1 : 0));
+			setSelectedIndex(prev => (prev < items.length - 1 ? prev + 1 : 0));
 		}
 
 		if (key.return || input === '\r' || input === '\n') {
@@ -89,7 +89,9 @@ export function MainMenu({project, onSelect}: Props) {
 	return (
 		<Box flexDirection="column" padding={1}>
 			<Box marginBottom={1}>
-				<Text bold color="cyan">Sitevision Project Information</Text>
+				<Text bold color="cyan">
+					Sitevision Project Information
+				</Text>
 			</Box>
 
 			<Box flexDirection="column" marginLeft={2} marginBottom={1}>
@@ -119,7 +121,9 @@ export function MainMenu({project, onSelect}: Props) {
 			{project.hasDevProperties && project.devProperties && (
 				<>
 					<Box marginBottom={1}>
-						<Text bold color="cyan">Development Configuration</Text>
+						<Text bold color="cyan">
+							Development Configuration
+						</Text>
 					</Box>
 
 					<Box flexDirection="column" marginLeft={2} marginBottom={1}>
@@ -141,7 +145,9 @@ export function MainMenu({project, onSelect}: Props) {
 						</Box>
 						<Box>
 							<Text bold>Use HTTP: </Text>
-							<Text>{project.devProperties.useHTTPForDevDeploy ? 'Yes' : 'No'}</Text>
+							<Text>
+								{project.devProperties.useHTTPForDevDeploy ? 'Yes' : 'No'}
+							</Text>
 						</Box>
 					</Box>
 				</>
@@ -150,7 +156,9 @@ export function MainMenu({project, onSelect}: Props) {
 			{project.hasSigningProperties && project.devProperties && (
 				<>
 					<Box marginBottom={1}>
-						<Text bold color="cyan">Signing Configuration</Text>
+						<Text bold color="cyan">
+							Signing Configuration
+						</Text>
 					</Box>
 
 					<Box flexDirection="column" marginLeft={2} marginBottom={1}>
@@ -169,7 +177,12 @@ export function MainMenu({project, onSelect}: Props) {
 			)}
 
 			{!project.hasDevProperties && (
-				<Box marginBottom={1} paddingX={1} borderStyle="round" borderColor="yellow">
+				<Box
+					marginBottom={1}
+					paddingX={1}
+					borderStyle="round"
+					borderColor="yellow"
+				>
 					<Text color="yellow">
 						⚠ No dev properties found. Some commands may not work.
 					</Text>
@@ -177,9 +190,15 @@ export function MainMenu({project, onSelect}: Props) {
 			)}
 
 			{project.hasDevProperties && !project.hasSigningProperties && (
-				<Box marginBottom={1} paddingX={1} borderStyle="round" borderColor="yellow">
+				<Box
+					marginBottom={1}
+					paddingX={1}
+					borderStyle="round"
+					borderColor="yellow"
+				>
 					<Text color="yellow">
-						⚠ No signing credentials configured. Run svc setup-signing to configure.
+						⚠ No signing credentials configured. Run svc setup-signing to
+						configure.
 					</Text>
 				</Box>
 			)}
@@ -191,12 +210,13 @@ export function MainMenu({project, onSelect}: Props) {
 			<Box flexDirection="column">
 				{items.map((item, index) => (
 					<Box key={item.value} marginLeft={1}>
-						<Text color={index === selectedIndex ? 'cyan' : undefined} bold={index === selectedIndex}>
+						<Text
+							color={index === selectedIndex ? 'cyan' : undefined}
+							bold={index === selectedIndex}
+						>
 							{index === selectedIndex ? '▶ ' : '  '}
 							{item.label}
-							{item.description && (
-								<Text dimColor> - {item.description}</Text>
-							)}
+							{item.description && <Text dimColor> - {item.description}</Text>}
 						</Text>
 					</Box>
 				))}

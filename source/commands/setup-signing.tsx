@@ -4,8 +4,8 @@ import readline from 'readline';
 import {type Command} from './types.js';
 
 function question(rl: readline.Interface, prompt: string): Promise<string> {
-	return new Promise((resolve) => {
-		rl.question(prompt, (answer) => {
+	return new Promise(resolve => {
+		rl.question(prompt, answer => {
 			resolve(answer);
 		});
 	});
@@ -22,7 +22,9 @@ export const setupSigningCommand: Command = {
 		});
 
 		console.log('\n\x1b[36m\x1b[1mSetup Signing Credentials\x1b[0m\n');
-		console.log('Configure credentials for signing apps on developer.sitevision.se');
+		console.log(
+			'Configure credentials for signing apps on developer.sitevision.se',
+		);
 		console.log('(Password will be prompted when running signing commands)\n');
 
 		// Find existing dev properties file
@@ -38,7 +40,9 @@ export const setupSigningCommand: Command = {
 			if (fs.existsSync(p)) {
 				devPropertiesPath = p;
 				try {
-					existingProperties = JSON.parse(fs.readFileSync(p, 'utf-8')) as Record<string, unknown>;
+					existingProperties = JSON.parse(
+						fs.readFileSync(p, 'utf-8'),
+					) as Record<string, unknown>;
 				} catch {
 					// Invalid file, start fresh
 				}
@@ -48,7 +52,8 @@ export const setupSigningCommand: Command = {
 
 		try {
 			// Get signing username
-			const defaultUsername = (existingProperties['signingUsername'] as string) || '';
+			const defaultUsername =
+				(existingProperties['signingUsername'] as string) || '';
 			const usernamePrompt = defaultUsername
 				? `Signing username [${defaultUsername}]: `
 				: 'Signing username: ';
@@ -64,7 +69,8 @@ export const setupSigningCommand: Command = {
 			}
 
 			// Get certificate name (optional)
-			const defaultCertName = (existingProperties['certificateName'] as string) || '';
+			const defaultCertName =
+				(existingProperties['certificateName'] as string) || '';
 			const certPrompt = defaultCertName
 				? `Certificate name (blank for default) [${defaultCertName}]: `
 				: 'Certificate name (blank for default): ';
@@ -76,20 +82,34 @@ export const setupSigningCommand: Command = {
 			rl.close();
 
 			// Update dev properties (strip any plaintext passwords — they live in the keychain)
-			const {signingPassword: _signingRemoved, password: _passwordRemoved, ...cleanedProperties} =
-				existingProperties as Record<string, unknown> & {signingPassword?: unknown; password?: unknown};
+			const {
+				signingPassword: _signingRemoved,
+				password: _passwordRemoved,
+				...cleanedProperties
+			} = existingProperties as Record<string, unknown> & {
+				signingPassword?: unknown;
+				password?: unknown;
+			};
 			const updatedProperties = {
 				...cleanedProperties,
 				signingUsername,
 				...(certificateName && {certificateName}),
 			};
 
-			fs.writeFileSync(devPropertiesPath, JSON.stringify(updatedProperties, null, 2));
+			fs.writeFileSync(
+				devPropertiesPath,
+				JSON.stringify(updatedProperties, null, 2),
+			);
 
-			console.log(`\n\x1b[32mSigning credentials saved to ${path.basename(devPropertiesPath)}\x1b[0m\n`);
+			console.log(
+				`\n\x1b[32mSigning credentials saved to ${path.basename(devPropertiesPath)}\x1b[0m\n`,
+			);
 		} catch (error) {
 			rl.close();
-			console.error('\x1b[31mError setting up signing credentials:\x1b[0m', error);
+			console.error(
+				'\x1b[31mError setting up signing credentials:\x1b[0m',
+				error,
+			);
 		}
 	},
 };

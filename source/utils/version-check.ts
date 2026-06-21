@@ -30,12 +30,12 @@ export function checkForUpdate(
 	currentVersion: string,
 	timeoutMs = 1500,
 ): Promise<string | null> {
-	return new Promise((resolve) => {
+	return new Promise(resolve => {
 		const url = `https://registry.npmjs.org/${encodeURIComponent(packageName)}/latest`;
 		const request = https.get(
 			url,
 			{timeout: timeoutMs, headers: {accept: 'application/json'}},
-			(response) => {
+			response => {
 				if (response.statusCode !== 200) {
 					response.resume();
 					resolve(null);
@@ -44,7 +44,7 @@ export function checkForUpdate(
 
 				let body = '';
 				response.setEncoding('utf8');
-				response.on('data', (chunk) => {
+				response.on('data', chunk => {
 					body += chunk;
 				});
 				response.on('end', () => {

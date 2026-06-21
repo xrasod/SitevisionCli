@@ -2,7 +2,7 @@
  * Prompt for a yes/no answer. Returns true for y/Y, false otherwise (incl. empty / Enter).
  */
 export function promptYesNo(prompt: string): Promise<boolean> {
-	return new Promise((resolve) => {
+	return new Promise(resolve => {
 		process.stdout.write(prompt);
 		const stdin = process.stdin;
 		stdin.setRawMode(true);
@@ -29,7 +29,7 @@ export function promptYesNo(prompt: string): Promise<boolean> {
  * Prompt for password input with masked display
  */
 export function promptPassword(prompt: string): Promise<string> {
-	return new Promise((resolve) => {
+	return new Promise(resolve => {
 		process.stdout.write(prompt);
 		const stdin = process.stdin;
 		stdin.setRawMode(true);

@@ -25,7 +25,13 @@ interface BuildScreenProps {
 	onBack?: () => void;
 }
 
-type BuildStatus = 'cleaning' | 'building' | 'copying' | 'zipping' | 'success' | 'error';
+type BuildStatus =
+	| 'cleaning'
+	| 'building'
+	| 'copying'
+	| 'zipping'
+	| 'success'
+	| 'error';
 
 interface BuildState {
 	status: BuildStatus;
@@ -36,14 +42,23 @@ interface BuildState {
 	error?: string;
 }
 
-export function BuildScreen({projectRoot, manifest, createZip = true, onBack}: BuildScreenProps) {
+export function BuildScreen({
+	projectRoot,
+	manifest,
+	createZip = true,
+	onBack,
+}: BuildScreenProps) {
 	const [state, setState] = React.useState<BuildState>({
 		status: 'cleaning',
 		message: 'Cleaning build directory...',
 	});
 
 	useInput((input, key) => {
-		if (onBack && (key.escape || input === 'q') && (state.status === 'success' || state.status === 'error')) {
+		if (
+			onBack &&
+			(key.escape || input === 'q') &&
+			(state.status === 'success' || state.status === 'error')
+		) {
 			onBack();
 		}
 	});
@@ -63,7 +78,8 @@ export function BuildScreen({projectRoot, manifest, createZip = true, onBack}: B
 					if (!WebpackRunner.isWebpackAvailable(projectRoot)) {
 						setState({
 							status: 'error',
-							error: 'webpack not found. Run npm install to install dependencies.',
+							error:
+								'webpack not found. Run npm install to install dependencies.',
 						});
 						return;
 					}
@@ -177,14 +193,13 @@ export function BuildScreen({projectRoot, manifest, createZip = true, onBack}: B
 			{/* Build stats on success */}
 			{state.status === 'success' && state.result?.stats && (
 				<Box flexDirection="column" marginLeft={2}>
-					<Text dimColor>
-						Compiled in {state.result.stats.time}ms
-					</Text>
-					{state.result.stats.assets && state.result.stats.assets.length > 0 && (
-						<Text dimColor>
-							Assets: {state.result.stats.assets.join(', ')}
-						</Text>
-					)}
+					<Text dimColor>Compiled in {state.result.stats.time}ms</Text>
+					{state.result.stats.assets &&
+						state.result.stats.assets.length > 0 && (
+							<Text dimColor>
+								Assets: {state.result.stats.assets.join(', ')}
+							</Text>
+						)}
 				</Box>
 			)}
 
@@ -193,7 +208,7 @@ export function BuildScreen({projectRoot, manifest, createZip = true, onBack}: B
 				<Box flexDirection="column" marginLeft={2} marginTop={1}>
 					<Text color="green">✓ Created: {state.zipPath}</Text>
 					{state.zipSize !== undefined && (
-						<Text dimColor>  Size: {formatFileSize(state.zipSize)}</Text>
+						<Text dimColor> Size: {formatFileSize(state.zipSize)}</Text>
 					)}
 				</Box>
 			)}
@@ -204,12 +219,12 @@ export function BuildScreen({projectRoot, manifest, createZip = true, onBack}: B
 					<Text color="yellow">Warnings:</Text>
 					{state.result.warnings.slice(0, 5).map((warning, i) => (
 						<Text key={i} color="yellow" dimColor>
-							  {warning.substring(0, 200)}
+							{warning.substring(0, 200)}
 						</Text>
 					))}
 					{state.result.warnings.length > 5 && (
 						<Text color="yellow" dimColor>
-							  ...and {state.result.warnings.length - 5} more
+							...and {state.result.warnings.length - 5} more
 						</Text>
 					)}
 				</Box>

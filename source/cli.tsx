@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import React from 'react';
 import {render} from 'ink';
 import {Text, Box} from 'ink';
 import meow from 'meow';
@@ -59,12 +58,12 @@ const cli = meow(
 			},
 			force: {
 				type: 'boolean',
-				alias: 'f',
+				shortFlag: 'f',
 				default: false,
 			},
 			production: {
 				type: 'boolean',
-				alias: 'p',
+				shortFlag: 'p',
 				default: false,
 			},
 		},
@@ -177,7 +176,10 @@ async function main() {
 					}}
 				/>,
 			);
-			app.waitUntilExit().then(resolve, resolve);
+			app.waitUntilExit().then(
+				() => resolve(),
+				() => resolve(),
+			);
 		});
 	}
 

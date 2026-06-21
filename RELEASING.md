@@ -4,13 +4,13 @@ This project publishes to npm as [`sitevision-cli`](https://www.npmjs.com/packag
 
 Two helper scripts handle versioning, building, tagging, and publishing. You
 only pick the **bump type** — `npm version` does the math and writes the new
-version into `package.json` *and* `package-lock.json`, then creates a git
+version into `package.json` _and_ `package-lock.json`, then creates a git
 commit and tag.
 
-| Command | npm dist-tag | Who gets it | Default bump |
-| --- | --- | --- | --- |
-| `npm run release` | `latest` | everyone (`npm i -g sitevision-cli`) | `patch` |
-| `npm run release:beta` | `beta` | opt-in only (`npm i -g sitevision-cli@beta`) | `prerelease` |
+| Command                | npm dist-tag | Who gets it                                  | Default bump |
+| ---------------------- | ------------ | -------------------------------------------- | ------------ |
+| `npm run release`      | `latest`     | everyone (`npm i -g sitevision-cli`)         | `patch`      |
+| `npm run release:beta` | `beta`       | opt-in only (`npm i -g sitevision-cli@beta`) | `prerelease` |
 
 > Pass a bump type after `--`, e.g. `npm run release -- minor`. The `--` is
 > required so npm forwards the argument to the script. The raw scripts also

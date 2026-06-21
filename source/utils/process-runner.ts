@@ -14,15 +14,25 @@ export interface ProcessResult {
 export class ProcessRunner extends EventEmitter {
 	private process: ChildProcess | null = null;
 	private output: ProcessOutput[] = [];
+	private readonly command: string;
+	private readonly args: string[];
+	private readonly cwd?: string;
+	private readonly interactive: boolean;
+	private readonly customEnv?: Record<string, string>;
 
 	constructor(
-		private command: string,
-		private args: string[] = [],
-		private cwd?: string,
-		private interactive: boolean = false,
-		private customEnv?: Record<string, string>,
+		command: string,
+		args: string[] = [],
+		cwd?: string,
+		interactive = false,
+		customEnv?: Record<string, string>,
 	) {
 		super();
+		this.command = command;
+		this.args = args;
+		this.cwd = cwd;
+		this.interactive = interactive;
+		this.customEnv = customEnv;
 	}
 
 	run(): Promise<ProcessResult> {

@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import {useState} from 'react';
 import {Box, Text, useInput} from 'ink';
 
 interface Props {
@@ -36,30 +36,30 @@ export function TextInput({
 		}
 
 		if (key.delete || key.backspace) {
-			setValue((prev) => prev.slice(0, -1));
+			setValue(prev => prev.slice(0, -1));
 			return;
 		}
 
 		if (!key.ctrl && !key.meta) {
-			setValue((prev) => prev + input);
+			setValue(prev => prev + input);
 		}
 	});
 
 	return (
 		<Box flexDirection="column" padding={1}>
 			<Box marginBottom={1}>
-				<Text bold color="cyan">{label}</Text>
+				<Text bold color="cyan">
+					{label}
+				</Text>
 			</Box>
 			<Box borderStyle="round" borderColor="cyan" paddingX={1}>
-				<Text>
-					{type === 'password' ? '*'.repeat(value.length) : value}
-				</Text>
-				{value === '' && placeholder && (
-					<Text dimColor>{placeholder}</Text>
-				)}
+				<Text>{type === 'password' ? '*'.repeat(value.length) : value}</Text>
+				{value === '' && placeholder && <Text dimColor>{placeholder}</Text>}
 			</Box>
 			<Box marginTop={1}>
-				<Text dimColor>Press Enter to submit{onCancel ? ', Esc to cancel' : ''}</Text>
+				<Text dimColor>
+					Press Enter to submit{onCancel ? ', Esc to cancel' : ''}
+				</Text>
 			</Box>
 		</Box>
 	);

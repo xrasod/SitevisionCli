@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import {useState, useEffect} from 'react';
 import {Box, Text} from 'ink';
 import {ProcessRunner, type ProcessOutput} from '../utils/process-runner.js';
 
