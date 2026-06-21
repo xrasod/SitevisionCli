@@ -18,7 +18,8 @@ import {
 	setLastSeenVersion,
 } from './utils/config.js';
 import {WelcomeScreen} from './components/WelcomeScreen.js';
-import {printBranding} from './utils/branding.js';
+import {AnimatedLogo} from './components/AnimatedLogo.js';
+import {printBranding, BIG_LOGO_WIDTH} from './utils/branding.js';
 
 const pkg = JSON.parse(
 	readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
@@ -109,6 +110,17 @@ function printMasthead(version: string): void {
 	console.log(`${CYAN}╰${border}╯${RESET}`);
 }
 
+// Play the one-shot animated wordmark and resolve once it finishes.
+async function playIntro(): Promise<void> {
+	await new Promise<void>(resolve => {
+		const app = render(<AnimatedLogo onDone={() => app.unmount()} />);
+		app.waitUntilExit().then(
+			() => resolve(),
+			() => resolve(),
+		);
+	});
+}
+
 async function main() {
 	// On the very first run we show a dedicated welcome screen instead of the
 	// masthead, so the branding is the moment. Only when stdin is a TTY — the
@@ -123,13 +135,23 @@ async function main() {
 	const isUpdate =
 		!firstRun && lastSeen !== undefined && lastSeen !== pkg.version;
 
+	// On the plain interactive `svc` (no command), play the animated wordmark
+	// instead of the static masthead — but only when stdout is wide enough for
+	// the art and stdin is a TTY (so it doesn't run in CI / piped input).
+	const wantsIntro =
+		!firstRun &&
+		!isUpdate &&
+		!commandName &&
+		Boolean(process.stdin.isTTY) &&
+		(process.stdout.columns ?? 0) >= BIG_LOGO_WIDTH;
+
 	if (!firstRun) {
 		if (isUpdate) {
 			printBranding();
 			console.log(
 				`\x1b[32m\n  ✨ Updated to v${pkg.version}\x1b[0m \x1b[2m(from v${lastSeen})\x1b[0m\n`,
 			);
-		} else {
+		} else if (!wantsIntro) {
 			printMasthead(pkg.version);
 		}
 
@@ -183,8 +205,13 @@ async function main() {
 		});
 	}
 
-	// If no command, show interactive menu
+	// If no command, show interactive menu (with the animated intro first when
+	// the terminal can fit it).
 	if (!commandName) {
+		if (wantsIntro) {
+			await playIntro();
+		}
+
 		render(<App project={project} />);
 		return;
 	}
