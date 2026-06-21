@@ -1,7 +1,11 @@
 /**
- * Prompt for a yes/no answer. Returns true for y/Y, false otherwise (incl. empty / Enter).
+ * Prompt for a yes/no answer. Returns true for y/Y.
+ * Pressing Enter (empty answer) returns `defaultYes` (default: false).
  */
-export function promptYesNo(prompt: string): Promise<boolean> {
+export function promptYesNo(
+	prompt: string,
+	defaultYes = false,
+): Promise<boolean> {
 	return new Promise(resolve => {
 		process.stdout.write(prompt);
 		const stdin = process.stdin;
@@ -15,8 +19,14 @@ export function promptYesNo(prompt: string): Promise<boolean> {
 			stdin.removeListener('data', onData);
 			stdin.pause();
 			process.stdout.write(`${char}\n`);
-			if (char.charCodeAt(0) === 3) {
+			const charCode = char.charCodeAt(0);
+			if (charCode === 3) {
 				process.exit();
+			}
+			// Enter (CR/LF) or empty input → use the default
+			if (char === '' || charCode === 13 || charCode === 10) {
+				resolve(defaultYes);
+				return;
 			}
 			resolve(char === 'y' || char === 'Y');
 		};

@@ -5,11 +5,8 @@ import {StatusIndicator} from '../components/StatusIndicator.js';
 import {WebpackRunner} from '../utils/webpack-runner.js';
 import {promptPassword, promptYesNo} from '../utils/password-prompt.js';
 import {signApp, deployApp} from '../utils/sitevision-api.js';
-import {
-	getSigningPassword,
-	setSigningPassword,
-	setDeployPassword,
-} from '../utils/keychain.js';
+import {setDeployPassword} from '../utils/keychain.js';
+import {resolveSigningPassword} from '../utils/signing-password.js';
 import {copyStaticToBuild, createBuildZip, cleanBuild} from '../utils/zip.js';
 import {
 	isBundledApp,
@@ -434,34 +431,13 @@ export const devCommand: Command = {
 			}
 
 			const signingUsername = project.devProperties.signingUsername;
-			let password =
-				getSigningPassword(signingUsername) ||
-				process.env['SITEVISION_SIGNING_PASSWORD'] ||
-				'';
-			let promptedManually = false;
-
-			if (!password) {
-				console.log('');
-				password = await promptPassword(
-					'Signing password (developer.sitevision.se): ',
-				);
-				promptedManually = true;
-			}
+			const password = await resolveSigningPassword(signingUsername);
 
 			if (!password) {
 				console.log(
 					'\x1b[31mError: Password is required for signed mode\x1b[0m',
 				);
 				return;
-			}
-
-			if (promptedManually) {
-				const remember = await promptYesNo(
-					'Save password to OS keychain? (y/N): ',
-				);
-				if (remember) {
-					setSigningPassword(signingUsername, password);
-				}
 			}
 
 			signingCredentials = {
