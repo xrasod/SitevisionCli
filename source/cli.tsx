@@ -62,9 +62,45 @@ const cli = meow(
 
 const [commandName, ...args] = cli.input;
 
+const CYAN = '\x1b[36m';
+const BOLD = '\x1b[1m';
+const DIM = '\x1b[2m';
+const RESET = '\x1b[0m';
+
+// Visible column width of a string: astral code points (emoji) take 2 columns,
+// everything else 1. ANSI escapes are never passed in here.
+function displayWidth(text: string): number {
+	let width = 0;
+	for (const char of text) {
+		width += (char.codePointAt(0) ?? 0) > 0xffff ? 2 : 1;
+	}
+
+	return width;
+}
+
+// Print a boxed masthead. Borders are sized from the content's display width so
+// they stay aligned regardless of how long the version string is.
+function printMasthead(version: string): void {
+	const left = '📦  Sitevision CLI';
+	const right = `v${version}`;
+	const padding = 2; // spaces inside each vertical border
+	const gap = 7; // spaces between the title and the version
+
+	const inner = padding + displayWidth(left) + gap + displayWidth(right) + padding;
+	const border = '─'.repeat(inner);
+	const spaces = (n: number) => ' '.repeat(n);
+
+	console.log(`${CYAN}╭${border}╮${RESET}`);
+	console.log(
+		`${CYAN}│${RESET}${spaces(padding)}${BOLD}${CYAN}${left}${RESET}` +
+			`${spaces(gap)}${DIM}${right}${RESET}${spaces(padding)}${CYAN}│${RESET}`,
+	);
+	console.log(`${CYAN}╰${border}╯${RESET}`);
+}
+
 async function main() {
-	// Show the CLI version on startup, and check npm for a newer release.
-	console.log(`\x1b[36msvc v${pkg.version}\x1b[0m`);
+	// Show the masthead on startup, and check npm for a newer release.
+	printMasthead(pkg.version);
 	const latestVersion = await checkForUpdate(pkg.name, pkg.version);
 	if (latestVersion) {
 		console.log(
