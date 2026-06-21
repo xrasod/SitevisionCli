@@ -1,15 +1,18 @@
-import {useState} from 'react';
+import {useMemo, useState} from 'react';
 import {type ProjectInfo} from './utils/project-detection.js';
 import {MainMenu} from './components/MainMenu.js';
 import {InfoScreen} from './components/InfoScreen.js';
 import {SetupFlow} from './components/SetupFlow.js';
 import {PasswordInput} from './components/PasswordInput.js';
+import {KeychainPasswordChoice} from './components/KeychainPasswordChoice.js';
+import {decideSigningStep} from './utils/signing-step.js';
 import {DevScreen} from './commands/dev.js';
 import {BuildScreen} from './commands/build.js';
 import {DeployScreen} from './commands/deploy.js';
 import {SignScreen} from './commands/sign.js';
 import {SigningPropertiesForm} from './components/SigningPropertiesForm.js';
 import {
+	getSigningPassword,
 	setDeployPassword as saveDeployPassword,
 	setSigningPassword as saveSigningPassword,
 } from './utils/keychain.js';
@@ -24,6 +27,7 @@ type AppState =
 	| 'info'
 	| 'dev-password-input'
 	| 'signing-password-input'
+	| 'signing-password-choice'
 	| 'dev'
 	| 'build'
 	| 'deploy'
@@ -35,6 +39,35 @@ export default function App({project}: Props) {
 	const [currentCommand, setCurrentCommand] = useState<string>('');
 	const [signingPassword, setSigningPassword] = useState<string>('');
 	const [devPassword, setDevPassword] = useState<string>('');
+	// When true, skip the keychain "use saved / enter new" choice and go straight
+	// to manual entry (e.g. the saved password just failed and we're retrying).
+	const [signingRetry, setSigningRetry] = useState(false);
+
+	// Read the saved signing password from the keychain once (keychain access is
+	// slow and this component re-renders frequently).
+	const signingUsername = project.devProperties?.signingUsername;
+	const storedSigningPassword = useMemo<string | null>(
+		() => (signingUsername ? getSigningPassword(signingUsername) : null),
+		[signingUsername],
+	);
+
+	// Decide the next step once a signing password is needed: proceed if we already
+	// have one this session, offer the keychain choice if one is saved, otherwise
+	// prompt for manual entry.
+	const routeToSigningStep = (command = currentCommand) => {
+		const step = decideSigningStep({
+			hasSessionPassword: Boolean(signingPassword),
+			hasStoredPassword: Boolean(storedSigningPassword),
+			isRetry: signingRetry,
+		});
+		if (step === 'proceed') {
+			setState(command === 'dev-signed' ? 'dev' : 'sign');
+		} else if (step === 'choice') {
+			setState('signing-password-choice');
+		} else {
+			setState('signing-password-input');
+		}
+	};
 
 	// Check if dev password is available (either from file or session)
 	const hasDevPassword = Boolean(
@@ -64,14 +97,25 @@ export default function App({project}: Props) {
 		}
 		// Continue to the intended command
 		if (currentCommand === 'dev' || currentCommand === 'dev-signed') {
-			if (currentCommand === 'dev-signed' && !signingPassword) {
-				setState('signing-password-input');
+			if (currentCommand === 'dev-signed') {
+				routeToSigningStep();
 			} else {
 				setState('dev');
 			}
 		} else if (currentCommand.startsWith('deploy')) {
 			setState('deploy');
 		}
+	};
+
+	const handleUseSavedSigning = () => {
+		if (storedSigningPassword) {
+			setSigningPassword(storedSigningPassword);
+		}
+		setState(currentCommand === 'dev-signed' ? 'dev' : 'sign');
+	};
+
+	const handleEnterNewSigning = () => {
+		setState('signing-password-input');
 	};
 
 	const handleSigningPasswordSubmit = (password: string, remember: boolean) => {
@@ -88,6 +132,8 @@ export default function App({project}: Props) {
 
 	const handleCommandSelect = (command: string) => {
 		setCurrentCommand(command);
+		// Fresh selection from the menu — re-offer the saved keychain password.
+		setSigningRetry(false);
 
 		switch (command) {
 			case 'info':
@@ -125,10 +171,8 @@ export default function App({project}: Props) {
 				// Need both dev password and signing password
 				if (!hasDevPassword) {
 					setState('dev-password-input');
-				} else if (!signingPassword) {
-					setState('signing-password-input');
 				} else {
-					setState('dev');
+					routeToSigningStep(command);
 				}
 				break;
 			case 'sign':
@@ -144,11 +188,7 @@ export default function App({project}: Props) {
 					);
 					return;
 				}
-				if (signingPassword) {
-					setState('sign');
-				} else {
-					setState('signing-password-input');
-				}
+				routeToSigningStep(command);
 				break;
 			case 'build':
 				setState('build');
@@ -197,12 +237,29 @@ export default function App({project}: Props) {
 		);
 	}
 
+	if (state === 'signing-password-choice') {
+		return (
+			<KeychainPasswordChoice
+				key="signing-password-choice"
+				onUseSaved={handleUseSavedSigning}
+				onEnterNew={handleEnterNewSigning}
+				onCancel={() => setState('menu')}
+			/>
+		);
+	}
+
 	if (state === 'signing-password-input') {
 		return (
 			<PasswordInput
 				key="signing-password"
 				label="Enter Signing Password (developer.sitevision.se)"
 				showRememberOption={Boolean(project.devProperties?.signingUsername)}
+				defaultRemember={Boolean(storedSigningPassword)}
+				rememberLabel={
+					storedSigningPassword
+						? 'Update saved password in OS keychain: '
+						: 'Save to OS keychain: '
+				}
 				onSubmit={handleSigningPasswordSubmit}
 				onCancel={() => setState('menu')}
 			/>
@@ -222,6 +279,8 @@ export default function App({project}: Props) {
 					if (project.devProperties) project.devProperties.password = undefined;
 					if (currentCommand === 'dev-signed') {
 						setSigningPassword('');
+						// The saved password may be what failed — don't re-offer it.
+						setSigningRetry(true);
 					}
 					setState('dev-password-input');
 				}}
