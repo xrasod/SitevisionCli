@@ -127,6 +127,18 @@ const xoConfig = [
 			'prefer-exponentiation-operator': 'off',
 		},
 	},
+	{
+		// Low-level binary/IO modules. Bitwise math is inherent to ZIP/CRC-32
+		// encoding, and the sequential awaits (deflating files one at a time,
+		// retrying signing requests with backoff) are intentional rather than
+		// accidentally serialized work.
+		files: ['source/utils/zip.ts', 'source/utils/sitevision-api.ts'],
+		rules: {
+			'no-bitwise': 'off',
+			'no-await-in-loop': 'off',
+			'@stylistic/no-mixed-operators': 'off',
+		},
+	},
 ];
 
 export default xoConfig;

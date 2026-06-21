@@ -1,8 +1,16 @@
+import fs from 'fs';
+import path from 'path';
 import React from 'react';
 import {render, Box, Text, useApp, useInput} from 'ink';
 import {type Command} from './types.js';
 import {StatusIndicator} from '../components/StatusIndicator.js';
-import {WebpackRunner} from '../utils/webpack-runner.js';
+import {WebpackRunner, hasLocalWebpackConfig} from '../utils/webpack-runner.js';
+import {
+	hasSitevisionScripts,
+	runSitevisionScriptsBuild,
+	getDelegatedZipPath,
+	checkSitevisionScriptsCompatibility,
+} from '../utils/sitevision-scripts-runner.js';
 import {promptPassword, promptYesNo} from '../utils/password-prompt.js';
 import {signApp, deployApp} from '../utils/sitevision-api.js';
 import {setDeployPassword} from '../utils/keychain.js';
@@ -48,6 +56,7 @@ interface DevState {
 	lastBuildTime?: number;
 	error?: string;
 	webpackReady: boolean;
+	warning?: string;
 }
 
 export function DevScreen({
@@ -77,28 +86,15 @@ export function DevScreen({
 	});
 
 	const webpackRunnerRef = React.useRef<WebpackRunner | null>(null);
+	const watchersRef = React.useRef<fs.FSWatcher[]>([]);
+	const debounceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+	const isBuildingRef = React.useRef(false);
+	const pendingRebuildRef = React.useRef(false);
 
-	const handleBuildComplete = React.useCallback(
-		async (result: BuildResult) => {
-			if (!result.success) {
-				setState(prev => ({
-					...prev,
-					status: 'error',
-					message: result.errors?.join('\n') || 'Build failed',
-					error: result.errors?.join('\n'),
-				}));
-				return;
-			}
-
+	// Sign (if needed) and deploy an already-built zip, updating UI state.
+	const signAndDeploy = React.useCallback(
+		async (zipPath: string, buildTime?: number) => {
 			try {
-				// Copy static files
-				copyStaticToBuild(projectRoot);
-
-				// Create zip
-				const appId = getFullAppId(manifest.id);
-				await createBuildZip(projectRoot, appId);
-				const zipPath = getZipPath(projectRoot, manifest);
-
 				let deployZipPath = zipPath;
 
 				// Sign if needed
@@ -167,7 +163,7 @@ export function DevScreen({
 					status: 'ready',
 					message: 'Deployed. Watching for changes...',
 					buildCount: prev.buildCount + 1,
-					lastBuildTime: result.stats?.time,
+					lastBuildTime: buildTime,
 					error: undefined,
 				}));
 			} catch (error) {
@@ -182,6 +178,111 @@ export function DevScreen({
 		[projectRoot, manifest, devProperties, signed, signingCredentials],
 	);
 
+	// In-house webpack path: copy static, zip, then sign + deploy.
+	const handleBuildComplete = React.useCallback(
+		async (result: BuildResult) => {
+			if (!result.success) {
+				setState(prev => ({
+					...prev,
+					status: 'error',
+					message: result.errors?.join('\n') || 'Build failed',
+					error: result.errors?.join('\n'),
+				}));
+				return;
+			}
+
+			try {
+				copyStaticToBuild(projectRoot);
+				const appId = getFullAppId(manifest.id);
+				await createBuildZip(projectRoot, appId);
+				await signAndDeploy(
+					getZipPath(projectRoot, manifest),
+					result.stats?.time,
+				);
+			} catch (error) {
+				setState(prev => ({
+					...prev,
+					status: 'error',
+					message: error instanceof Error ? error.message : String(error),
+					error: error instanceof Error ? error.message : String(error),
+				}));
+			}
+		},
+		[projectRoot, manifest, signAndDeploy],
+	);
+
+	// Delegated path: full `sitevision-scripts build` then sign + deploy.
+	// Coalesces overlapping triggers so a save mid-build queues one rebuild.
+	const runDelegatedBuild = React.useCallback(async () => {
+		if (isBuildingRef.current) {
+			pendingRebuildRef.current = true;
+			return;
+		}
+
+		isBuildingRef.current = true;
+
+		const buildOnce = async (): Promise<void> => {
+			pendingRebuildRef.current = false;
+
+			setState(prev => ({
+				...prev,
+				status: 'building',
+				message: 'Building via sitevision-scripts...',
+			}));
+
+			const result = await runSitevisionScriptsBuild(projectRoot);
+
+			if (result.success) {
+				await signAndDeploy(getDelegatedZipPath(projectRoot, manifest.id));
+			} else {
+				setState(prev => ({
+					...prev,
+					status: 'error',
+					message: result.error ?? 'Build failed',
+					error: `${result.error}\n${result.output.slice(-1000)}`,
+				}));
+			}
+
+			if (pendingRebuildRef.current) {
+				await buildOnce();
+			}
+		};
+
+		try {
+			await buildOnce();
+		} finally {
+			isBuildingRef.current = false;
+		}
+	}, [projectRoot, manifest, signAndDeploy]);
+
+	// Watch source files and trigger a delegated rebuild (debounced).
+	const startFileWatcher = React.useCallback(() => {
+		const targets = [
+			'src',
+			'static',
+			'i18n',
+			'resource',
+			'config',
+			'manifest.json',
+		]
+			.map(name => path.join(projectRoot, name))
+			.filter(target => fs.existsSync(target));
+
+		for (const target of targets) {
+			const isDir = fs.statSync(target).isDirectory();
+			const watcher = fs.watch(target, {recursive: isDir}, () => {
+				if (debounceTimerRef.current) {
+					clearTimeout(debounceTimerRef.current);
+				}
+
+				debounceTimerRef.current = setTimeout(() => {
+					void runDelegatedBuild();
+				}, 300);
+			});
+			watchersRef.current.push(watcher);
+		}
+	}, [projectRoot, runDelegatedBuild]);
+
 	React.useEffect(() => {
 		const isBundled = isBundledApp(manifest);
 
@@ -190,8 +291,29 @@ export function DevScreen({
 				// Clean build directory
 				cleanBuild(projectRoot);
 
-				if (isBundled) {
-					// Check if webpack is available
+				if (isBundled && !hasLocalWebpackConfig(projectRoot)) {
+					// No local webpack config: delegate each build to
+					// sitevision-scripts (full rebuild) and watch source files
+					// ourselves, keeping the CLI's own sign + deploy flow.
+					if (!hasSitevisionScripts(projectRoot)) {
+						setState({
+							status: 'error',
+							message:
+								'No webpack.config.js found and @sitevision/sitevision-scripts is not installed. Run npm install.',
+							buildCount: 0,
+							webpackReady: false,
+							error: 'No build pipeline available',
+						});
+						return;
+					}
+
+					const warning =
+						checkSitevisionScriptsCompatibility(projectRoot).warning;
+					setState(prev => ({...prev, webpackReady: true, warning}));
+					startFileWatcher();
+					await runDelegatedBuild();
+				} else if (isBundled) {
+					// Project ships its own webpack config: incremental in-process watch.
 					if (!WebpackRunner.isWebpackAvailable(projectRoot)) {
 						setState({
 							status: 'error',
@@ -258,8 +380,24 @@ export function DevScreen({
 			if (webpackRunnerRef.current) {
 				webpackRunnerRef.current.close().catch(() => {});
 			}
+
+			if (debounceTimerRef.current) {
+				clearTimeout(debounceTimerRef.current);
+			}
+
+			for (const watcher of watchersRef.current) {
+				watcher.close();
+			}
+
+			watchersRef.current = [];
 		};
-	}, [projectRoot, manifest, handleBuildComplete]);
+	}, [
+		projectRoot,
+		manifest,
+		handleBuildComplete,
+		runDelegatedBuild,
+		startFileWatcher,
+	]);
 
 	// Handle Ctrl+C
 	React.useEffect(() => {
@@ -267,6 +405,11 @@ export function DevScreen({
 			if (webpackRunnerRef.current) {
 				webpackRunnerRef.current.close().catch(() => {});
 			}
+
+			for (const watcher of watchersRef.current) {
+				watcher.close();
+			}
+
 			exit();
 		};
 
@@ -318,6 +461,13 @@ export function DevScreen({
 					message={state.message}
 				/>
 			</Box>
+
+			{/* Version-compatibility warning */}
+			{state.warning && (
+				<Box marginBottom={1}>
+					<Text color="yellow">⚠ {state.warning}</Text>
+				</Box>
+			)}
 
 			{/* Build stats */}
 			{state.buildCount > 0 && (

@@ -35,6 +35,15 @@ import {
 const SIGNING_API_HOST = 'developer.sitevision.se';
 const SIGNING_API_PATH = '/rest-api/appsigner/signapp';
 
+/** Default per-request timeout. Generous because signing uploads a full zip. */
+const DEFAULT_TIMEOUT_MS = 120_000;
+
+/** Max attempts for transient failures (network errors, timeouts, 5xx). */
+const SIGN_MAX_ATTEMPTS = 3;
+
+/** Base backoff between retries; grows exponentially per attempt. */
+const RETRY_BASE_DELAY_MS = 1000;
+
 // =============================================================================
 // UTILITY FUNCTIONS
 // =============================================================================
@@ -89,13 +98,14 @@ function createMultipartFormData(
 /**
  * Make an HTTP/HTTPS request
  */
-function makeRequest(
+export function makeRequest(
 	url: string,
 	options: {
 		method: string;
 		headers?: Record<string, string>;
 		body?: Buffer;
 		auth?: {username: string; password: string};
+		timeoutMs?: number;
 	},
 ): Promise<{
 	statusCode: number;
@@ -142,6 +152,15 @@ function makeRequest(
 			});
 		});
 
+		// Abort hung connections instead of blocking the CLI indefinitely.
+		req.setTimeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS, () => {
+			req.destroy(
+				new Error(
+					`Request timed out after ${options.timeoutMs ?? DEFAULT_TIMEOUT_MS}ms`,
+				),
+			);
+		});
+
 		req.on('error', reject);
 
 		if (options.body) {
@@ -150,6 +169,58 @@ function makeRequest(
 
 		req.end();
 	});
+}
+
+/**
+ * Whether an HTTP status is worth retrying (transient server-side failures).
+ */
+export function isRetryableStatus(statusCode: number): boolean {
+	return statusCode === 408 || statusCode === 429 || statusCode >= 500;
+}
+
+/**
+ * Sleep helper for backoff between retries.
+ */
+async function delay(ms: number): Promise<void> {
+	return new Promise(resolve => {
+		setTimeout(resolve, ms);
+	});
+}
+
+/**
+ * Summarize a non-success response body for error messages.
+ * Avoids dumping raw bytes (e.g. an HTML error page or a binary blob) by
+ * trimming text bodies and labelling binary ones by their content type.
+ */
+export function summarizeErrorBody(
+	body: Buffer,
+	headers: Record<string, string>,
+): string {
+	const contentType = headers['content-type'] ?? 'unknown';
+	const isText =
+		contentType.includes('text') ||
+		contentType.includes('json') ||
+		contentType.includes('xml');
+
+	if (!isText) {
+		return `(${contentType}, ${body.length} bytes)`;
+	}
+
+	const text = body.toString('utf8').replaceAll(/\s+/g, ' ').trim();
+	const max = 300;
+	const summary = text.length > max ? text.slice(0, max) + '…' : text;
+	return summary.length > 0 ? summary : `(${contentType}, empty body)`;
+}
+
+/** ZIP local-file-header magic bytes: "PK\x03\x04". */
+const ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+
+/**
+ * Check that a buffer begins with the ZIP magic bytes. Used to fail fast when
+ * the signing endpoint returns an error page with HTTP 200.
+ */
+export function looksLikeZip(body: Buffer): boolean {
+	return body.length >= 4 && body.subarray(0, 4).equals(ZIP_MAGIC);
 }
 
 // =============================================================================
@@ -190,52 +261,81 @@ export async function signApp(
 		boundary,
 	);
 
-	try {
-		const response = await makeRequest(url, {
-			method: 'POST',
-			headers: {
-				'Content-Type': contentType,
-				'Content-Length': String(body.length),
-			},
-			body,
-			auth: {
-				username: credentials.username,
-				password: credentials.password,
-			},
-		});
+	// Signing is idempotent (same input → same signed output), so transient
+	// failures (network errors, timeouts, 5xx) are safe to retry with backoff.
+	let lastError = 'Signing failed';
 
-		if (response.statusCode === 200) {
-			// Write signed zip to output path
-			const outputDir = path.dirname(outputPath);
-			if (!fs.existsSync(outputDir)) {
-				fs.mkdirSync(outputDir, {recursive: true});
+	for (let attempt = 1; attempt <= SIGN_MAX_ATTEMPTS; attempt++) {
+		try {
+			const response = await makeRequest(url, {
+				method: 'POST',
+				headers: {
+					'Content-Type': contentType,
+					'Content-Length': String(body.length),
+				},
+				body,
+				auth: {
+					username: credentials.username,
+					password: credentials.password,
+				},
+			});
+
+			if (response.statusCode === 200) {
+				// Guard against an error page returned with a 200 status.
+				if (!looksLikeZip(response.body)) {
+					return {
+						success: false,
+						error: `Signing returned a non-zip response: ${summarizeErrorBody(
+							response.body,
+							response.headers,
+						)}`,
+					};
+				}
+
+				// Write signed zip to output path
+				const outputDir = path.dirname(outputPath);
+				if (!fs.existsSync(outputDir)) {
+					fs.mkdirSync(outputDir, {recursive: true});
+				}
+
+				fs.writeFileSync(outputPath, response.body);
+
+				return {
+					success: true,
+					signedFilePath: outputPath,
+				};
 			}
 
-			fs.writeFileSync(outputPath, response.body);
+			if (response.statusCode === 401) {
+				// Auth failures will not resolve on retry.
+				return {
+					success: false,
+					error: 'Unauthorized. Check username and password.',
+				};
+			}
 
-			return {
-				success: true,
-				signedFilePath: outputPath,
-			};
+			lastError = `Signing failed with status ${response.statusCode}: ${summarizeErrorBody(
+				response.body,
+				response.headers,
+			)}`;
+
+			if (!isRetryableStatus(response.statusCode)) {
+				return {success: false, error: lastError};
+			}
+		} catch (error) {
+			lastError = `Signing request failed: ${error instanceof Error ? error.message : String(error)}`;
 		}
 
-		if (response.statusCode === 401) {
-			return {
-				success: false,
-				error: 'Unauthorized. Check username and password.',
-			};
+		// Back off before the next attempt (skip after the final attempt).
+		if (attempt < SIGN_MAX_ATTEMPTS) {
+			await delay(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));
 		}
-
-		return {
-			success: false,
-			error: `Signing failed with status ${response.statusCode}: ${response.body.toString()}`,
-		};
-	} catch (error) {
-		return {
-			success: false,
-			error: `Signing request failed: ${error instanceof Error ? error.message : String(error)}`,
-		};
 	}
+
+	return {
+		success: false,
+		error: `${lastError} (after ${SIGN_MAX_ATTEMPTS} attempts)`,
+	};
 }
 
 // =============================================================================
@@ -332,7 +432,7 @@ export async function deployApp(
 
 		return {
 			success: false,
-			error: `Deployment failed with status ${response.statusCode}: ${response.body.toString()}`,
+			error: `Deployment failed with status ${response.statusCode}: ${summarizeErrorBody(response.body, response.headers)}`,
 		};
 	} catch (error) {
 		return {
@@ -457,7 +557,7 @@ export async function createAddon(
 
 		return {
 			success: false,
-			error: `Create addon failed with status ${response.statusCode}: ${response.body.toString()}`,
+			error: `Create addon failed with status ${response.statusCode}: ${summarizeErrorBody(response.body, response.headers)}`,
 		};
 	} catch (error) {
 		return {
@@ -513,7 +613,7 @@ export async function activateApp(
 
 		return {
 			success: false,
-			error: `Activation failed with status ${response.statusCode}: ${response.body.toString()}`,
+			error: `Activation failed with status ${response.statusCode}: ${summarizeErrorBody(response.body, response.headers)}`,
 		};
 	} catch (error) {
 		return {

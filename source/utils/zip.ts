@@ -7,7 +7,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import {spawn} from 'child_process';
+import zlib from 'zlib';
 import {ensureDistDir} from './project-detection.js';
 
 // =============================================================================
@@ -15,10 +15,17 @@ import {ensureDistDir} from './project-detection.js';
 // =============================================================================
 
 /**
- * Create a zip archive of a directory
+ * Create a zip archive of a directory.
  *
- * Uses the system `zip` command for cross-platform compatibility.
- * Falls back to a basic implementation if zip is not available.
+ * In-house, dependency-free implementation: walks the directory, deflates each
+ * file with Node's built-in zlib, and assembles a standard ZIP container (local
+ * file headers + central directory + end-of-central-directory record). This
+ * removes the previous reliance on the external `zip`/`tar`/PowerShell binaries
+ * and behaves identically across macOS, Linux, and Windows.
+ *
+ * Mirrors `zip -r <out> .` run from inside `sourceDir`: archive paths are
+ * relative to `sourceDir`, use forward slashes, and directory entries are
+ * emitted so empty directories are preserved.
  *
  * @param sourceDir - Directory to zip
  * @param outputPath - Path for the output zip file
@@ -39,95 +46,222 @@ export async function createZip(
 		fs.unlinkSync(outputPath);
 	}
 
-	return new Promise((resolve, reject) => {
-		// Try using system zip command (works on macOS, Linux, and Windows with Git Bash)
-		const zipProcess = spawn('zip', ['-r', outputPath, '.'], {
-			cwd: sourceDir,
-			stdio: ['ignore', 'pipe', 'pipe'],
-		});
+	const entries = collectZipEntries(sourceDir);
+	const buffer = await buildZipBuffer(entries);
+	fs.writeFileSync(outputPath, buffer);
 
-		let stderr = '';
+	return outputPath;
+}
 
-		zipProcess.stderr?.on('data', (data: Buffer) => {
-			stderr += data.toString();
-		});
+// =============================================================================
+// IN-HOUSE ZIP WRITER
+// =============================================================================
 
-		zipProcess.on('error', error => {
-			// If zip command not found, try alternative methods
-			if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-				// Fall back to tar on systems without zip
-				createZipWithTar(sourceDir, outputPath).then(resolve).catch(reject);
-			} else {
-				reject(new Error(`Zip process error: ${error.message}`));
-			}
-		});
-
-		zipProcess.on('close', code => {
-			if (code === 0) {
-				resolve(outputPath);
-			} else {
-				reject(new Error(`Zip failed with code ${code}: ${stderr}`));
-			}
-		});
-	});
+interface ZipEntry {
+	/** Archive path (forward slashes; trailing slash for directories) */
+	name: string;
+	isDirectory: boolean;
+	/** Absolute path on disk (files only) */
+	absolutePath?: string;
+	mtime: Date;
 }
 
 /**
- * Fallback: Create zip using tar (converts to zip format)
- * This is a fallback for systems without the zip command.
+ * Recursively collect file and directory entries for the archive.
+ * Directories are emitted before their contents, matching `zip -r`.
  */
-async function createZipWithTar(
-	sourceDir: string,
-	outputPath: string,
-): Promise<string> {
-	// On Windows without zip, we might need to use PowerShell
-	const isWindows = process.platform === 'win32';
+function collectZipEntries(sourceDir: string): ZipEntry[] {
+	const entries: ZipEntry[] = [];
 
-	if (isWindows) {
-		return createZipWithPowerShell(sourceDir, outputPath);
+	const walk = (dir: string, prefix: string): void => {
+		const dirEntries = fs.readdirSync(dir, {withFileTypes: true});
+
+		for (const entry of dirEntries) {
+			const absolutePath = path.join(dir, entry.name);
+			const archiveName = prefix + entry.name;
+
+			if (entry.isDirectory()) {
+				const stat = fs.statSync(absolutePath);
+				entries.push({
+					name: archiveName + '/',
+					isDirectory: true,
+					mtime: stat.mtime,
+				});
+				walk(absolutePath, archiveName + '/');
+			} else if (entry.isFile()) {
+				const stat = fs.statSync(absolutePath);
+				entries.push({
+					name: archiveName,
+					isDirectory: false,
+					absolutePath,
+					mtime: stat.mtime,
+				});
+			}
+			// Symlinks and special files are skipped (matches prior `zip` defaults
+			// closely enough for Sitevision build output, which has neither).
+		}
+	};
+
+	walk(sourceDir, '');
+	return entries;
+}
+
+/**
+ * Assemble the full ZIP byte buffer from collected entries.
+ */
+async function buildZipBuffer(entries: ZipEntry[]): Promise<Buffer> {
+	const localChunks: Buffer[] = [];
+	const centralChunks: Buffer[] = [];
+	let offset = 0;
+
+	for (const entry of entries) {
+		const nameBuffer = Buffer.from(entry.name, 'utf8');
+		const {dosTime, dosDate} = toDosDateTime(entry.mtime);
+
+		let rawData: Buffer;
+		let compressed: Buffer;
+		let method: number;
+
+		if (entry.isDirectory) {
+			rawData = Buffer.alloc(0);
+			compressed = Buffer.alloc(0);
+			method = 0; // stored
+		} else {
+			rawData = fs.readFileSync(entry.absolutePath!);
+			if (rawData.length === 0) {
+				compressed = Buffer.alloc(0);
+				method = 0; // stored (deflating empty data is wasteful)
+			} else {
+				compressed = await deflateRaw(rawData);
+				method = 8; // deflate
+			}
+		}
+
+		const crc = crc32(rawData);
+		const localHeaderOffset = offset;
+
+		// Local file header (signature 0x04034b50)
+		const localHeader = Buffer.alloc(30);
+		localHeader.writeUInt32LE(0x04034b50, 0);
+		localHeader.writeUInt16LE(20, 4); // version needed to extract
+		localHeader.writeUInt16LE(0, 6); // general purpose flag
+		localHeader.writeUInt16LE(method, 8);
+		localHeader.writeUInt16LE(dosTime, 10);
+		localHeader.writeUInt16LE(dosDate, 12);
+		localHeader.writeUInt32LE(crc, 14);
+		localHeader.writeUInt32LE(compressed.length, 18);
+		localHeader.writeUInt32LE(rawData.length, 22);
+		localHeader.writeUInt16LE(nameBuffer.length, 26);
+		localHeader.writeUInt16LE(0, 28); // extra field length
+
+		localChunks.push(localHeader, nameBuffer, compressed);
+		offset += localHeader.length + nameBuffer.length + compressed.length;
+
+		// Central directory header (signature 0x02014b50)
+		const centralHeader = Buffer.alloc(46);
+		centralHeader.writeUInt32LE(0x02014b50, 0);
+		centralHeader.writeUInt16LE(20, 4); // version made by
+		centralHeader.writeUInt16LE(20, 6); // version needed
+		centralHeader.writeUInt16LE(0, 8); // general purpose flag
+		centralHeader.writeUInt16LE(method, 10);
+		centralHeader.writeUInt16LE(dosTime, 12);
+		centralHeader.writeUInt16LE(dosDate, 14);
+		centralHeader.writeUInt32LE(crc, 16);
+		centralHeader.writeUInt32LE(compressed.length, 20);
+		centralHeader.writeUInt32LE(rawData.length, 24);
+		centralHeader.writeUInt16LE(nameBuffer.length, 28);
+		centralHeader.writeUInt16LE(0, 30); // extra field length
+		centralHeader.writeUInt16LE(0, 32); // comment length
+		centralHeader.writeUInt16LE(0, 34); // disk number start
+		centralHeader.writeUInt16LE(0, 36); // internal attributes
+		// External attributes: directory vs file unix-ish mode in high bytes.
+		centralHeader.writeUInt32LE(
+			entry.isDirectory ? 0x41ed0010 : 0x81a40000,
+			38,
+		);
+		centralHeader.writeUInt32LE(localHeaderOffset, 42);
+
+		centralChunks.push(centralHeader, nameBuffer);
 	}
 
-	// On Unix without zip, this is unlikely but we'll throw an error
-	throw new Error(
-		'zip command not found. Please install zip: apt-get install zip (Linux) or brew install zip (macOS)',
-	);
+	const centralDirectory = Buffer.concat(centralChunks);
+	const centralDirectoryOffset = offset;
+
+	// End of central directory record (signature 0x06054b50)
+	const eocd = Buffer.alloc(22);
+	eocd.writeUInt32LE(0x06054b50, 0);
+	eocd.writeUInt16LE(0, 4); // disk number
+	eocd.writeUInt16LE(0, 6); // disk with central directory
+	eocd.writeUInt16LE(entries.length, 8); // entries on this disk
+	eocd.writeUInt16LE(entries.length, 10); // total entries
+	eocd.writeUInt32LE(centralDirectory.length, 12);
+	eocd.writeUInt32LE(centralDirectoryOffset, 16);
+	eocd.writeUInt16LE(0, 20); // comment length
+
+	return Buffer.concat([...localChunks, centralDirectory, eocd]);
 }
 
 /**
- * Create zip using PowerShell on Windows
+ * Deflate (raw, no zlib header) a buffer.
  */
-async function createZipWithPowerShell(
-	sourceDir: string,
-	outputPath: string,
-): Promise<string> {
+async function deflateRaw(data: Buffer): Promise<Buffer> {
 	return new Promise((resolve, reject) => {
-		const absoluteSourceDir = path.resolve(sourceDir);
-		const absoluteOutputPath = path.resolve(outputPath);
-
-		const command = `Compress-Archive -Path "${absoluteSourceDir}\\*" -DestinationPath "${absoluteOutputPath}" -Force`;
-
-		const psProcess = spawn('powershell', ['-Command', command], {
-			stdio: ['ignore', 'pipe', 'pipe'],
-		});
-
-		let stderr = '';
-
-		psProcess.stderr?.on('data', (data: Buffer) => {
-			stderr += data.toString();
-		});
-
-		psProcess.on('error', error => {
-			reject(new Error(`PowerShell error: ${error.message}`));
-		});
-
-		psProcess.on('close', code => {
-			if (code === 0) {
-				resolve(absoluteOutputPath);
+		zlib.deflateRaw(data, (error, result) => {
+			if (error) {
+				reject(error);
 			} else {
-				reject(new Error(`PowerShell zip failed with code ${code}: ${stderr}`));
+				resolve(result);
 			}
 		});
 	});
+}
+
+/**
+ * Convert a Date to DOS date/time fields used by the ZIP format.
+ * ZIP timestamps only span 1980–2107 with 2-second resolution.
+ */
+function toDosDateTime(date: Date): {dosTime: number; dosDate: number} {
+	const year = date.getFullYear();
+	if (year < 1980) {
+		// Clamp to the ZIP epoch (1980-01-01 00:00:00).
+		return {dosTime: 0, dosDate: (1 << 5) | 1};
+	}
+
+	const dosTime =
+		(date.getHours() << 11) |
+		(date.getMinutes() << 5) |
+		Math.floor(date.getSeconds() / 2);
+	const dosDate =
+		((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+
+	return {dosTime, dosDate};
+}
+
+// CRC-32 table (IEEE polynomial 0xEDB88320), built once and reused.
+const crc32Table = (() => {
+	const table = new Uint32Array(256);
+	for (let n = 0; n < 256; n++) {
+		let c = n;
+		for (let k = 0; k < 8; k++) {
+			c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+		}
+
+		table[n] = c >>> 0;
+	}
+
+	return table;
+})();
+
+/**
+ * Compute the CRC-32 checksum of a buffer.
+ */
+function crc32(data: Buffer): number {
+	let crc = 0xffffffff;
+	for (const byte of data) {
+		crc = crc32Table[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
+	}
+
+	return (crc ^ 0xffffffff) >>> 0;
 }
 
 /**

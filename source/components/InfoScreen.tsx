@@ -1,5 +1,6 @@
 import {Box, Text, useInput} from 'ink';
 import {type ProjectInfo, getAppType} from '../utils/project-detection.js';
+import {checkSitevisionScriptsCompatibility} from '../utils/sitevision-scripts-runner.js';
 
 interface Props {
 	project: ProjectInfo;
@@ -8,6 +9,7 @@ interface Props {
 
 export function InfoScreen({project, onBack}: Props) {
 	const appType = getAppType(project.manifest);
+	const scriptsCompat = checkSitevisionScriptsCompatibility(project.root);
 
 	useInput((input, key) => {
 		if (key.escape || input === 'q' || key.return) {
@@ -45,6 +47,25 @@ export function InfoScreen({project, onBack}: Props) {
 					<Text bold>Bundled: </Text>
 					<Text>{project.manifest.bundled ? 'Yes' : 'No'}</Text>
 				</Box>
+			</Box>
+
+			<Box marginTop={1} marginBottom={1}>
+				<Text bold color="cyan">
+					Build Tooling
+				</Text>
+			</Box>
+
+			<Box flexDirection="column" marginLeft={2}>
+				<Box>
+					<Text bold>sitevision-scripts: </Text>
+					<Text>{scriptsCompat.installed ?? 'not installed'}</Text>
+					<Text dimColor> (supported {scriptsCompat.supportedRange})</Text>
+				</Box>
+				{scriptsCompat.warning && (
+					<Box marginTop={1}>
+						<Text color="yellow">⚠ {scriptsCompat.warning}</Text>
+					</Box>
+				)}
 			</Box>
 
 			{project.hasDevProperties && project.devProperties && (

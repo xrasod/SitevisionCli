@@ -78,6 +78,38 @@ type WebpackConfigFactory = (options: {
 }) => WebpackConfig;
 
 // =============================================================================
+// LOCAL CONFIG DETECTION
+// =============================================================================
+
+/**
+ * Standard locations for a project-local webpack config, highest priority first.
+ */
+function localWebpackConfigPaths(projectRoot: string): string[] {
+	return [
+		path.join(projectRoot, 'webpack.config.js'),
+		path.join(projectRoot, 'webpack.config.mjs'),
+		path.join(projectRoot, 'config', 'webpack', 'webpack.config.js'),
+	];
+}
+
+/**
+ * Find the project's own webpack config, or null if it has none.
+ */
+export function findLocalWebpackConfig(projectRoot: string): string | null {
+	return (
+		localWebpackConfigPaths(projectRoot).find(p => fs.existsSync(p)) ?? null
+	);
+}
+
+/**
+ * Whether the project ships its own webpack config (in-house build path),
+ * as opposed to relying on the sitevision-scripts package.
+ */
+export function hasLocalWebpackConfig(projectRoot: string): boolean {
+	return findLocalWebpackConfig(projectRoot) !== null;
+}
+
+// =============================================================================
 // WEBPACK RUNNER CLASS
 // =============================================================================
 
@@ -131,30 +163,10 @@ export class WebpackRunner {
 	 * Load webpack configuration from the project
 	 */
 	private async loadConfig(): Promise<void> {
-		// Try to find webpack config in standard locations
-		// Project-specific configs take priority, fall back to @sitevision/sitevision-scripts
-		const configPaths = [
-			path.join(this.projectRoot, 'webpack.config.js'),
-			path.join(this.projectRoot, 'webpack.config.mjs'),
-			path.join(this.projectRoot, 'config', 'webpack', 'webpack.config.js'),
-			path.join(
-				this.projectRoot,
-				'node_modules',
-				'@sitevision',
-				'sitevision-scripts',
-				'config',
-				'webpack',
-				'webpack.config.js',
-			),
-		];
-
-		let configPath: string | null = null;
-		for (const p of configPaths) {
-			if (fs.existsSync(p)) {
-				configPath = p;
-				break;
-			}
-		}
+		// Only project-local webpack configs are consumed in-process. Projects
+		// without one are built by delegating to @sitevision/sitevision-scripts
+		// (see sitevision-scripts-runner), so there is no config fallback here.
+		const configPath = findLocalWebpackConfig(this.projectRoot);
 
 		if (!configPath) {
 			throw new Error(

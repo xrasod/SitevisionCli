@@ -2,7 +2,13 @@ import React from 'react';
 import {render, Box, Text, useInput} from 'ink';
 import {type Command} from './types.js';
 import {StatusIndicator} from '../components/StatusIndicator.js';
-import {WebpackRunner} from '../utils/webpack-runner.js';
+import {WebpackRunner, hasLocalWebpackConfig} from '../utils/webpack-runner.js';
+import {
+	hasSitevisionScripts,
+	runSitevisionScriptsBuild,
+	getDelegatedZipPath,
+	checkSitevisionScriptsCompatibility,
+} from '../utils/sitevision-scripts-runner.js';
 import {
 	copyStaticToBuild,
 	copySrcToBuild,
@@ -10,6 +16,7 @@ import {
 	formatFileSize,
 	createBuildZip,
 	getZipSize,
+	zipExists,
 } from '../utils/zip.js';
 import {
 	isBundledApp,
@@ -40,6 +47,7 @@ interface BuildState {
 	zipPath?: string;
 	zipSize?: number;
 	error?: string;
+	warning?: string;
 }
 
 export function BuildScreen({
@@ -73,8 +81,64 @@ export function BuildScreen({
 				cleanBuild(projectRoot);
 
 				// Step 2: Build or copy files
+				if (isBundled && !hasLocalWebpackConfig(projectRoot)) {
+					// No project-local webpack config: delegate the whole build to
+					// @sitevision/sitevision-scripts, which compiles + zips to
+					// dist/<appId>.zip (the path the CLI's sign/deploy already use).
+					if (!hasSitevisionScripts(projectRoot)) {
+						setState({
+							status: 'error',
+							error:
+								'No webpack.config.js found and @sitevision/sitevision-scripts is not installed. Run npm install.',
+						});
+						return;
+					}
+
+					// Warn if the installed sitevision-scripts is outside the range
+					// the delegated build was validated against.
+					const warning =
+						checkSitevisionScriptsCompatibility(projectRoot).warning;
+
+					setState({
+						status: 'building',
+						message: 'Building via sitevision-scripts...',
+						warning,
+					});
+
+					const sitevisionResult = await runSitevisionScriptsBuild(projectRoot);
+
+					if (!sitevisionResult.success) {
+						setState({
+							status: 'error',
+							error: `${sitevisionResult.error}\n${sitevisionResult.output.slice(-1000)}`,
+							warning,
+						});
+						return;
+					}
+
+					// sitevision-scripts already produced the zip; report it directly.
+					const zipPath = getDelegatedZipPath(projectRoot, manifest.id);
+					if (!zipExists(zipPath)) {
+						setState({
+							status: 'error',
+							error: `Build reported success but no zip was found at ${zipPath}.`,
+							warning,
+						});
+						return;
+					}
+
+					setState({
+						status: 'success',
+						message: 'Build complete',
+						zipPath,
+						zipSize: getZipSize(zipPath),
+						warning,
+					});
+					return;
+				}
+
 				if (isBundled) {
-					// Check if webpack is available
+					// Project ships its own webpack config: build it in-process.
 					if (!WebpackRunner.isWebpackAvailable(projectRoot)) {
 						setState({
 							status: 'error',
@@ -189,6 +253,13 @@ export function BuildScreen({
 					message={state.message}
 				/>
 			</Box>
+
+			{/* Version-compatibility warning */}
+			{state.warning && (
+				<Box marginBottom={1}>
+					<Text color="yellow">⚠ {state.warning}</Text>
+				</Box>
+			)}
 
 			{/* Build stats on success */}
 			{state.status === 'success' && state.result?.stats && (
