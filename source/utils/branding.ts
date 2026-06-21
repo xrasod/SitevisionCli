@@ -42,6 +42,21 @@ export const BIG_LOGO = [
 export const BIG_LOGO_WIDTH = Math.max(...BIG_LOGO.map(line => line.length));
 
 /**
+ * Compact "Sitevision CLI" wordmark, animated on terminals too narrow for
+ * BIG_LOGO. ~72 columns wide.
+ */
+export const SMALL_LOGO = [
+	'▄█████ ▄▄ ▄▄▄▄▄▄ ▄▄▄▄▄ ▄▄ ▄▄ ▄▄  ▄▄▄▄ ▄▄  ▄▄▄  ▄▄  ▄▄   ▄█████ ██     ██ ',
+	'▀▀▀▄▄▄ ██   ██   ██▄▄  ██▄██ ██ ███▄▄ ██ ██▀██ ███▄██   ██     ██     ██ ',
+	'█████▀ ██   ██   ██▄▄▄  ▀█▀  ██ ▄▄██▀ ██ ▀███▀ ██ ▀██   ▀█████ ██████ ██ ',
+];
+
+/** Display width of the widest SMALL_LOGO line. */
+export const SMALL_LOGO_WIDTH = Math.max(
+	...SMALL_LOGO.map(line => [...line].length),
+);
+
+/**
  * Print the logo + author line straight to stdout (non-interactive), mirroring
  * how the masthead is printed. Used for the update banner.
  */

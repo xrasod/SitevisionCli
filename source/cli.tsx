@@ -19,7 +19,13 @@ import {
 } from './utils/config.js';
 import {WelcomeScreen} from './components/WelcomeScreen.js';
 import {AnimatedLogo} from './components/AnimatedLogo.js';
-import {printBranding, BIG_LOGO_WIDTH} from './utils/branding.js';
+import {
+	printBranding,
+	BIG_LOGO,
+	BIG_LOGO_WIDTH,
+	SMALL_LOGO,
+	SMALL_LOGO_WIDTH,
+} from './utils/branding.js';
 
 const pkg = JSON.parse(
 	readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
@@ -110,10 +116,18 @@ function printMasthead(version: string): void {
 	console.log(`${CYAN}╰${border}╯${RESET}`);
 }
 
+// Pick the widest wordmark that fits the terminal, or undefined if even the
+// compact one would wrap (caller then falls back to the static masthead).
+function pickIntroArt(columns: number): string[] | undefined {
+	if (columns >= BIG_LOGO_WIDTH) return BIG_LOGO;
+	if (columns >= SMALL_LOGO_WIDTH) return SMALL_LOGO;
+	return undefined;
+}
+
 // Play the one-shot animated wordmark and resolve once it finishes.
-async function playIntro(): Promise<void> {
+async function playIntro(art: string[]): Promise<void> {
 	await new Promise<void>(resolve => {
-		const app = render(<AnimatedLogo onDone={() => app.unmount()} />);
+		const app = render(<AnimatedLogo art={art} onDone={() => app.unmount()} />);
 		app.waitUntilExit().then(
 			() => resolve(),
 			() => resolve(),
@@ -136,14 +150,13 @@ async function main() {
 		!firstRun && lastSeen !== undefined && lastSeen !== pkg.version;
 
 	// On the plain interactive `svc` (no command), play the animated wordmark
-	// instead of the static masthead — but only when stdout is wide enough for
-	// the art and stdin is a TTY (so it doesn't run in CI / piped input).
-	const wantsIntro =
-		!firstRun &&
-		!isUpdate &&
-		!commandName &&
-		Boolean(process.stdin.isTTY) &&
-		(process.stdout.columns ?? 0) >= BIG_LOGO_WIDTH;
+	// instead of the static masthead — sized to the terminal. Only on a TTY so it
+	// doesn't run in CI / piped input.
+	const introEligible =
+		!firstRun && !isUpdate && !commandName && Boolean(process.stdin.isTTY);
+	const introArt = introEligible
+		? pickIntroArt(process.stdout.columns ?? 0)
+		: undefined;
 
 	if (!firstRun) {
 		if (isUpdate) {
@@ -151,7 +164,7 @@ async function main() {
 			console.log(
 				`\x1b[32m\n  ✨ Updated to v${pkg.version}\x1b[0m \x1b[2m(from v${lastSeen})\x1b[0m\n`,
 			);
-		} else if (!wantsIntro) {
+		} else if (!introArt) {
 			printMasthead(pkg.version);
 		}
 
@@ -208,8 +221,8 @@ async function main() {
 	// If no command, show interactive menu (with the animated intro first when
 	// the terminal can fit it).
 	if (!commandName) {
-		if (wantsIntro) {
-			await playIntro();
+		if (introArt) {
+			await playIntro(introArt);
 		}
 
 		render(<App project={project} />);

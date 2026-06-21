@@ -1,8 +1,11 @@
 import {Fragment, useEffect, useRef, useState} from 'react';
 import {Box, Text} from 'ink';
-import {AUTHOR, BIG_LOGO, BIG_LOGO_WIDTH} from '../utils/branding.js';
+import {AUTHOR, BIG_LOGO} from '../utils/branding.js';
 
 interface Props {
+	// Block-art lines to animate. Defaults to the big wordmark; callers pass the
+	// compact SMALL_LOGO on terminals too narrow for the big one.
+	art?: string[];
 	onDone: () => void;
 }
 
@@ -11,10 +14,12 @@ const SWEEP_COLS_PER_FRAME = 7; // how fast the wipe edge moves left → right
 const BAND = 18; // width of the rainbow zone trailing the sweep edge
 const HOLD_FRAMES = 6; // frames to hold the fully-settled logo before finishing
 
-// The sweep edge runs past the right side by BAND so the rainbow zone trails
-// all the way off, leaving every character settled to the terminal default.
-const SWEEP_FRAMES = Math.ceil((BIG_LOGO_WIDTH + BAND) / SWEEP_COLS_PER_FRAME);
-const TOTAL_FRAMES = SWEEP_FRAMES + HOLD_FRAMES;
+// Frames to fully reveal and settle art `width` columns wide. The sweep edge
+// runs past the right side by BAND so the rainbow zone trails all the way off,
+// leaving every character settled to the terminal default.
+function framesFor(width: number): number {
+	return Math.ceil((width + BAND) / SWEEP_COLS_PER_FRAME) + HOLD_FRAMES;
+}
 
 // Convert HSL (h in degrees, s/l in 0..1) to a #rrggbb string for ink/chalk.
 function hslToHex(h: number, s: number, l: number): string {
@@ -80,9 +85,12 @@ function buildSpans(
  * One-shot startup flair: wipes the big wordmark in left-to-right while a
  * rainbow gradient drifts across it, then calls `onDone`. Purely decorative.
  */
-export function AnimatedLogo({onDone}: Props) {
+export function AnimatedLogo({art = BIG_LOGO, onDone}: Props) {
 	const [frame, setFrame] = useState(0);
 	const intervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
+
+	const width = Math.max(...art.map(line => [...line].length));
+	const total = framesFor(width);
 
 	useEffect(() => {
 		intervalRef.current = setInterval(() => {
@@ -97,17 +105,17 @@ export function AnimatedLogo({onDone}: Props) {
 	// Stop the loop and notify the parent exactly once, when the last frame is
 	// reached. Kept out of the setFrame updater so that updater stays pure.
 	useEffect(() => {
-		if (frame >= TOTAL_FRAMES) {
+		if (frame >= total) {
 			clearInterval(intervalRef.current);
 			onDone();
 		}
-	}, [frame, onDone]);
+	}, [frame, total, onDone]);
 
 	const edge = (frame + 1) * SWEEP_COLS_PER_FRAME;
 
 	return (
 		<Box flexDirection="column" padding={1}>
-			{BIG_LOGO.map((line, y) => (
+			{art.map((line, y) => (
 				<Text key={y}>
 					{buildSpans(line, y, frame, edge).map((span, index) => (
 						<Fragment key={index}>
