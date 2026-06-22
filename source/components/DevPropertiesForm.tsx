@@ -128,7 +128,7 @@ export function DevPropertiesForm({
 					<BooleanInput
 						key="useHTTP"
 						label="Use HTTP for deployment? (y/n)"
-						defaultValue={properties.useHTTPForDevDeploy}
+						defaultValue={properties.useHTTPForDevDeploy ?? false}
 						onSubmit={(value: boolean) =>
 							handleNext('useHTTPForDevDeploy', value)
 						}
