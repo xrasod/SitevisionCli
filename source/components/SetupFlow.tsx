@@ -3,6 +3,7 @@ import {Box, Text, useInput} from 'ink';
 import {
 	type ProjectInfo,
 	getAppType,
+	localizedText,
 	migrateLegacyPassword,
 } from '../utils/project-detection.js';
 import {ProcessRunner} from '../utils/process-runner.js';
@@ -263,7 +264,7 @@ export function SetupFlow({project, onComplete}: Props) {
 				<Box flexDirection="column" marginLeft={2}>
 					<Box>
 						<Text bold>Name: </Text>
-						<Text>{project.manifest.name}</Text>
+						<Text>{localizedText(project.manifest.name)}</Text>
 					</Box>
 					<Box>
 						<Text bold>ID: </Text>

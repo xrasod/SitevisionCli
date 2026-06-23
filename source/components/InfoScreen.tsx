@@ -1,5 +1,9 @@
 import {Box, Text, useInput} from 'ink';
-import {type ProjectInfo, getAppType} from '../utils/project-detection.js';
+import {
+	type ProjectInfo,
+	getAppType,
+	localizedText,
+} from '../utils/project-detection.js';
 import {checkSitevisionScriptsCompatibility} from '../utils/sitevision-scripts-runner.js';
 
 interface Props {
@@ -28,7 +32,7 @@ export function InfoScreen({project, onBack}: Props) {
 			<Box flexDirection="column" marginLeft={2}>
 				<Box>
 					<Text bold>Name: </Text>
-					<Text>{project.manifest.name}</Text>
+					<Text>{localizedText(project.manifest.name)}</Text>
 				</Box>
 				<Box>
 					<Text bold>ID: </Text>

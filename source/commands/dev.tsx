@@ -22,6 +22,7 @@ import {
 	getFullAppId,
 	getZipPath,
 	getSignedZipPath,
+	localizedText,
 } from '../utils/project-detection.js';
 import type {
 	SitevisionManifest,
@@ -504,7 +505,7 @@ export function DevScreen({
 			{/* App info */}
 			<Box marginLeft={2} marginBottom={1}>
 				<Text dimColor>
-					{manifest.name} v{manifest.version}
+					{localizedText(manifest.name)} v{manifest.version}
 				</Text>
 			</Box>
 

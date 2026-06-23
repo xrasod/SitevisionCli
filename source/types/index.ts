@@ -19,15 +19,22 @@ export type AppType = 'WebApp' | 'Widget' | 'RESTApp';
 export type SimpleAppType = 'web' | 'widget' | 'rest';
 
 /**
+ * A manifest text field that may be a plain string or a localized object keyed
+ * by language code, e.g. `{sv: 'Namn', en: 'Name'}`. Sitevision allows either
+ * form for human-facing fields like `name` and `description`.
+ */
+export type LocalizedString = string | Record<string, string>;
+
+/**
  * Sitevision app manifest (manifest.json)
  */
 export interface SitevisionManifest {
 	id: string;
-	name: string;
+	name: LocalizedString;
 	version: string;
 	type: AppType;
 	bundled?: boolean;
-	description?: string;
+	description?: LocalizedString;
 	author?: string;
 	helpUrl?: string;
 	license?: string;

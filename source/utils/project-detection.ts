@@ -8,6 +8,7 @@ import type {
 	SimpleAppType,
 	PackageJson,
 	ApiEndpoints,
+	LocalizedString,
 } from '../types/index.js';
 import {getDeployPassword, setDeployPassword} from './keychain.js';
 
@@ -17,6 +18,28 @@ export type {
 	DevProperties,
 	ProjectInfo,
 } from '../types/index.js';
+
+// =============================================================================
+// LOCALIZED TEXT
+// =============================================================================
+
+/**
+ * Resolve a manifest text field that may be a plain string or a localized
+ * object (e.g. `{sv: 'Namn', en: 'Name'}`) to a single display string.
+ *
+ * Preference order: Swedish, then English, then any available language. Returns
+ * an empty string for missing/empty values. This guards the UI from rendering a
+ * raw object as a React child, which Sitevision's localized manifests would
+ * otherwise trigger.
+ */
+export function localizedText(
+	value: LocalizedString | undefined,
+	preferred = 'sv',
+): string {
+	if (!value) return '';
+	if (typeof value === 'string') return value;
+	return value[preferred] ?? value['en'] ?? Object.values(value)[0] ?? '';
+}
 
 // =============================================================================
 // PATH UTILITIES
@@ -208,6 +231,19 @@ export function buildImportEndpointUrl(
 // =============================================================================
 
 /**
+ * Thrown when a manifest.json is present but cannot be parsed. Kept distinct from
+ * a plain "no project here" (null) so the CLI can tell the user their manifest is
+ * malformed instead of the misleading "Not a Sitevision project".
+ */
+export class ManifestParseError extends Error {
+	constructor(manifestPath: string, cause: unknown) {
+		const reason = cause instanceof Error ? cause.message : String(cause);
+		super(`${manifestPath} is not valid JSON: ${reason}`);
+		this.name = 'ManifestParseError';
+	}
+}
+
+/**
  * Detect if the current directory is a Sitevision project
  */
 export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
@@ -225,9 +261,18 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
 		for (const p of manifestPaths) {
 			if (fs.existsSync(p)) {
 				manifestPath = p;
-				manifest = JSON.parse(
-					fs.readFileSync(p, 'utf-8'),
-				) as SitevisionManifest;
+				// A present-but-unparseable manifest is a real, fixable error (a stray
+				// comment, a trailing comma, …). Surface it rather than silently
+				// reporting "Not a Sitevision project". JSON has no comments — strip
+				// any `//` annotations from manifest.json.
+				try {
+					manifest = JSON.parse(
+						fs.readFileSync(p, 'utf-8'),
+					) as SitevisionManifest;
+				} catch (error) {
+					throw new ManifestParseError(p, error);
+				}
+
 				break;
 			}
 		}
@@ -314,7 +359,13 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
 			hasNodeModules,
 			paths,
 		};
-	} catch {
+	} catch (error) {
+		// A malformed manifest is a real error the user should see; everything else
+		// (missing files, unreadable optional config) just means "no project here".
+		if (error instanceof ManifestParseError) {
+			throw error;
+		}
+
 		return null;
 	}
 }
