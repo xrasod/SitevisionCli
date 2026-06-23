@@ -14,6 +14,9 @@ import {SigningPropertiesForm} from './SigningPropertiesForm.js';
 
 interface Props {
 	project: ProjectInfo;
+	// Re-detect the project from disk/keychain after a setup step writes changes,
+	// so the in-memory project (passed down from App) reflects them immediately.
+	onReload: () => void;
 	onComplete: () => void;
 }
 
@@ -31,7 +34,7 @@ type SetupStep =
 	| 'show-info'
 	| 'complete';
 
-export function SetupFlow({project, onComplete}: Props) {
+export function SetupFlow({project, onReload, onComplete}: Props) {
 	const [step, setStep] = useState<SetupStep>('check-node-modules');
 	const [runner, setRunner] = useState<any>(null);
 	const [commandStatus, setCommandStatus] = useState<
@@ -101,6 +104,9 @@ export function SetupFlow({project, onComplete}: Props) {
 		} else if (step === 'confirm-password-migration') {
 			if (input === 'y' || input === 'Y') {
 				migrateLegacyPassword(project);
+				// The file was rewritten (plaintext stripped, password moved to
+				// keychain) — re-detect so hasLegacyPassword/password reflect that.
+				onReload();
 				setStep('check-signing-properties');
 			} else if (input === 'n' || input === 'N') {
 				setStep('check-signing-properties');
@@ -122,10 +128,10 @@ export function SetupFlow({project, onComplete}: Props) {
 				initialProperties={project.devProperties}
 				packageJson={project.packageJson}
 				onComplete={() => {
-					// Manually update project state locally if possible, or just proceed
-					// Since we can't easily update 'project' prop from here without reloading,
-					// we just move to next step. The file is written.
-					project.hasDevProperties = true; // Optimization/Hack to pass check
+					// Re-detect from disk/keychain so devProperties (incl. the keychain
+					// password) populate in memory — otherwise the rest of this flow and
+					// the menu would see stale state until the CLI is restarted.
+					onReload();
 					setStep('check-signing-properties');
 				}}
 				onCancel={() => setStep('check-signing-properties')}
@@ -139,7 +145,9 @@ export function SetupFlow({project, onComplete}: Props) {
 			<SigningPropertiesForm
 				projectRoot={project.root}
 				onComplete={() => {
-					project.hasSigningProperties = true; // Optimization/Hack
+					// Re-detect so signing credentials are reflected in memory before
+					// the info screen / menu render.
+					onReload();
 					setStep('show-info');
 				}}
 				onCancel={() => setStep('show-info')}

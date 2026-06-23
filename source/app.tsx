@@ -1,5 +1,5 @@
-import {useMemo, useState} from 'react';
-import {type ProjectInfo} from './utils/project-detection.js';
+import {useCallback, useMemo, useState} from 'react';
+import {type ProjectInfo, detectProject} from './utils/project-detection.js';
 import {MainMenu} from './components/MainMenu.js';
 import {InfoScreen} from './components/InfoScreen.js';
 import {SetupFlow} from './components/SetupFlow.js';
@@ -35,7 +35,21 @@ type AppState =
 	| 'sign'
 	| 'setup-signing';
 
-export default function App({project}: Props) {
+export default function App({project: initialProject}: Props) {
+	// The project is loaded once at startup, but setup flows write new values to
+	// disk and the OS keychain. Hold it in state so we can re-detect after setup
+	// and pick up those changes (e.g. saved passwords) without restarting the CLI.
+	const [project, setProject] = useState<ProjectInfo>(initialProject);
+	const reloadProject = useCallback(() => {
+		try {
+			const refreshed = detectProject(initialProject.root);
+			if (refreshed) setProject(refreshed);
+		} catch {
+			// Re-detection failed (e.g. manifest became unparseable mid-session) —
+			// keep the existing in-memory project rather than crashing.
+		}
+	}, [initialProject.root]);
+
 	const [state, setState] = useState<AppState>('setup');
 	const [currentCommand, setCurrentCommand] = useState<string>('');
 	const [signingPassword, setSigningPassword] = useState<string>('');
@@ -236,7 +250,13 @@ export default function App({project}: Props) {
 	};
 
 	if (state === 'setup') {
-		return <SetupFlow project={project} onComplete={() => setState('menu')} />;
+		return (
+			<SetupFlow
+				project={project}
+				onReload={reloadProject}
+				onComplete={() => setState('menu')}
+			/>
+		);
 	}
 
 	if (state === 'menu') {
@@ -406,9 +426,9 @@ export default function App({project}: Props) {
 			<SigningPropertiesForm
 				projectRoot={project.root}
 				onComplete={() => {
-					// We can't easily update project info here without full reload,
-					// but since we are just returning to menu, it's fine.
-					// The user might need to restart CLI or we implement a reload mechanism.
+					// Re-detect so the newly written signing credentials are reflected
+					// in memory (hasSigningProperties, keychain password) without a restart.
+					reloadProject();
 					setState('menu');
 				}}
 				onCancel={() => setState('menu')}
