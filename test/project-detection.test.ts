@@ -15,10 +15,19 @@ function projectDir(manifest: string): string {
 	return dir;
 }
 
-test('a manifest with a // comment reports invalid JSON, not "not a project"', t => {
+test('a manifest with // comments (as the Sitevision docs show) is accepted', t => {
 	const dir = projectDir(
-		'{\n  "id": "x",\n  "name": { // localized\n    "sv": "Namn"\n  },\n  "type": "RESTApp"\n}',
+		'{\n  "id": "x",\n  "version": "0.0.1",\n  "name": { // Multilingual-manifest requires SV 10.1\n    "sv": "Namn",\n    "en": "Name"\n  },\n  "helpUrl": "https://example.com/restapps",\n  "type": "RESTApp"\n}',
 	);
+	const project = detectProject(dir);
+	t.truthy(project);
+	t.deepEqual(project!.manifest.name, {sv: 'Namn', en: 'Name'});
+	// The // inside the URL must be preserved, not stripped as a comment.
+	t.is(project!.manifest.helpUrl, 'https://example.com/restapps');
+});
+
+test('a manifest that is broken beyond comments reports invalid JSON', t => {
+	const dir = projectDir('{\n  "id": "x",\n  "name": "Name",,\n}');
 	const error = t.throws(() => requireProject(dir), {
 		instanceOf: ManifestParseError,
 	});

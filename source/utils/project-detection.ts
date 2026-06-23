@@ -11,6 +11,7 @@ import type {
 	LocalizedString,
 } from '../types/index.js';
 import {getDeployPassword, setDeployPassword} from './keychain.js';
+import {parseJsonc} from './jsonc.js';
 
 // Re-export types for backward compatibility
 export type {
@@ -261,14 +262,14 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
 		for (const p of manifestPaths) {
 			if (fs.existsSync(p)) {
 				manifestPath = p;
-				// A present-but-unparseable manifest is a real, fixable error (a stray
-				// comment, a trailing comma, …). Surface it rather than silently
-				// reporting "Not a Sitevision project". JSON has no comments — strip
-				// any `//` annotations from manifest.json.
+				// Manifests may contain comments (Sitevision's own docs show them), so
+				// parse as JSONC. A still-unparseable manifest is a real, fixable
+				// error — surface it rather than silently reporting "Not a Sitevision
+				// project".
 				try {
-					manifest = JSON.parse(
+					manifest = parseJsonc<SitevisionManifest>(
 						fs.readFileSync(p, 'utf-8'),
-					) as SitevisionManifest;
+					);
 				} catch (error) {
 					throw new ManifestParseError(p, error);
 				}
