@@ -2,9 +2,14 @@ import {useState, useEffect} from 'react';
 import {Box, Text, useInput} from 'ink';
 import {
 	type ProjectInfo,
+	type PackageJsonSyncChange,
 	getAppType,
 	localizedText,
 	migrateLegacyPassword,
+	getPackageJsonSyncChanges,
+	syncDevPropertiesToPackageJson,
+	readSvcConfig,
+	writeSvcConfig,
 } from '../utils/project-detection.js';
 import {ProcessRunner} from '../utils/process-runner.js';
 import {ProcessOutputComponent} from './ProcessOutput.js';
@@ -28,6 +33,9 @@ type SetupStep =
 	| 'confirm-dev-setup'
 	| 'setup-dev-properties'
 	| 'confirm-password-migration'
+	| 'check-package-sync'
+	| 'confirm-package-sync'
+	| 'confirm-save-sync-choice'
 	| 'check-signing-properties'
 	| 'confirm-signing-setup'
 	| 'setup-signing-properties'
@@ -40,6 +48,8 @@ export function SetupFlow({project, onReload, onComplete}: Props) {
 	const [commandStatus, setCommandStatus] = useState<
 		'running' | 'success' | 'error'
 	>('running');
+	const [syncChanges, setSyncChanges] = useState<PackageJsonSyncChange[]>([]);
+	const [syncDecision, setSyncDecision] = useState(false);
 	const appType = getAppType(project.manifest);
 
 	// Auto-advance through checks
@@ -55,10 +65,27 @@ export function SetupFlow({project, onReload, onComplete}: Props) {
 				if (project.hasLegacyPassword) {
 					setStep('confirm-password-migration');
 				} else {
-					setStep('check-signing-properties');
+					setStep('check-package-sync');
 				}
 			} else {
 				setStep('confirm-dev-setup');
+			}
+		} else if (step === 'check-package-sync') {
+			const preference = readSvcConfig(project.root).syncPackageJson;
+			const properties = project.devProperties;
+			const changes =
+				preference !== false && properties
+					? getPackageJsonSyncChanges(project.root, properties)
+					: [];
+			if (changes.length === 0 || !properties) {
+				setStep('check-signing-properties');
+			} else if (preference === true) {
+				syncDevPropertiesToPackageJson(project.root, properties);
+				onReload();
+				setStep('check-signing-properties');
+			} else {
+				setSyncChanges(changes);
+				setStep('confirm-package-sync');
 			}
 		} else if (step === 'check-signing-properties') {
 			if (project.hasSigningProperties) {
@@ -107,6 +134,24 @@ export function SetupFlow({project, onReload, onComplete}: Props) {
 				// The file was rewritten (plaintext stripped, password moved to
 				// keychain) — re-detect so hasLegacyPassword/password reflect that.
 				onReload();
+				setStep('check-package-sync');
+			} else if (input === 'n' || input === 'N') {
+				setStep('check-package-sync');
+			}
+		} else if (step === 'confirm-package-sync') {
+			if (['y', 'Y', 'n', 'N'].includes(input)) {
+				const accepted = input.toLowerCase() === 'y';
+				if (accepted && project.devProperties) {
+					syncDevPropertiesToPackageJson(project.root, project.devProperties);
+					onReload();
+				}
+
+				setSyncDecision(accepted);
+				setStep('confirm-save-sync-choice');
+			}
+		} else if (step === 'confirm-save-sync-choice') {
+			if (input === 'y' || input === 'Y') {
+				writeSvcConfig(project.root, {syncPackageJson: syncDecision});
 				setStep('check-signing-properties');
 			} else if (input === 'n' || input === 'N') {
 				setStep('check-signing-properties');
@@ -132,7 +177,7 @@ export function SetupFlow({project, onReload, onComplete}: Props) {
 					// password) populate in memory — otherwise the rest of this flow and
 					// the menu would see stale state until the CLI is restarted.
 					onReload();
-					setStep('check-signing-properties');
+					setStep('check-package-sync');
 				}}
 				onCancel={() => setStep('check-signing-properties')}
 			/>
@@ -228,6 +273,65 @@ export function SetupFlow({project, onReload, onComplete}: Props) {
 					</Text>
 					<Text dimColor>
 						Recommended — storing passwords in project files is insecure.
+					</Text>
+				</Box>
+			</Box>
+		);
+	}
+
+	// Confirm package.json sync
+	if (step === 'confirm-package-sync') {
+		return (
+			<Box flexDirection="column" padding={1}>
+				<Box marginBottom={1}>
+					<Text bold color="cyan">
+						Sitevision CLI
+					</Text>
+				</Box>
+				<Box marginBottom={1}>
+					<Text color="yellow">
+						⚠ package.json is out of sync with .dev_properties.json
+					</Text>
+				</Box>
+				<Box marginBottom={1} flexDirection="column" marginLeft={2}>
+					{syncChanges.map(change => (
+						<Box key={change.key}>
+							<Text color={change.from === undefined ? 'green' : 'yellow'}>
+								{change.from === undefined ? '+ ' : '~ '}
+							</Text>
+							<Text bold>{change.key}: </Text>
+							{change.from !== undefined && (
+								<Text dimColor>{change.from} → </Text>
+							)}
+							<Text>{change.to}</Text>
+						</Box>
+					))}
+				</Box>
+				<Box marginBottom={1} flexDirection="column">
+					<Text>Update package.json from .dev_properties.json? (y/n)</Text>
+					<Text dimColor>
+						sitevision-scripts reads these fields from package.json.
+					</Text>
+				</Box>
+			</Box>
+		);
+	}
+
+	// Offer to persist the sync decision in .svcconfig
+	if (step === 'confirm-save-sync-choice') {
+		return (
+			<Box flexDirection="column" padding={1}>
+				<Box marginBottom={1}>
+					<Text bold color="cyan">
+						Sitevision CLI
+					</Text>
+				</Box>
+				<Box marginBottom={1} flexDirection="column">
+					<Text>Remember this choice in .svcconfig? (y/n)</Text>
+					<Text dimColor>
+						{syncDecision
+							? 'svc will update package.json automatically from now on.'
+							: 'svc will stop asking about package.json sync.'}
 					</Text>
 				</Box>
 			</Box>

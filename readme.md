@@ -126,6 +126,29 @@ Create this file in your project root for deployment configuration:
 }
 ```
 
+### Keeping `package.json` in sync
+
+`sitevision-scripts` reads `developmentDomain`, `siteName` and `addonName`
+from `package.json`, which duplicates three fields of
+`.dev_properties.json`. When they disagree — or when a fresh setup has just
+written `.dev_properties.json` — `svc` shows the differences and offers to
+update `package.json` from `.dev_properties.json`. Nothing is written without
+confirmation, and `.dev_properties.json` is always the source of truth for
+the copy. Existing indentation and unrelated fields are left alone.
+
+After answering, `svc` offers to remember the choice in a `.svcconfig` file
+in the project root:
+
+```json
+{
+	"syncPackageJson": true
+}
+```
+
+With `true`, `svc` updates `package.json` automatically without asking; with
+`false`, the check is skipped entirely. Delete the key (or the file) to be
+asked again. The file contains no secrets, so it is safe to commit.
+
 ### Password storage
 
 Passwords are stored in the OS-native secret store (macOS Keychain, Windows

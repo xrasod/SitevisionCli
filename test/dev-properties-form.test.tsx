@@ -15,11 +15,19 @@ const delay = async (ms: number) =>
 // password), submitting each with Enter. Leaves the form on the final
 // useHTTP BooleanInput step.
 async function fillTextSteps(stdin: {write: (s: string) => void}) {
-	for (const value of ['test.sitevision.se', 'MySite', 'MyAddon', 'user@example.com', '']) {
+	for (const value of [
+		'test.sitevision.se',
+		'MySite',
+		'MyAddon',
+		'user@example.com',
+		'',
+	]) {
+		/* eslint-disable no-await-in-loop -- keystrokes must land sequentially */
 		stdin.write(value);
 		await delay(15);
 		stdin.write('\r');
 		await delay(15);
+		/* eslint-enable no-await-in-loop -- end sequential keystrokes */
 	}
 }
 
@@ -49,8 +57,11 @@ test('pressing Enter on the final step writes the file with useHTTP=false', asyn
 	t.true(completed, 'onComplete should fire when Enter submits the default');
 	t.true(fs.existsSync(file), `expected file at ${file}`);
 
-	const written = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
-	t.is(written['useHTTPForDevDeploy'], false);
+	const written = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<
+		string,
+		unknown
+	>;
+	t.false(written['useHTTPForDevDeploy']);
 	t.is(written['domain'], 'test.sitevision.se');
 	t.is(written['username'], 'user@example.com');
 });
@@ -74,5 +85,5 @@ test('answering the final step explicitly writes the file', async t => {
 	const written = JSON.parse(
 		fs.readFileSync(path.join(root, '.dev_properties.json'), 'utf8'),
 	) as Record<string, unknown>;
-	t.is(written['useHTTPForDevDeploy'], true);
+	t.true(written['useHTTPForDevDeploy']);
 });

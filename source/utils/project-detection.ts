@@ -445,6 +445,138 @@ export function writeDevProperties(
 	fs.writeFileSync(devPropertiesPath, JSON.stringify(persisted, null, 2));
 }
 
+// =============================================================================
+// SVC CONFIG
+// =============================================================================
+
+/**
+ * CLI preferences stored in .svcconfig at the project root. Unknown keys are
+ * preserved on write so hand-edited entries survive.
+ */
+export interface SvcConfig {
+	syncPackageJson?: boolean;
+	[key: string]: unknown;
+}
+
+export function readSvcConfig(projectRoot: string): SvcConfig {
+	try {
+		return parseJsonc<SvcConfig>(
+			fs.readFileSync(path.join(projectRoot, '.svcconfig'), 'utf-8'),
+		);
+	} catch {
+		return {};
+	}
+}
+
+export function writeSvcConfig(projectRoot: string, updates: SvcConfig): void {
+	const merged = {...readSvcConfig(projectRoot), ...updates};
+	fs.writeFileSync(
+		path.join(projectRoot, '.svcconfig'),
+		JSON.stringify(merged, null, 2) + '\n',
+	);
+}
+
+// =============================================================================
+// PACKAGE.JSON SYNC
+// =============================================================================
+
+/**
+ * Fields duplicated between .dev_properties.json and package.json, where
+ * sitevision-scripts reads them under different names.
+ */
+const PACKAGE_JSON_SYNC_KEYS: {
+	packageKey: 'developmentDomain' | 'siteName' | 'addonName';
+	devKey: keyof DevProperties;
+}[] = [
+	{packageKey: 'developmentDomain', devKey: 'domain'},
+	{packageKey: 'siteName', devKey: 'siteName'},
+	{packageKey: 'addonName', devKey: 'addonName'},
+];
+
+export interface PackageJsonSyncChange {
+	key: string;
+	from?: string;
+	to: string;
+}
+
+function readPackageJson(projectRoot: string): PackageJson | null {
+	try {
+		return JSON.parse(
+			fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf-8'),
+		) as PackageJson;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Which of the shared fields package.json is missing or disagrees on, relative
+ * to the given dev properties. Reads package.json from disk — an earlier
+ * `npm install` in the same session may have rewritten it.
+ */
+export function getPackageJsonSyncChanges(
+	projectRoot: string,
+	properties: DevProperties,
+): PackageJsonSyncChange[] {
+	const packageJson = readPackageJson(projectRoot);
+	if (!packageJson) return [];
+
+	const changes: PackageJsonSyncChange[] = [];
+	for (const {packageKey, devKey} of PACKAGE_JSON_SYNC_KEYS) {
+		const to = properties[devKey];
+		if (typeof to !== 'string' || to === '') continue;
+		const from = packageJson[packageKey];
+		if (from !== to) {
+			changes.push(
+				from === undefined
+					? {key: packageKey, to}
+					: {key: packageKey, from, to},
+			);
+		}
+	}
+
+	return changes;
+}
+
+/**
+ * Copy the shared fields from dev properties into package.json, preserving the
+ * file's existing indentation and trailing newline.
+ */
+export function syncDevPropertiesToPackageJson(
+	projectRoot: string,
+	properties: DevProperties,
+): boolean {
+	const packageJsonPath = path.join(projectRoot, 'package.json');
+	let raw: string;
+	try {
+		raw = fs.readFileSync(packageJsonPath, 'utf-8');
+	} catch {
+		return false;
+	}
+
+	let packageJson: PackageJson;
+	try {
+		packageJson = JSON.parse(raw) as PackageJson;
+	} catch {
+		return false;
+	}
+
+	for (const {packageKey, devKey} of PACKAGE_JSON_SYNC_KEYS) {
+		const value = properties[devKey];
+		if (typeof value === 'string' && value !== '') {
+			packageJson[packageKey] = value;
+		}
+	}
+
+	const indent = /^(?<indent>[\t ]+)/m.exec(raw)?.groups?.['indent'] ?? '\t';
+	const newline = raw.endsWith('\n') ? '\n' : '';
+	fs.writeFileSync(
+		packageJsonPath,
+		JSON.stringify(packageJson, null, indent) + newline,
+	);
+	return true;
+}
+
 /**
  * Move a plaintext password from .dev_properties.json into the OS keychain and
  * strip it from the file. Returns true if the password was migrated.
