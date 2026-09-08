@@ -23,6 +23,7 @@ import {
 	getZipPath,
 	getSignedZipPath,
 	localizedText,
+	readManifest,
 } from '../utils/project-detection.js';
 import type {
 	SitevisionManifest,
@@ -74,6 +75,7 @@ export function DevScreen({
 	onRetryCredentials,
 }: DevScreenProps) {
 	const {exit} = useApp();
+	const [version, setVersion] = React.useState(manifest.version);
 	const [state, setState] = React.useState<DevState>({
 		status: 'initializing',
 		message: 'Starting webpack watch...',
@@ -97,6 +99,15 @@ export function DevScreen({
 	const pendingRebuildRef = React.useRef(false);
 
 	// Sign (if needed) and deploy an already-built zip, updating UI state.
+	const refreshVersion = React.useCallback(() => {
+		try {
+			const fresh = readManifest(projectRoot)?.manifest.version;
+			if (fresh) setVersion(fresh);
+		} catch {
+			// keep last known version
+		}
+	}, [projectRoot]);
+
 	const signAndDeploy = React.useCallback(
 		async (zipPath: string, buildTime?: number) => {
 			try {
@@ -129,6 +140,8 @@ export function DevScreen({
 
 					deployZipPath = signedZipPath;
 				}
+
+				refreshVersion();
 
 				// Watch/build-only mode: stop after building (and signing).
 				if (!deploy || !devProperties) {
@@ -195,7 +208,15 @@ export function DevScreen({
 				}));
 			}
 		},
-		[projectRoot, manifest, devProperties, signed, deploy, signingCredentials],
+		[
+			projectRoot,
+			manifest,
+			devProperties,
+			signed,
+			deploy,
+			signingCredentials,
+			refreshVersion,
+		],
 	);
 
 	// In-house webpack path: copy static, zip, then sign + deploy.
@@ -505,7 +526,7 @@ export function DevScreen({
 			{/* App info */}
 			<Box marginLeft={2} marginBottom={1}>
 				<Text dimColor>
-					{localizedText(manifest.name)} v{manifest.version}
+					{localizedText(manifest.name)} v{version}
 				</Text>
 			</Box>
 

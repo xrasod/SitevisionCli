@@ -245,42 +245,51 @@ export class ManifestParseError extends Error {
 }
 
 /**
+ * Read manifest.json from its supported locations (root, static/, src/).
+ * Throws ManifestParseError on malformed JSON.
+ */
+export function readManifest(
+	cwd: string,
+): {manifestPath: string; manifest: SitevisionManifest} | null {
+	const manifestPaths = [
+		path.join(cwd, 'manifest.json'),
+		path.join(cwd, 'static', 'manifest.json'),
+		path.join(cwd, 'src', 'manifest.json'),
+	];
+
+	for (const manifestPath of manifestPaths) {
+		if (!fs.existsSync(manifestPath)) {
+			continue;
+		}
+
+		// Manifests may contain comments (Sitevision's own docs show them), so
+		// parse as JSONC.
+		try {
+			return {
+				manifestPath,
+				manifest: parseJsonc<SitevisionManifest>(
+					fs.readFileSync(manifestPath, 'utf-8'),
+				),
+			};
+		} catch (error) {
+			throw new ManifestParseError(manifestPath, error);
+		}
+	}
+
+	return null;
+}
+
+/**
  * Detect if the current directory is a Sitevision project
  */
 export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
 	try {
-		// Look for manifest.json in multiple locations (current, static/, src/)
-		const manifestPaths = [
-			path.join(cwd, 'manifest.json'),
-			path.join(cwd, 'static', 'manifest.json'),
-			path.join(cwd, 'src', 'manifest.json'),
-		];
-
-		let manifestPath: string | null = null;
-		let manifest: SitevisionManifest | null = null;
-
-		for (const p of manifestPaths) {
-			if (fs.existsSync(p)) {
-				manifestPath = p;
-				// Manifests may contain comments (Sitevision's own docs show them), so
-				// parse as JSONC. A still-unparseable manifest is a real, fixable
-				// error — surface it rather than silently reporting "Not a Sitevision
-				// project".
-				try {
-					manifest = parseJsonc<SitevisionManifest>(
-						fs.readFileSync(p, 'utf-8'),
-					);
-				} catch (error) {
-					throw new ManifestParseError(p, error);
-				}
-
-				break;
-			}
-		}
-
-		if (!manifest || !manifestPath) {
+		const found = readManifest(cwd);
+		if (!found) {
 			return null;
 		}
+
+		const {manifestPath, manifest} = found;
 
 		// Check for package.json
 		const packageJsonPath = path.join(cwd, 'package.json');
