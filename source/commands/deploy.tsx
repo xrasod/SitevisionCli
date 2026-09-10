@@ -12,7 +12,7 @@ import {zipExists} from '../utils/zip.js';
 import {promptPassword, promptYesNo} from '../utils/password-prompt.js';
 import {setDeployPassword, deleteSessionCookie} from '../utils/keychain.js';
 import {resolveOAuth2AccessToken} from '../utils/oauth2-auth.js';
-import {resolveSessionCookie} from '../utils/session-cookie-auth.js';
+import {AuthLoginScreen} from '../components/AuthLoginScreen.js';
 import type {
 	SitevisionManifest,
 	DevProperties,
@@ -28,7 +28,6 @@ interface DeployScreenProps {
 	force: boolean;
 	production: boolean;
 	activate: boolean;
-	signingPassword?: string;
 	onBack?: () => void;
 	onRetryCredentials?: () => void;
 }
@@ -49,7 +48,6 @@ export function DeployScreen({
 	force,
 	production,
 	activate,
-	signingPassword,
 	onBack,
 	onRetryCredentials,
 }: DeployScreenProps) {
@@ -57,6 +55,18 @@ export function DeployScreen({
 		status: 'deploying',
 		message: production ? 'Deploying to production...' : 'Deploying to dev...',
 	});
+	// 'init' resolves cached credentials, 'login' shows the Ink login screen,
+	// 'deploy' runs the upload. Token/cookie login now happens here, so both the
+	// TUI and the standalone command reach it.
+	const [phase, setPhase] = React.useState<'init' | 'login' | 'deploy'>('init');
+	const [credential, setCredential] = React.useState<{
+		accessToken?: string;
+		sessionCookie?: string;
+	}>({
+		accessToken: devProperties.accessToken,
+		sessionCookie: devProperties.sessionCookie,
+	});
+	const deployStartedRef = React.useRef(false);
 
 	useInput((input, key) => {
 		if (state.status !== 'deploying') {
@@ -69,47 +79,52 @@ export function DeployScreen({
 		}
 	});
 
+	// Decide once whether we can deploy straight away or must log in first.
 	React.useEffect(() => {
+		const authMethod = devProperties.authMethod ?? 'basic';
+		if (authMethod === 'basic' || devProperties.sessionCookie) {
+			setPhase('deploy');
+			return;
+		}
+
+		if (authMethod === 'cookie') {
+			// env/keychain cookie is already loaded in devProperties; none here.
+			setPhase('login');
+			return;
+		}
+
+		if (authMethod === 'oauth2') {
+			if (devProperties.accessToken) {
+				setPhase('deploy');
+				return;
+			}
+
+			void (async () => {
+				const token = await resolveOAuth2AccessToken(devProperties);
+				if (token) {
+					setCredential({accessToken: token});
+					setPhase('deploy');
+				} else {
+					setPhase('login');
+				}
+			})();
+			return;
+		}
+
+		setPhase('deploy');
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
+	React.useEffect(() => {
+		if (phase !== 'deploy' || deployStartedRef.current) return;
+		deployStartedRef.current = true;
+
 		async function runDeploy() {
 			try {
 				const appType = getAppType(manifest);
-
-				// Resolve an OAuth2 token silently (env/keychain refresh). A fresh
-				// browser login happens only in the direct `svc deploy` command, which
-				// sets accessToken before rendering — the Ink menu can't own the
-				// terminal for a login, so it resolves refresh-only here.
 				const authMethod = devProperties.authMethod ?? 'basic';
-				let accessToken = devProperties.accessToken;
-				if (authMethod === 'oauth2' && !accessToken) {
-					accessToken =
-						(await resolveOAuth2AccessToken(devProperties, {
-							interactive: false,
-						})) ?? undefined;
-					if (!accessToken) {
-						setState({
-							status: 'error',
-							error:
-								'No OAuth2 access token. Run `svc deploy` from a terminal to log in, or set SITEVISION_ACCESS_TOKEN.',
-						});
-						return;
-					}
-				}
-
-				let sessionCookie = devProperties.sessionCookie;
-				if (authMethod === 'cookie' && !sessionCookie) {
-					sessionCookie =
-						(await resolveSessionCookie(devProperties, {
-							interactive: false,
-						})) ?? undefined;
-					if (!sessionCookie) {
-						setState({
-							status: 'error',
-							error:
-								'No session cookie. Run `svc deploy` from a terminal to log in, or set SITEVISION_SESSION_COOKIE.',
-						});
-						return;
-					}
-				}
+				// Credential resolved in the init effect / login screen.
+				const {accessToken, sessionCookie} = credential;
 
 				// A stale session fails without a clean 401 — clear the stored cookie
 				// so the next run re-authenticates. Skip when SITEVISION_SESSION_COOKIE
@@ -216,15 +231,35 @@ export function DeployScreen({
 		}
 
 		runDeploy();
-	}, [
-		projectRoot,
-		manifest,
-		devProperties,
-		force,
-		production,
-		activate,
-		signingPassword,
-	]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [phase]);
+
+	if (phase === 'login' && state.status !== 'error') {
+		return (
+			<AuthLoginScreen
+				method={
+					(devProperties.authMethod ?? 'basic') === 'cookie'
+						? 'cookie'
+						: 'oauth2'
+				}
+				devProperties={devProperties}
+				onComplete={cred => {
+					setCredential(cred);
+					setPhase('deploy');
+				}}
+				onError={message => {
+					setState({status: 'error', error: message});
+				}}
+				onCancel={() => {
+					if (onBack) {
+						onBack();
+					} else {
+						setState({status: 'error', error: 'Login cancelled.'});
+					}
+				}}
+			/>
+		);
+	}
 
 	return (
 		<Box flexDirection="column" padding={1}>
@@ -309,37 +344,11 @@ export const deployCommand: Command = {
 			return;
 		}
 
-		// Resolve deploy credentials. A token/cookie from env/--flag (already
-		// loaded in detectProject / cli) short-circuits everything.
+		// Basic auth prompts for a password here; OAuth2 and cookie resolve or log
+		// in inside DeployScreen (Ink-native), so both the TUI and this command
+		// share one login path. env/--flag token/cookie are already loaded.
 		const authMethod = project.devProperties.authMethod ?? 'basic';
-		if (
-			project.devProperties.accessToken ||
-			project.devProperties.sessionCookie
-		) {
-			// Nothing to acquire — a bearer token or session cookie is in hand.
-		} else if (authMethod === 'oauth2') {
-			const token = await resolveOAuth2AccessToken(project.devProperties);
-			if (!token) {
-				console.log(
-					'\n\x1b[31mError: No OAuth2 access token available.\x1b[0m',
-				);
-				console.log(
-					'Set SITEVISION_ACCESS_TOKEN, pass --token, or configure the oauth2 endpoints in .dev_properties.json to log in.\n',
-				);
-				return;
-			}
-			project.devProperties.accessToken = token;
-		} else if (authMethod === 'cookie') {
-			const cookie = await resolveSessionCookie(project.devProperties);
-			if (!cookie) {
-				console.log('\n\x1b[31mError: No session cookie available.\x1b[0m');
-				console.log(
-					'Log in when the browser opens, or set SITEVISION_SESSION_COOKIE / pass --cookie.\n',
-				);
-				return;
-			}
-			project.devProperties.sessionCookie = cookie;
-		} else if (!project.devProperties.password) {
+		if (authMethod === 'basic' && !project.devProperties.password) {
 			const {domain, username} = project.devProperties;
 			console.log('');
 			const password = await promptPassword(
@@ -362,17 +371,7 @@ export const deployCommand: Command = {
 		const force = Boolean(flags['force']);
 		const activate = Boolean(flags['activate']);
 
-		// For production, we need the signed zip, which requires signing credentials
-		let signingPassword: string | undefined;
-		if (
-			production &&
-			project.hasSigningProperties &&
-			project.devProperties.signingUsername
-		) {
-			// We already have a signed zip, no need to prompt for password here
-			// The sign command should have been run separately
-		}
-
+		// Production deploys use the already-signed zip; `sign` is run separately.
 		const {waitUntilExit} = render(
 			<DeployScreen
 				projectRoot={project.root}
@@ -381,7 +380,6 @@ export const deployCommand: Command = {
 				force={force}
 				production={production}
 				activate={activate}
-				signingPassword={signingPassword}
 			/>,
 		);
 

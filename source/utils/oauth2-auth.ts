@@ -70,7 +70,7 @@ async function postToken(
 	}
 }
 
-function openBrowser(url: string): void {
+export function openBrowser(url: string): void {
 	const isWin = process.platform === 'win32';
 	const cmd =
 		process.platform === 'darwin' ? 'open' : isWin ? 'cmd' : 'xdg-open';
@@ -82,98 +82,120 @@ function openBrowser(url: string): void {
 	}
 }
 
-/** Serve the loopback redirect once, resolving the authorization code. */
-function waitForCode(port: number, state: string): Promise<string | null> {
-	return new Promise(resolve => {
-		let settled = false;
-		const finish = (code: string | null) => {
+/**
+ * Serve the loopback redirect once. Returns the awaited code and a `close()`
+ * that shuts the server down (freeing the port) if the login is cancelled — so
+ * a retry doesn't hit an EADDRINUSE on the fixed redirect port.
+ */
+function startLoopback(
+	port: number,
+	state: string,
+): {code: Promise<string | null>; close: () => void} {
+	let finish!: (code: string | null) => void;
+	let settled = false;
+
+	const code = new Promise<string | null>(resolve => {
+		finish = (value: string | null) => {
 			if (settled) return;
 			settled = true;
 			clearTimeout(timer);
 			server.close();
-			resolve(code);
+			resolve(value);
 		};
-
-		const server = http.createServer((req, res) => {
-			const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
-			if (url.pathname !== '/callback') {
-				res.writeHead(404).end();
-				return;
-			}
-
-			const ok = url.searchParams.get('state') === state;
-			const code = url.searchParams.get('code');
-			const message =
-				ok && code
-					? 'Login complete. You can close this window and return to the terminal.'
-					: 'Login failed. Check the terminal.';
-			res.writeHead(200, {'Content-Type': 'text/html'});
-			res.end(`<!doctype html><meta charset="utf-8"><p>${message}</p>`);
-			finish(ok ? code : null);
-		});
-
-		const timer = setTimeout(() => finish(null), LOGIN_TIMEOUT_MS);
-		server.on('error', () => finish(null));
-		server.listen(port, '127.0.0.1');
 	});
+
+	const server = http.createServer((req, res) => {
+		const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+		if (url.pathname !== '/callback') {
+			res.writeHead(404).end();
+			return;
+		}
+
+		const ok = url.searchParams.get('state') === state;
+		const authCode = url.searchParams.get('code');
+		const message =
+			ok && authCode
+				? 'Login complete. You can close this window and return to the terminal.'
+				: 'Login failed. Check the terminal.';
+		res.writeHead(200, {'Content-Type': 'text/html'});
+		res.end(`<!doctype html><meta charset="utf-8"><p>${message}</p>`);
+		finish(ok ? authCode : null);
+	});
+
+	const timer = setTimeout(() => finish(null), LOGIN_TIMEOUT_MS);
+	server.on('error', () => finish(null));
+	server.listen(port, '127.0.0.1');
+
+	return {code, close: () => finish(null)};
 }
 
-async function interactiveLogin(
-	config: OAuth2Config,
-	secret?: string,
-): Promise<TokenResponse | null> {
+/**
+ * Start an interactive OAuth2 login. Returns the authorize URL to open and a
+ * `complete()` that awaits the loopback redirect, exchanges the code, stores the
+ * refresh token, and resolves the access token. UI-agnostic, so an Ink screen
+ * can drive it without owning the terminal.
+ */
+export function beginOAuth2Login(dev: DevProperties): {
+	authUrl: string;
+	complete: () => Promise<string | null>;
+	cancel: () => void;
+} | null {
+	const config = dev.oauth2;
+	if (!hasOAuth2Config(config)) return null;
+
+	const {domain} = dev;
+	const secret = getOAuth2ClientSecret(domain, config.clientId) ?? undefined;
 	const port = config.redirectPort ?? DEFAULT_REDIRECT_PORT;
 	const redirectUri = `http://127.0.0.1:${port}/callback`;
 	const {verifier, challenge} = createPkcePair();
 	const state = base64url(crypto.randomBytes(16));
 
-	const authUrl = new URL(config.authorizationEndpoint);
-	authUrl.searchParams.set('response_type', 'code');
-	authUrl.searchParams.set('client_id', config.clientId);
-	authUrl.searchParams.set('redirect_uri', redirectUri);
-	authUrl.searchParams.set('state', state);
-	authUrl.searchParams.set('code_challenge', challenge);
-	authUrl.searchParams.set('code_challenge_method', 'S256');
+	const url = new URL(config.authorizationEndpoint);
+	url.searchParams.set('response_type', 'code');
+	url.searchParams.set('client_id', config.clientId);
+	url.searchParams.set('redirect_uri', redirectUri);
+	url.searchParams.set('state', state);
+	url.searchParams.set('code_challenge', challenge);
+	url.searchParams.set('code_challenge_method', 'S256');
 	if (config.scopes?.length) {
-		authUrl.searchParams.set('scope', config.scopes.join(' '));
+		url.searchParams.set('scope', config.scopes.join(' '));
 	}
 
-	const codePromise = waitForCode(port, state);
-	openBrowser(authUrl.href);
-	console.log(
-		`\nOpening browser to log in. If it doesn't open, visit:\n${authUrl.href}\n`,
-	);
+	const loopback = startLoopback(port, state);
 
-	const code = await codePromise;
-	if (!code) return null;
+	const complete = async (): Promise<string | null> => {
+		const code = await loopback.code;
+		if (!code) return null;
+		const tokens = await postToken(
+			config,
+			{
+				grant_type: 'authorization_code',
+				code,
+				redirect_uri: redirectUri,
+				client_id: config.clientId,
+				code_verifier: verifier,
+			},
+			secret,
+		);
+		if (!tokens?.access_token) return null;
+		if (tokens.refresh_token) {
+			setOAuth2RefreshToken(domain, config.clientId, tokens.refresh_token);
+		}
+		return tokens.access_token;
+	};
 
-	return postToken(
-		config,
-		{
-			grant_type: 'authorization_code',
-			code,
-			redirect_uri: redirectUri,
-			client_id: config.clientId,
-			code_verifier: verifier,
-		},
-		secret,
-	);
+	return {authUrl: url.href, complete, cancel: loopback.close};
 }
 
 /**
- * Return a usable OAuth2 access token, or null if one can't be obtained.
- *
- * Order: silent refresh from the keychain refresh token, then (when
- * `interactive`) a browser login. The access token is never persisted; the
- * refresh token is stored in the keychain for next time. Pass
- * `interactive: false` from contexts that can't own the terminal (the Ink
- * menu) to get refresh-only resolution with no browser.
+ * Silently resolve an access token by refreshing the keychain refresh token.
+ * Returns null when there's no refresh token or it's expired/revoked (in which
+ * case the stale token is dropped). Interactive login lives in `beginOAuth2Login`,
+ * driven by the Ink login screen — the access token is never persisted.
  */
 export async function resolveOAuth2AccessToken(
 	dev: DevProperties,
-	options: {interactive?: boolean} = {},
 ): Promise<string | null> {
-	const {interactive = true} = options;
 	const config = dev.oauth2;
 	if (!hasOAuth2Config(config)) return null;
 
@@ -181,32 +203,25 @@ export async function resolveOAuth2AccessToken(
 	const secret = getOAuth2ClientSecret(domain, config.clientId) ?? undefined;
 
 	const storedRefresh = getOAuth2RefreshToken(domain, config.clientId);
-	if (storedRefresh) {
-		const tokens = await postToken(
-			config,
-			{
-				grant_type: 'refresh_token',
-				refresh_token: storedRefresh,
-				client_id: config.clientId,
-			},
-			secret,
-		);
-		if (tokens?.access_token) {
-			if (tokens.refresh_token) {
-				setOAuth2RefreshToken(domain, config.clientId, tokens.refresh_token);
-			}
-			return tokens.access_token;
+	if (!storedRefresh) return null;
+
+	const tokens = await postToken(
+		config,
+		{
+			grant_type: 'refresh_token',
+			refresh_token: storedRefresh,
+			client_id: config.clientId,
+		},
+		secret,
+	);
+	if (tokens?.access_token) {
+		if (tokens.refresh_token) {
+			setOAuth2RefreshToken(domain, config.clientId, tokens.refresh_token);
 		}
-		// Stale/expired refresh token — drop it and log in fresh.
-		deleteOAuth2RefreshToken(domain, config.clientId);
+		return tokens.access_token;
 	}
 
-	if (!interactive || !process.stdin.isTTY) return null;
-
-	const tokens = await interactiveLogin(config, secret);
-	if (!tokens?.access_token) return null;
-	if (tokens.refresh_token) {
-		setOAuth2RefreshToken(domain, config.clientId, tokens.refresh_token);
-	}
-	return tokens.access_token;
+	// Stale/expired refresh token — drop it so the next run logs in fresh.
+	deleteOAuth2RefreshToken(domain, config.clientId);
+	return null;
 }

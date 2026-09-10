@@ -1,11 +1,21 @@
 import type {DevProperties} from '../types/index.js';
-import {getSessionCookie, setSessionCookie} from './keychain.js';
-import {promptEnter} from './password-prompt.js';
+import {setSessionCookie} from './keychain.js';
 
 interface RawCookie {
 	name: string;
 	value: string;
 	domain: string;
+}
+
+export interface CaptureResult {
+	cookie?: string;
+	note?: string;
+	error?: string;
+}
+
+export interface CookieLoginSession {
+	capture: () => Promise<CaptureResult>;
+	close: () => Promise<void>;
 }
 
 function bareDomain(domain: string): string {
@@ -17,6 +27,35 @@ function domainRelated(a: string, b: string): boolean {
 	const x = bareDomain(a);
 	const y = bareDomain(b);
 	return x === y || x.endsWith(`.${y}`) || y.endsWith(`.${x}`);
+}
+
+/**
+ * Pick the session from a cookie jar: find JSESSIONID (preferring the deploy
+ * host), then return every cookie on that host as a `Cookie:` header. On miss,
+ * return diagnostics naming the domains actually seen. Pure — no keychain, no
+ * browser — so it's unit-testable.
+ */
+export function selectSessionCookie(
+	all: RawCookie[],
+	siteDomain: string,
+): CaptureResult {
+	const sessions = all.filter(c => c.name === 'JSESSIONID');
+	if (sessions.length === 0) {
+		const domains = [...new Set(all.map(c => bareDomain(c.domain)))];
+		return {
+			error: `No JSESSIONID among ${all.length} cookies. Domains seen: ${
+				domains.join(', ') || 'none'
+			}. If these are only your IdP, open a Sitevision page in the browser, then press Enter again.`,
+		};
+	}
+
+	const chosen =
+		sessions.find(c => domainRelated(c.domain, siteDomain)) ?? sessions[0]!;
+	const cookies = all.filter(c => domainRelated(c.domain, chosen.domain));
+	return {
+		cookie: cookies.map(c => `${c.name}=${c.value}`).join('; '),
+		note: `Captured session on ${bareDomain(chosen.domain)} (${cookies.length} cookies).`,
+	};
 }
 
 /** Read every cookie in the browser jar (httponly and secure included). */
@@ -36,96 +75,61 @@ async function readAllCookies(browser: any, page: any): Promise<RawCookie[]> {
 }
 
 /**
- * Open a real browser at the login URL, let the user complete SSO, then read
- * the session cookies via CDP — which returns httponly, secure cookies that
- * page JavaScript can't see. Returns a `Cookie:` header value, or null.
+ * Launch a real browser at the login URL for an interactive SAML/SSO login and
+ * return handles to capture the session and close the browser. UI-agnostic: the
+ * Ink login screen decides when to `capture()` (on the user's keypress) and
+ * `close()`. Returns null if the browser can't be launched.
+ *
+ * `capture()` reads the whole cookie jar via CDP (httponly and secure included),
+ * stores the session in the keychain on success, and otherwise returns
+ * diagnostics naming the cookie domains it actually saw.
  */
-async function captureViaBrowser(
-	loginUrl: string,
-	siteDomain: string,
-): Promise<string | null> {
+export async function beginCookieLogin(
+	dev: DevProperties,
+): Promise<CookieLoginSession | null> {
+	const {domain, username} = dev;
+	if (!domain || !username) return null;
+
 	let puppeteer;
 	try {
 		({default: puppeteer} = await import('puppeteer-core'));
 	} catch {
-		console.log(
-			'\x1b[31mpuppeteer-core is not installed. Run `npm i puppeteer-core`, or pass --cookie / set SITEVISION_SESSION_COOKIE.\x1b[0m',
-		);
 		return null;
 	}
 
-	let browser;
+	let browser: any;
 	try {
 		browser = await puppeteer.launch({headless: false, channel: 'chrome'});
 		const page = await browser.newPage();
+		const loginUrl = dev.sessionLoginUrl || `https://${domain}/`;
 		await page.goto(loginUrl, {waitUntil: 'domcontentloaded'}).catch(() => {
 			// A SAML redirect may abort the initial navigation — that's fine.
 		});
 
-		await promptEnter(
-			'\nLog in in the browser this tool opened, then press Enter here to capture the session: ',
-		);
+		const capture = async (): Promise<CaptureResult> => {
+			const all = await readAllCookies(browser, page);
+			const result = selectSessionCookie(all, domain);
+			if (result.cookie) {
+				setSessionCookie(domain, username, result.cookie);
+			}
 
-		const all = await readAllCookies(browser, page);
-		const sessions = all.filter(c => c.name === 'JSESSIONID');
+			return result;
+		};
 
-		if (sessions.length === 0) {
-			const domains = [...new Set(all.map(c => bareDomain(c.domain)))];
-			console.log(`\x1b[31mNo JSESSIONID among ${all.length} cookies.\x1b[0m`);
-			console.log(
-				`Cookie domains seen: ${domains.join(', ') || '(none — was the login done in the browser this tool opened?)'}`,
-			);
-			console.log(
-				'If those are only your IdP and not the Sitevision site, open a Sitevision page/editor in that same browser (so it issues a session), then run this again.',
-			);
-			return null;
-		}
+		const close = async () => {
+			await browser!.close().catch(() => {
+				// Best-effort close.
+			});
+		};
 
-		// Prefer the JSESSIONID on the deploy host; else take the only/first one.
-		const chosen =
-			sessions.find(c => domainRelated(c.domain, siteDomain)) ?? sessions[0]!;
-		const cookies = all.filter(c => domainRelated(c.domain, chosen.domain));
-
-		console.log(
-			`\x1b[32mCaptured session on ${bareDomain(chosen.domain)} (${cookies.length} cookies).\x1b[0m`,
-		);
-		return cookies.map(c => `${c.name}=${c.value}`).join('; ');
-	} catch (error) {
-		console.log(
-			`\x1b[31mBrowser login failed: ${
-				error instanceof Error ? error.message : String(error)
-			}\x1b[0m`,
-		);
-		return null;
-	} finally {
+		return {capture, close};
+	} catch {
 		if (browser) {
 			await browser.close().catch(() => {
 				// Best-effort close.
 			});
 		}
+
+		return null;
 	}
-}
-
-/**
- * Return a usable session cookie, or null. Order: keychain (a prior capture),
- * then (when `interactive`) a browser login. Pass `interactive: false` from the
- * Ink menu, which can't own the terminal for the "press Enter" handoff.
- */
-export async function resolveSessionCookie(
-	dev: DevProperties,
-	options: {interactive?: boolean} = {},
-): Promise<string | null> {
-	const {interactive = true} = options;
-	const {domain, username} = dev;
-	if (!domain || !username) return null;
-
-	const stored = getSessionCookie(domain, username);
-	if (stored) return stored;
-
-	if (!interactive || !process.stdin.isTTY) return null;
-
-	const loginUrl = dev.sessionLoginUrl || `https://${domain}/`;
-	const cookie = await captureViaBrowser(loginUrl, domain);
-	if (cookie) setSessionCookie(domain, username, cookie);
-	return cookie;
 }
