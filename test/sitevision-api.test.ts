@@ -42,6 +42,14 @@ test('summarizeErrorBody trims text bodies and labels binary ones', t => {
 		'content-type': 'application/octet-stream',
 	});
 	t.is(binary, '(application/octet-stream, 2048 bytes)');
+
+	// A printable body with an unknown/missing content-type is still shown —
+	// Sitevision returns 400 messages this way.
+	const unknownButText = summarizeErrorBody(
+		Buffer.from('Missing required part: data'),
+		{},
+	);
+	t.is(unknownButText, 'Missing required part: data');
 });
 
 test('makeRequest aborts a hung request after the timeout', async t => {

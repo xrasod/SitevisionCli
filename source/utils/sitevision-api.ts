@@ -246,19 +246,41 @@ export function summarizeErrorBody(
 	headers: Record<string, string>,
 ): string {
 	const contentType = headers['content-type'] ?? 'unknown';
-	const isText =
+	const declaredText =
 		contentType.includes('text') ||
 		contentType.includes('json') ||
 		contentType.includes('xml');
 
-	if (!isText) {
-		return `(${contentType}, ${body.length} bytes)`;
+	const text = body.toString('utf8');
+
+	// Show the body when the server declares it text OR the bytes decode to
+	// mostly-printable text. Sitevision sometimes returns a text/JSON error with
+	// a missing or non-text content-type, and hiding it obscures the real cause.
+	if (declaredText || isMostlyPrintable(text)) {
+		const collapsed = text.replaceAll(/\s+/g, ' ').trim();
+		const max = 300;
+		const summary =
+			collapsed.length > max ? collapsed.slice(0, max) + '…' : collapsed;
+		if (summary.length > 0) return summary;
 	}
 
-	const text = body.toString('utf8').replaceAll(/\s+/g, ' ').trim();
-	const max = 300;
-	const summary = text.length > max ? text.slice(0, max) + '…' : text;
-	return summary.length > 0 ? summary : `(${contentType}, empty body)`;
+	return `(${contentType}, ${body.length} bytes)`;
+}
+
+/** Heuristic: a decoded string is text if <10% of chars are control/undecodable. */
+function isMostlyPrintable(text: string): boolean {
+	if (text.length === 0) return false;
+	let bad = 0;
+	for (const ch of text) {
+		const code = ch.codePointAt(0) ?? 0;
+		// Undecodable byte (replacement char), or a control char other than
+		// tab/newline/vertical-tab/form-feed/carriage-return.
+		if (code === 0xff_fd || code < 9 || (code > 13 && code < 32)) {
+			bad++;
+		}
+	}
+
+	return bad / text.length < 0.1;
 }
 
 /** ZIP local-file-header magic bytes: "PK\x03\x04". */
@@ -454,11 +476,12 @@ export async function deployApp(
 		url += '?force=true';
 	}
 
-	// Create multipart form data
+	// The import endpoints expect the archive in a multipart part named "data"
+	// (per the webAppImport/restAppImport docs). Signing uses "file" separately.
 	const boundary = generateBoundary();
 	const {body, contentType} = createMultipartFormData(
 		zipPath,
-		'file',
+		'data',
 		boundary,
 	);
 
