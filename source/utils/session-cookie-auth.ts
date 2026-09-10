@@ -2,17 +2,43 @@ import type {DevProperties} from '../types/index.js';
 import {getSessionCookie, setSessionCookie} from './keychain.js';
 import {promptEnter} from './password-prompt.js';
 
-/** Match cookies set on the site host or any parent domain. */
-function domainMatches(cookieDomain: string, siteDomain: string): boolean {
-	const bare = cookieDomain.replace(/^\./, '');
-	return siteDomain === bare || siteDomain.endsWith(`.${bare}`);
+interface RawCookie {
+	name: string;
+	value: string;
+	domain: string;
+}
+
+function bareDomain(domain: string): string {
+	return domain.replace(/^\./, '');
+}
+
+/** Related if either host is the other or a subdomain of it (both directions). */
+function domainRelated(a: string, b: string): boolean {
+	const x = bareDomain(a);
+	const y = bareDomain(b);
+	return x === y || x.endsWith(`.${y}`) || y.endsWith(`.${x}`);
+}
+
+/** Read every cookie in the browser jar (httponly and secure included). */
+async function readAllCookies(browser: any, page: any): Promise<RawCookie[]> {
+	// puppeteer >= 22 exposes the whole jar directly.
+	if (typeof browser.cookies === 'function') {
+		try {
+			return (await browser.cookies()) as RawCookie[];
+		} catch {
+			// Fall through to CDP.
+		}
+	}
+
+	const client = await page.createCDPSession();
+	const {cookies} = await client.send('Network.getAllCookies');
+	return cookies as RawCookie[];
 }
 
 /**
  * Open a real browser at the login URL, let the user complete SSO, then read
- * the session cookies (JSESSIONID and any siblings) via CDP — which returns
- * httponly cookies that page JavaScript can't see. Returns a `Cookie:` header
- * value, or null if capture failed.
+ * the session cookies via CDP — which returns httponly, secure cookies that
+ * page JavaScript can't see. Returns a `Cookie:` header value, or null.
  */
 async function captureViaBrowser(
 	loginUrl: string,
@@ -37,21 +63,33 @@ async function captureViaBrowser(
 		});
 
 		await promptEnter(
-			'\nLog in in the opened browser, then press Enter here to capture the session: ',
+			'\nLog in in the browser this tool opened, then press Enter here to capture the session: ',
 		);
 
-		const client = await page.createCDPSession();
-		const {cookies} = await client.send('Network.getAllCookies');
-		const wanted = cookies.filter(c => domainMatches(c.domain, siteDomain));
+		const all = await readAllCookies(browser, page);
+		const sessions = all.filter(c => c.name === 'JSESSIONID');
 
-		if (wanted.every(c => c.name !== 'JSESSIONID')) {
+		if (sessions.length === 0) {
+			const domains = [...new Set(all.map(c => bareDomain(c.domain)))];
+			console.log(`\x1b[31mNo JSESSIONID among ${all.length} cookies.\x1b[0m`);
 			console.log(
-				'\x1b[31mNo JSESSIONID found for this site. Was the login completed?\x1b[0m',
+				`Cookie domains seen: ${domains.join(', ') || '(none — was the login done in the browser this tool opened?)'}`,
+			);
+			console.log(
+				'If those are only your IdP and not the Sitevision site, open a Sitevision page/editor in that same browser (so it issues a session), then run this again.',
 			);
 			return null;
 		}
 
-		return wanted.map(c => `${c.name}=${c.value}`).join('; ');
+		// Prefer the JSESSIONID on the deploy host; else take the only/first one.
+		const chosen =
+			sessions.find(c => domainRelated(c.domain, siteDomain)) ?? sessions[0]!;
+		const cookies = all.filter(c => domainRelated(c.domain, chosen.domain));
+
+		console.log(
+			`\x1b[32mCaptured session on ${bareDomain(chosen.domain)} (${cookies.length} cookies).\x1b[0m`,
+		);
+		return cookies.map(c => `${c.name}=${c.value}`).join('; ');
 	} catch (error) {
 		console.log(
 			`\x1b[31mBrowser login failed: ${
