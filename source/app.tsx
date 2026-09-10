@@ -21,6 +21,9 @@ type Props = {
 	project: ProjectInfo;
 };
 
+const NONBASIC_DEV_UNSUPPORTED =
+	'\x1b[33mdev/watch support only basic auth. Use `svc deploy` for OAuth2/cookie.\x1b[0m';
+
 type AppState =
 	| 'setup'
 	| 'menu'
@@ -97,9 +100,17 @@ export default function App({project: initialProject}: Props) {
 		project.devProperties?.password || devPassword,
 	);
 
+	// OAuth2 / cookie configs authenticate with a token or session resolved at
+	// deploy time, so they need no basic password. `svc dev`/`watch` stay basic.
+	const authMethod = project.devProperties?.authMethod ?? 'basic';
+	const isTokenAuth = authMethod === 'oauth2' || authMethod === 'cookie';
+	const deployAuthReady = isTokenAuth || hasDevPassword;
+
 	// Get effective dev properties with session password if needed
 	const getEffectiveDevProperties = () => {
 		if (!project.devProperties) return undefined;
+		// Non-basic configs authenticate by token/cookie — never graft a password.
+		if (isTokenAuth) return project.devProperties;
 		if (project.devProperties.password) return project.devProperties;
 		return {...project.devProperties, password: devPassword};
 	};
@@ -168,6 +179,10 @@ export default function App({project: initialProject}: Props) {
 					);
 					return;
 				}
+				if (isTokenAuth) {
+					console.log(NONBASIC_DEV_UNSUPPORTED);
+					return;
+				}
 				if (!hasDevPassword) {
 					setState('dev-password-input');
 				} else {
@@ -185,6 +200,10 @@ export default function App({project: initialProject}: Props) {
 					console.log(
 						'\x1b[31mSigning credentials not configured. Run svc setup-signing first.\x1b[0m',
 					);
+					return;
+				}
+				if (isTokenAuth) {
+					console.log(NONBASIC_DEV_UNSUPPORTED);
 					return;
 				}
 				// Need both dev password and signing password
@@ -209,6 +228,10 @@ export default function App({project: initialProject}: Props) {
 					console.log(
 						'\x1b[31mSigning credentials not configured. Run svc setup-signing first.\x1b[0m',
 					);
+					return;
+				}
+				if (isTokenAuth) {
+					console.log(NONBASIC_DEV_UNSUPPORTED);
 					return;
 				}
 				routeToSigningStep(command);
@@ -240,7 +263,7 @@ export default function App({project: initialProject}: Props) {
 					);
 					return;
 				}
-				if (!hasDevPassword) {
+				if (!deployAuthReady) {
 					setState('dev-password-input');
 				} else {
 					setState('deploy');

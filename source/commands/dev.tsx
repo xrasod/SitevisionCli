@@ -585,6 +585,15 @@ export const devCommand: Command = {
 			return;
 		}
 
+		// dev/watch continuously redeploy and only support basic auth. Fail clearly
+		// on an OAuth2/cookie config instead of prompting for an unusable password.
+		if ((project.devProperties.authMethod ?? 'basic') !== 'basic') {
+			console.log(
+				'\n\x1b[33mdev/watch support only basic auth. Use `svc deploy` for OAuth2/cookie.\x1b[0m\n',
+			);
+			return;
+		}
+
 		// Resolve deploy password (already loaded from keychain/env in detectProject — prompt if missing)
 		if (!project.devProperties.password) {
 			const {domain, username} = project.devProperties;

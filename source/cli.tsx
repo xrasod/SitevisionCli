@@ -77,6 +77,12 @@ const cli = meow(
 				shortFlag: 'p',
 				default: false,
 			},
+			token: {
+				type: 'string',
+			},
+			cookie: {
+				type: 'string',
+			},
 		},
 	},
 );
@@ -200,6 +206,24 @@ async function main() {
 			process.exit(1);
 		}
 	})();
+
+	// --token / --cookie override the resolved bearer token / session cookie for
+	// this run (manual / CI path, alongside SITEVISION_ACCESS_TOKEN and
+	// SITEVISION_SESSION_COOKIE).
+	if (cli.flags.token || cli.flags.cookie) {
+		if (project.devProperties) {
+			if (cli.flags.token) {
+				project.devProperties.accessToken = cli.flags.token;
+			}
+			if (cli.flags.cookie) {
+				project.devProperties.sessionCookie = cli.flags.cookie;
+			}
+		} else {
+			console.log(
+				'\x1b[33m--token/--cookie needs a .dev_properties.json (domain, site, addon) to deploy against.\x1b[0m',
+			);
+		}
+	}
 
 	// First run: show the welcome (branding + optional signing-password save),
 	// then continue to the normal flow once the user dismisses it.

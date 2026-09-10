@@ -36,6 +36,38 @@ export function promptYesNo(
 }
 
 /**
+ * Wait for the user to press Enter (or Ctrl+C). Used to hand control to an
+ * external browser and resume once the user says they're done.
+ */
+export function promptEnter(prompt: string): Promise<void> {
+	return new Promise(resolve => {
+		process.stdout.write(prompt);
+		const stdin = process.stdin;
+		stdin.setRawMode(true);
+		stdin.resume();
+		stdin.setEncoding('utf8');
+
+		const onData = (data: string) => {
+			const char = data[0] || '';
+			const charCode = char.charCodeAt(0);
+			if (charCode === 3) {
+				process.exit();
+			}
+
+			if (char === '' || charCode === 13 || charCode === 10) {
+				stdin.setRawMode(false);
+				stdin.removeListener('data', onData);
+				stdin.pause();
+				process.stdout.write('\n');
+				resolve();
+			}
+		};
+
+		stdin.on('data', onData);
+	});
+}
+
+/**
  * Prompt for password input with masked display
  */
 export function promptPassword(prompt: string): Promise<string> {

@@ -61,6 +61,29 @@ export interface DevProperties {
 	useHTTPForDevDeploy?: boolean;
 	signingUsername?: string;
 	certificateName?: string;
+	// Absent means 'basic' — existing configs keep working without migration.
+	authMethod?: 'basic' | 'oauth2' | 'cookie';
+	oauth2?: OAuth2Config;
+	// URL to open for the session-cookie login (defaults to the site root).
+	sessionLoginUrl?: string;
+	// Runtime-only, never persisted: resolved from env/keychain like `password`.
+	accessToken?: string;
+	sessionCookie?: string;
+}
+
+/**
+ * OAuth2 provider config for bearer-token deploys.
+ *
+ * Deliberately secret-free: the client secret and refresh token live in the OS
+ * keychain, so nothing here is unsafe to write to .dev_properties.json.
+ */
+export interface OAuth2Config {
+	authorizationEndpoint: string;
+	tokenEndpoint: string;
+	clientId: string;
+	scopes?: string[];
+	// Fixed so the admin can whitelist one redirect URI (RFC 8252 loopback).
+	redirectPort?: number;
 }
 
 /**
@@ -80,7 +103,11 @@ export interface DeployConfig {
 	siteName: string;
 	addonName: string;
 	username: string;
-	password: string;
+	// One auth path is used, in precedence order: sessionCookie (cookie),
+	// accessToken (bearer), otherwise username+password (basic).
+	password?: string;
+	accessToken?: string;
+	sessionCookie?: string;
 	useHTTP?: boolean;
 }
 
@@ -180,6 +207,9 @@ export interface DeployResponse {
 	executableId?: string;
 	message?: string;
 	error?: string;
+	// Set when the failure looks like a stale/rejected session or token, so the
+	// caller can drop the cached credential and re-authenticate.
+	authExpired?: boolean;
 }
 
 /**
@@ -189,6 +219,7 @@ export interface CreateAddonResponse {
 	success: boolean;
 	addonId?: string;
 	error?: string;
+	authExpired?: boolean;
 }
 
 /**
@@ -197,6 +228,7 @@ export interface CreateAddonResponse {
 export interface ActivationResponse {
 	success: boolean;
 	error?: string;
+	authExpired?: boolean;
 }
 
 // =============================================================================

@@ -10,6 +10,7 @@ import {
 	syncDevPropertiesToPackageJson,
 	readSvcConfig,
 	writeSvcConfig,
+	writeDevProperties,
 } from '../utils/project-detection.js';
 import {ProcessRunner} from '../utils/process-runner.js';
 import {ProcessOutputComponent} from './ProcessOutput.js';
@@ -33,6 +34,7 @@ type SetupStep =
 	| 'confirm-dev-setup'
 	| 'setup-dev-properties'
 	| 'confirm-password-migration'
+	| 'confirm-auth-method'
 	| 'check-package-sync'
 	| 'confirm-package-sync'
 	| 'confirm-save-sync-choice'
@@ -50,6 +52,11 @@ export function SetupFlow({project, onReload, onComplete}: Props) {
 	>('running');
 	const [syncChanges, setSyncChanges] = useState<PackageJsonSyncChange[]>([]);
 	const [syncDecision, setSyncDecision] = useState(false);
+	// Set when the user picks OAuth2 for an existing config, so the form opens in
+	// the OAuth2 branch without mutating the shared project object.
+	const [pendingAuthMethod, setPendingAuthMethod] = useState<
+		'oauth2' | 'cookie' | undefined
+	>(undefined);
 	const appType = getAppType(project.manifest);
 
 	// Auto-advance through checks
@@ -64,6 +71,8 @@ export function SetupFlow({project, onReload, onComplete}: Props) {
 			if (project.hasDevProperties) {
 				if (project.hasLegacyPassword) {
 					setStep('confirm-password-migration');
+				} else if (project.devProperties?.authMethod === undefined) {
+					setStep('confirm-auth-method');
 				} else {
 					setStep('check-package-sync');
 				}
@@ -162,6 +171,24 @@ export function SetupFlow({project, onReload, onComplete}: Props) {
 			} else if (input === 'n' || input === 'N') {
 				setStep('show-info');
 			}
+		} else if (step === 'confirm-auth-method') {
+			if (input === 'o' || input === 'O') {
+				// Choosing OAuth2 needs endpoints — collect them in the full form.
+				setPendingAuthMethod('oauth2');
+				setStep('setup-dev-properties');
+			} else if (input === 'c' || input === 'C') {
+				setPendingAuthMethod('cookie');
+				setStep('setup-dev-properties');
+			} else if (['b', 'B', '\r'].includes(input)) {
+				if (project.devProperties) {
+					writeDevProperties(project.root, {
+						...project.devProperties,
+						authMethod: 'basic',
+					});
+					onReload();
+				}
+				setStep('check-package-sync');
+			}
 		}
 	});
 
@@ -170,7 +197,11 @@ export function SetupFlow({project, onReload, onComplete}: Props) {
 		return (
 			<DevPropertiesForm
 				projectRoot={project.root}
-				initialProperties={project.devProperties}
+				initialProperties={
+					pendingAuthMethod && project.devProperties
+						? {...project.devProperties, authMethod: pendingAuthMethod}
+						: project.devProperties
+				}
 				packageJson={project.packageJson}
 				onComplete={() => {
 					// Re-detect from disk/keychain so devProperties (incl. the keychain
@@ -273,6 +304,30 @@ export function SetupFlow({project, onReload, onComplete}: Props) {
 					</Text>
 					<Text dimColor>
 						Recommended — storing passwords in project files is insecure.
+					</Text>
+				</Box>
+			</Box>
+		);
+	}
+
+	// Ask which auth method an existing config should use (setting is missing)
+	if (step === 'confirm-auth-method') {
+		return (
+			<Box flexDirection="column" padding={1}>
+				<Box marginBottom={1}>
+					<Text bold color="cyan">
+						Sitevision CLI
+					</Text>
+				</Box>
+				<Box marginBottom={1}>
+					<Text color="yellow">⚠ Deploy authentication method not set</Text>
+				</Box>
+				<Box marginBottom={1} flexDirection="column">
+					<Text>
+						Which method should deploys use? [B]asic / [O]Auth2 / [C]ookie
+					</Text>
+					<Text dimColor>
+						B = Basic (default), O = OAuth2 bearer, C = session cookie (SSO).
 					</Text>
 				</Box>
 			</Box>

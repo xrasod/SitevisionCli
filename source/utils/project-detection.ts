@@ -10,7 +10,11 @@ import type {
 	ApiEndpoints,
 	LocalizedString,
 } from '../types/index.js';
-import {getDeployPassword, setDeployPassword} from './keychain.js';
+import {
+	getDeployPassword,
+	setDeployPassword,
+	getSessionCookie,
+} from './keychain.js';
 import {parseJsonc} from './jsonc.js';
 
 // Re-export types for backward compatibility
@@ -346,6 +350,29 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
 						}
 					}
 				}
+
+				// Resolve an OAuth2 access token: env var > keychain refresh.
+				// The env var is the manual/CI path; the interactive login stores a
+				// refresh token in the keychain and mints access tokens from it.
+				if (devProperties.authMethod === 'oauth2') {
+					const envToken = process.env['SITEVISION_ACCESS_TOKEN'];
+					if (envToken) {
+						devProperties.accessToken = envToken;
+					}
+				}
+
+				// Resolve a session cookie: env var > keychain (captured at login).
+				if (
+					devProperties.authMethod === 'cookie' &&
+					devProperties.domain &&
+					devProperties.username
+				) {
+					const envCookie = process.env['SITEVISION_SESSION_COOKIE'];
+					devProperties.sessionCookie =
+						envCookie ??
+						getSessionCookie(devProperties.domain, devProperties.username) ??
+						undefined;
+				}
 			} catch {
 				// Invalid dev properties file
 			}
@@ -440,8 +467,9 @@ export function readDevProperties(projectRoot: string): DevProperties | null {
 }
 
 /**
- * Write dev properties to file. The `password` field is never persisted —
- * it is held in the OS keychain instead.
+ * Write dev properties to file. Secrets are never persisted — `password`,
+ * `accessToken` and `sessionCookie` are held in the OS keychain / resolved at
+ * runtime instead.
  */
 export function writeDevProperties(
 	projectRoot: string,
@@ -450,7 +478,12 @@ export function writeDevProperties(
 	const devPropertiesPath =
 		findDevPropertiesPath(projectRoot) ||
 		getDefaultDevPropertiesPath(projectRoot);
-	const {password: _password, ...persisted} = properties;
+	const {
+		password: _password,
+		accessToken: _accessToken,
+		sessionCookie: _sessionCookie,
+		...persisted
+	} = properties;
 	fs.writeFileSync(devPropertiesPath, JSON.stringify(persisted, null, 2));
 }
 

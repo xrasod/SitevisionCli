@@ -55,6 +55,46 @@ function createBasicAuth(username: string, password: string): string {
 	return `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
 }
 
+type RequestAuth =
+	| {username: string; password: string}
+	| {token: string}
+	| {cookie: string};
+
+type AuthKind = 'basic' | 'bearer' | 'cookie';
+
+/** Single source of the 401 message, worded for the auth kind actually used. */
+function unauthorizedMessage(kind: AuthKind): string {
+	switch (kind) {
+		case 'bearer':
+			return 'Unauthorized. The access token was rejected or has expired.';
+		case 'cookie':
+			return 'Unauthorized. The session cookie was rejected or has expired — log in again.';
+		default:
+			return 'Unauthorized. Check username and password.';
+	}
+}
+
+/** Pick cookie > bearer > basic based on what the deploy config carries. */
+function configAuth(config: {
+	username: string;
+	password?: string;
+	accessToken?: string;
+	sessionCookie?: string;
+}): {auth: RequestAuth; kind: AuthKind} {
+	if (config.sessionCookie) {
+		return {auth: {cookie: config.sessionCookie}, kind: 'cookie'};
+	}
+
+	if (config.accessToken) {
+		return {auth: {token: config.accessToken}, kind: 'bearer'};
+	}
+
+	return {
+		auth: {username: config.username, password: config.password ?? ''},
+		kind: 'basic',
+	};
+}
+
 /**
  * Generate a random boundary for multipart form data
  */
@@ -104,7 +144,7 @@ export function makeRequest(
 		method: string;
 		headers?: Record<string, string>;
 		body?: Buffer;
-		auth?: {username: string; password: string};
+		auth?: RequestAuth;
 		timeoutMs?: number;
 	},
 ): Promise<{
@@ -122,10 +162,19 @@ export function makeRequest(
 		};
 
 		if (options.auth) {
-			headers['Authorization'] = createBasicAuth(
-				options.auth.username,
-				options.auth.password,
-			);
+			if ('cookie' in options.auth) {
+				headers['Cookie'] = options.auth.cookie;
+				// Session-authenticated state-changing calls typically need this to
+				// pass Sitevision's CSRF guard, unlike Basic-auth requests.
+				headers['X-Requested-With'] ??= 'XMLHttpRequest';
+			} else if ('token' in options.auth) {
+				headers['Authorization'] = `Bearer ${options.auth.token}`;
+			} else {
+				headers['Authorization'] = createBasicAuth(
+					options.auth.username,
+					options.auth.password,
+				);
+			}
 		}
 
 		const requestOptions: https.RequestOptions = {
@@ -223,6 +272,34 @@ export function looksLikeZip(body: Buffer): boolean {
 	return body.length >= 4 && body.subarray(0, 4).equals(ZIP_MAGIC);
 }
 
+/**
+ * A stale Sitevision session usually answers with a redirect to the login page
+ * or a 200 carrying an HTML login form — not a clean 401. Detect both so cookie
+ * auth can drop the dead session and re-login instead of showing a generic error.
+ */
+export function looksLikeAuthExpired(
+	statusCode: number,
+	body: Buffer,
+	headers: Record<string, string>,
+): boolean {
+	if (statusCode === 401) return true;
+	if (statusCode >= 300 && statusCode < 400) return true;
+	if (statusCode === 200) {
+		const contentType = headers['content-type'] ?? '';
+		if (contentType.includes('html')) return true;
+		const head = body
+			.subarray(0, 64)
+			.toString('utf8')
+			.trimStart()
+			.toLowerCase();
+		if (head.startsWith('<!doctype html') || head.startsWith('<html')) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 // =============================================================================
 // SIGNING API
 // =============================================================================
@@ -310,7 +387,7 @@ export async function signApp(
 				// Auth failures will not resolve on retry.
 				return {
 					success: false,
-					error: 'Unauthorized. Check username and password.',
+					error: unauthorizedMessage('basic'),
 				};
 			}
 
@@ -385,6 +462,8 @@ export async function deployApp(
 		boundary,
 	);
 
+	const {auth, kind} = configAuth(config);
+
 	try {
 		const response = await makeRequest(url, {
 			method: 'POST',
@@ -393,11 +472,29 @@ export async function deployApp(
 				'Content-Length': String(body.length),
 			},
 			body,
-			auth: {
-				username: config.username,
-				password: config.password,
-			},
+			auth,
 		});
+
+		if (response.statusCode === 401) {
+			return {
+				success: false,
+				error: unauthorizedMessage(kind),
+				authExpired: true,
+			};
+		}
+
+		// A cookie session fails without a clean 401: a redirect to login or a
+		// 200 carrying an HTML login page. Flag it so the caller re-authenticates.
+		if (
+			kind === 'cookie' &&
+			looksLikeAuthExpired(response.statusCode, response.body, response.headers)
+		) {
+			return {
+				success: false,
+				error: unauthorizedMessage('cookie'),
+				authExpired: true,
+			};
+		}
 
 		if (response.statusCode === 200) {
 			// Try to parse response for executable ID
@@ -413,13 +510,6 @@ export async function deployApp(
 				success: true,
 				executableId,
 				message: 'Deployment successful',
-			};
-		}
-
-		if (response.statusCode === 401) {
-			return {
-				success: false,
-				error: 'Unauthorized. Check username and password.',
 			};
 		}
 
@@ -512,6 +602,8 @@ export async function createAddon(
 		category: 'Other',
 	});
 
+	const {auth, kind} = configAuth(config);
+
 	try {
 		const response = await makeRequest(url, {
 			method: 'POST',
@@ -520,10 +612,7 @@ export async function createAddon(
 				'Content-Length': String(Buffer.byteLength(body)),
 			},
 			body: Buffer.from(body),
-			auth: {
-				username: config.username,
-				password: config.password,
-			},
+			auth,
 		});
 
 		if (response.statusCode === 200 || response.statusCode === 201) {
@@ -544,7 +633,8 @@ export async function createAddon(
 		if (response.statusCode === 401) {
 			return {
 				success: false,
-				error: 'Unauthorized. Check username and password.',
+				error: unauthorizedMessage(kind),
+				authExpired: true,
 			};
 		}
 
@@ -586,6 +676,8 @@ export async function activateApp(
 		executableId,
 	});
 
+	const {auth, kind} = configAuth(config);
+
 	try {
 		const response = await makeRequest(url, {
 			method: 'PUT',
@@ -594,10 +686,7 @@ export async function activateApp(
 				'Content-Length': String(Buffer.byteLength(body)),
 			},
 			body: Buffer.from(body),
-			auth: {
-				username: config.username,
-				password: config.password,
-			},
+			auth,
 		});
 
 		if (response.statusCode === 200) {
@@ -607,7 +696,8 @@ export async function activateApp(
 		if (response.statusCode === 401) {
 			return {
 				success: false,
-				error: 'Unauthorized. Check username and password.',
+				error: unauthorizedMessage(kind),
+				authExpired: true,
 			};
 		}
 
@@ -627,4 +717,4 @@ export async function activateApp(
 // HELPER EXPORTS
 // =============================================================================
 
-export {createBasicAuth};
+export {createBasicAuth, configAuth, unauthorizedMessage};

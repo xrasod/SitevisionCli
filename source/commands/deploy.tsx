@@ -10,11 +10,14 @@ import {
 } from '../utils/project-detection.js';
 import {zipExists} from '../utils/zip.js';
 import {promptPassword, promptYesNo} from '../utils/password-prompt.js';
-import {setDeployPassword} from '../utils/keychain.js';
+import {setDeployPassword, deleteSessionCookie} from '../utils/keychain.js';
+import {resolveOAuth2AccessToken} from '../utils/oauth2-auth.js';
+import {resolveSessionCookie} from '../utils/session-cookie-auth.js';
 import type {
 	SitevisionManifest,
 	DevProperties,
 	DeployConfig,
+	DeployResponse,
 	ProductionDeployConfig,
 } from '../types/index.js';
 
@@ -71,6 +74,59 @@ export function DeployScreen({
 			try {
 				const appType = getAppType(manifest);
 
+				// Resolve an OAuth2 token silently (env/keychain refresh). A fresh
+				// browser login happens only in the direct `svc deploy` command, which
+				// sets accessToken before rendering — the Ink menu can't own the
+				// terminal for a login, so it resolves refresh-only here.
+				const authMethod = devProperties.authMethod ?? 'basic';
+				let accessToken = devProperties.accessToken;
+				if (authMethod === 'oauth2' && !accessToken) {
+					accessToken =
+						(await resolveOAuth2AccessToken(devProperties, {
+							interactive: false,
+						})) ?? undefined;
+					if (!accessToken) {
+						setState({
+							status: 'error',
+							error:
+								'No OAuth2 access token. Run `svc deploy` from a terminal to log in, or set SITEVISION_ACCESS_TOKEN.',
+						});
+						return;
+					}
+				}
+
+				let sessionCookie = devProperties.sessionCookie;
+				if (authMethod === 'cookie' && !sessionCookie) {
+					sessionCookie =
+						(await resolveSessionCookie(devProperties, {
+							interactive: false,
+						})) ?? undefined;
+					if (!sessionCookie) {
+						setState({
+							status: 'error',
+							error:
+								'No session cookie. Run `svc deploy` from a terminal to log in, or set SITEVISION_SESSION_COOKIE.',
+						});
+						return;
+					}
+				}
+
+				// A stale session fails without a clean 401 — clear the stored cookie
+				// so the next run re-authenticates. Skip when SITEVISION_SESSION_COOKIE
+				// is set: detection re-reads it first, so clearing would just replay
+				// the same dead cookie in a loop.
+				const clearStaleCookie = (result: DeployResponse) => {
+					if (
+						result.authExpired &&
+						authMethod === 'cookie' &&
+						!process.env['SITEVISION_SESSION_COOKIE'] &&
+						devProperties.domain &&
+						devProperties.username
+					) {
+						deleteSessionCookie(devProperties.domain, devProperties.username);
+					}
+				};
+
 				if (production) {
 					// Production deployment requires a signed zip
 					const signedZipPath = getSignedZipPath(projectRoot, manifest);
@@ -88,7 +144,9 @@ export function DeployScreen({
 						siteName: devProperties.siteName,
 						addonName: devProperties.addonName,
 						username: devProperties.username,
-						password: devProperties.password!,
+						password: devProperties.password,
+						accessToken,
+						sessionCookie,
 						useHTTP: devProperties.useHTTPForDevDeploy,
 						activate,
 					};
@@ -96,6 +154,7 @@ export function DeployScreen({
 					const result = await deployProduction(signedZipPath, config, appType);
 
 					if (!result.success) {
+						clearStaleCookie(result);
 						setState({
 							status: 'error',
 							error: result.error || 'Deployment failed',
@@ -125,13 +184,16 @@ export function DeployScreen({
 						siteName: devProperties.siteName,
 						addonName: devProperties.addonName,
 						username: devProperties.username,
-						password: devProperties.password!,
+						password: devProperties.password,
+						accessToken,
+						sessionCookie,
 						useHTTP: devProperties.useHTTPForDevDeploy,
 					};
 
 					const result = await deployApp(zipPath, config, appType, force);
 
 					if (!result.success) {
+						clearStaleCookie(result);
 						setState({
 							status: 'error',
 							error: result.error || 'Deployment failed',
@@ -247,8 +309,37 @@ export const deployCommand: Command = {
 			return;
 		}
 
-		// Resolve deploy password (already loaded from keychain/env in detectProject — prompt if missing)
-		if (!project.devProperties.password) {
+		// Resolve deploy credentials. A token/cookie from env/--flag (already
+		// loaded in detectProject / cli) short-circuits everything.
+		const authMethod = project.devProperties.authMethod ?? 'basic';
+		if (
+			project.devProperties.accessToken ||
+			project.devProperties.sessionCookie
+		) {
+			// Nothing to acquire — a bearer token or session cookie is in hand.
+		} else if (authMethod === 'oauth2') {
+			const token = await resolveOAuth2AccessToken(project.devProperties);
+			if (!token) {
+				console.log(
+					'\n\x1b[31mError: No OAuth2 access token available.\x1b[0m',
+				);
+				console.log(
+					'Set SITEVISION_ACCESS_TOKEN, pass --token, or configure the oauth2 endpoints in .dev_properties.json to log in.\n',
+				);
+				return;
+			}
+			project.devProperties.accessToken = token;
+		} else if (authMethod === 'cookie') {
+			const cookie = await resolveSessionCookie(project.devProperties);
+			if (!cookie) {
+				console.log('\n\x1b[31mError: No session cookie available.\x1b[0m');
+				console.log(
+					'Log in when the browser opens, or set SITEVISION_SESSION_COOKIE / pass --cookie.\n',
+				);
+				return;
+			}
+			project.devProperties.sessionCookie = cookie;
+		} else if (!project.devProperties.password) {
 			const {domain, username} = project.devProperties;
 			console.log('');
 			const password = await promptPassword(

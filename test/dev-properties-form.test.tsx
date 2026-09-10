@@ -11,16 +11,15 @@ const delay = async (ms: number) =>
 		setTimeout(resolve, ms);
 	});
 
-// Walk the five TextInput steps (domain, siteName, addonName, username,
-// password), submitting each with Enter. Leaves the form on the final
-// useHTTP BooleanInput step.
+// Walk the basic-auth steps: four TextInputs (domain, siteName, addonName,
+// username), the authMethod BooleanInput (Enter = basic default), then the
+// password TextInput. Leaves the form on the final useHTTP BooleanInput step.
 async function fillTextSteps(stdin: {write: (s: string) => void}) {
 	for (const value of [
 		'test.sitevision.se',
 		'MySite',
 		'MyAddon',
 		'user@example.com',
-		'',
 	]) {
 		/* eslint-disable no-await-in-loop -- keystrokes must land sequentially */
 		stdin.write(value);
@@ -29,6 +28,11 @@ async function fillTextSteps(stdin: {write: (s: string) => void}) {
 		await delay(15);
 		/* eslint-enable no-await-in-loop -- end sequential keystrokes */
 	}
+
+	stdin.write('\r'); // authMethod: Enter keeps basic
+	await delay(15);
+	stdin.write('\r'); // password: empty
+	await delay(15);
 }
 
 // Regression: a fresh setup left useHTTPForDevDeploy undefined, so pressing
