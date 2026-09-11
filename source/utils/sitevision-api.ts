@@ -476,8 +476,9 @@ export async function deployApp(
 		url += '?force=true';
 	}
 
-	// The import endpoints expect the archive in a multipart part named "data"
-	// (per the webAppImport/restAppImport docs). Signing uses "file" separately.
+	// The import endpoints read the archive from a multipart part named "data"
+	// (per the webAppImport/restAppImport docs, and confirmed against a live
+	// server). Signing uses "file" against a different endpoint.
 	const boundary = generateBoundary();
 	const {body, contentType} = createMultipartFormData(
 		zipPath,
