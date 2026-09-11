@@ -405,48 +405,7 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
 					typeof parsed.password === 'string' && parsed.password.length > 0;
 				devProperties = parsed;
 
-				// Resolve deploy password: env var > keychain (file is legacy-only)
-				if (
-					!hasLegacyPassword &&
-					devProperties.domain &&
-					devProperties.username
-				) {
-					const envPassword = process.env['SITEVISION_DEPLOY_PASSWORD'];
-					if (envPassword) {
-						devProperties.password = envPassword;
-					} else {
-						const stored = getDeployPassword(
-							devProperties.domain,
-							devProperties.username,
-						);
-						if (stored) {
-							devProperties.password = stored;
-						}
-					}
-				}
-
-				// Resolve an OAuth2 access token: env var > keychain refresh.
-				// The env var is the manual/CI path; the interactive login stores a
-				// refresh token in the keychain and mints access tokens from it.
-				if (devProperties.authMethod === 'oauth2') {
-					const envToken = process.env['SITEVISION_ACCESS_TOKEN'];
-					if (envToken) {
-						devProperties.accessToken = envToken;
-					}
-				}
-
-				// Resolve a session cookie: env var > keychain (captured at login).
-				if (
-					devProperties.authMethod === 'cookie' &&
-					devProperties.domain &&
-					devProperties.username
-				) {
-					const envCookie = process.env['SITEVISION_SESSION_COOKIE'];
-					devProperties.sessionCookie =
-						envCookie ??
-						getSessionCookie(devProperties.domain, devProperties.username) ??
-						undefined;
-				}
+				if (!hasLegacyPassword) resolveRuntimeSecrets(devProperties);
 			} catch {
 				// Invalid dev properties file
 			}
@@ -480,6 +439,33 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
 
 		return null;
 	}
+}
+
+/**
+ * Fill the runtime-only credential fields for the given domain/username:
+ * deploy password (env var > keychain), OAuth2 access token (env var), and
+ * session cookie (env var > keychain). Mutates and returns `dev`.
+ */
+export function resolveRuntimeSecrets(dev: DevProperties): DevProperties {
+	if (dev.domain && dev.username) {
+		dev.password =
+			process.env['SITEVISION_DEPLOY_PASSWORD'] ??
+			getDeployPassword(dev.domain, dev.username) ??
+			undefined;
+	}
+
+	if (dev.authMethod === 'oauth2') {
+		dev.accessToken = process.env['SITEVISION_ACCESS_TOKEN'] ?? undefined;
+	}
+
+	if (dev.authMethod === 'cookie' && dev.domain && dev.username) {
+		dev.sessionCookie =
+			process.env['SITEVISION_SESSION_COOKIE'] ??
+			getSessionCookie(dev.domain, dev.username) ??
+			undefined;
+	}
+
+	return dev;
 }
 
 /**
@@ -563,6 +549,8 @@ export function writeDevProperties(
 		password: _password,
 		accessToken: _accessToken,
 		sessionCookie: _sessionCookie,
+		environmentName: _environmentName,
+		productionEnvironment: _productionEnvironment,
 		...persisted
 	} = properties;
 	// Keep the app file minimal: values identical to the inherited ones stay
@@ -590,6 +578,8 @@ export function writeDevProperties(
  */
 export interface SvcConfig {
 	syncPackageJson?: boolean;
+	// Last selected environment in the shell.
+	environment?: string;
 	[key: string]: unknown;
 }
 

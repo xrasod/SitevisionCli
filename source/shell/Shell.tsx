@@ -8,6 +8,9 @@ import {
 	appTypeOf,
 	localizedText,
 	readWorkspaceDevProperties,
+	readSvcConfig,
+	writeSvcConfig,
+	writeDevProperties,
 } from '../utils/project-detection.js';
 import {appGroup} from '../utils/workspace.js';
 import {
@@ -46,6 +49,14 @@ import {CommandPalette} from './CommandPalette.js';
 import {ConfigForm, type ConfigTarget} from './ConfigForm.js';
 import {AddonPicker} from './AddonPicker.js';
 import {SettingsScreen} from './Settings.js';
+import {
+	baseEnvironment,
+	environmentColor,
+	environmentNames,
+	environmentProject,
+	isProductionEnvironment,
+	resolveEnvironment,
+} from '../utils/environments.js';
 import {t} from '../utils/i18n.js';
 import {
 	actionForKey,
@@ -73,7 +84,8 @@ type Overlay =
 	  }
 	| {kind: 'confirm'; message: string; resolve: (v: boolean) => void}
 	| {kind: 'picker'; resolve: (v: string | null) => void}
-	| {kind: 'settings'};
+	| {kind: 'settings'}
+	| {kind: 'prompt'; label: string; resolve: (v: string | null) => void};
 
 interface Props {
 	apps: ProjectInfo[];
@@ -119,20 +131,41 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 
 	// In workspace mode the row after the last app is "Workspace settings".
 	const settings = Boolean(workspaceRoot) && selected === apps.length;
-	const project = apps[Math.min(selected, apps.length - 1)]!;
+	const rawProject = apps[Math.min(selected, apps.length - 1)]!;
+	// Active environment, remembered per workspace (or app) in .svcconfig.
+	const configRoot = workspaceRoot ?? rawProject.root;
+	const [envChoice, setEnvChoice] = useState<string>(
+		() => readSvcConfig(configRoot).environment ?? '',
+	);
+	const envNames = environmentNames(rawProject.devProperties);
+	const envList = envNames.join(',');
+	const env = envNames.includes(envChoice)
+		? envChoice
+		: baseEnvironment(rawProject.devProperties);
+	const project = useMemo(
+		() => environmentProject(rawProject, env),
+		[rawProject, env],
+	);
+	const isProduction = isProductionEnvironment(env, rawProject.devProperties);
+	const versionsKey = `${project.root}|${env}`;
 	const single = !workspaceRoot;
 	const workspaceTarget = useMemo<ConfigTarget | undefined>(
 		() =>
 			workspaceRoot
 				? {
 						root: workspaceRoot,
-						devProperties: readWorkspaceDevProperties(workspaceRoot),
+						base: readWorkspaceDevProperties(workspaceRoot),
+						devProperties: resolveEnvironment(
+							readWorkspaceDevProperties(workspaceRoot) as DevProperties,
+							env,
+						),
+						environment: env,
 						workspace: true,
 					}
 				: undefined,
 		// Re-read after any reload so saved values show up.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[workspaceRoot, apps],
+		[workspaceRoot, apps, env],
 	);
 	const narrow = columns < NARROW_BELOW;
 	const sidebar = navWidth(columns);
@@ -191,6 +224,44 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 			openSettings() {
 				setOverlay({kind: 'settings'});
 			},
+			environment: env,
+			isProduction,
+			cycleEnvironment() {
+				const next = envNames[(envNames.indexOf(env) + 1) % envNames.length]!;
+				setEnvChoice(next);
+				writeSvcConfig(configRoot, {environment: next});
+				notify(t('switched to {env}', {env: next}));
+			},
+			async addEnvironment() {
+				const name = await new Promise<string | null>(resolve => {
+					setOverlay({
+						kind: 'prompt',
+						label: t('Environment name (e.g. test, prod)'),
+						resolve,
+					});
+				});
+				const clean = name
+					?.trim()
+					.toLowerCase()
+					.replaceAll(/[^\d\-a-z]/g, '');
+				if (!clean || clean === baseEnvironment(rawProject.devProperties))
+					return;
+				const targetRoot = workspaceRoot ?? rawProject.root;
+				const base = (
+					workspaceRoot
+						? readWorkspaceDevProperties(workspaceRoot)
+						: rawProject.devProperties
+				) as DevProperties | undefined;
+				if (!base) return;
+				writeDevProperties(targetRoot, {
+					...base,
+					environments: {...base.environments, [clean]: {}},
+				});
+				reload();
+				setEnvChoice(clean);
+				writeSvcConfig(configRoot, {environment: clean});
+				notify(t('environment {env} added', {env: clean}), 'ok');
+			},
 			openWorkspaceSettings: workspaceRoot
 				? () => {
 						setSelected(apps.length);
@@ -215,7 +286,8 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 					setOverlay({kind: 'confirm', message, resolve});
 				}),
 		}),
-		[project, reload, notify, quit, workspaceRoot, apps.length],
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[project, reload, notify, quit, workspaceRoot, apps.length, env, envList],
 	);
 
 	const run = useCallback(
@@ -238,7 +310,7 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 
 	const fetchVersions = useCallback(
 		async (fresh = false) => {
-			const key = project.root;
+			const key = versionsKey;
 			const config = await resolveDeployConfig(context, fresh);
 			if (!config) return;
 			setVersions(v => ({
@@ -257,11 +329,11 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 			}));
 			setVersionRow(0);
 		},
-		[project.root, context],
+		[versionsKey, context],
 	);
 
 	const activateSelected = useCallback(async () => {
-		const executable = versions[project.root]?.executables?.[versionRow];
+		const executable = versions[versionsKey]?.executables?.[versionRow];
 		if (!executable) return;
 		if (executable.active) {
 			notify(t('{v} is already active', {v: executable.appVersion}));
@@ -337,7 +409,7 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 			if (input === 'a' && tab !== 'versions') {
 				setTab('versions');
 				setFocus('content');
-				if (!Object.hasOwn(versions, project.root)) void fetchVersions(false);
+				if (!Object.hasOwn(versions, versionsKey)) void fetchVersions(false);
 				return;
 			}
 
@@ -368,7 +440,7 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 				if (key.downArrow) setSelected(s => (s < last ? s + 1 : 0));
 				if (key.return) setFocus('content');
 			} else if (tab === 'versions') {
-				const count = versions[project.root]?.executables?.length ?? 0;
+				const count = versions[versionsKey]?.executables?.length ?? 0;
 				if (key.upArrow) setVersionRow(r => Math.max(0, r - 1));
 				if (key.downArrow)
 					setVersionRow(r => Math.min(Math.max(0, count - 1), r + 1));
@@ -473,6 +545,7 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 								['s', 'sign'],
 								['p', 'deploy'],
 								['a', 'activate'],
+								['E', 'env'],
 								['i', 'install'],
 								['/', 'commands'],
 								['q', 'quit'],
@@ -543,8 +616,13 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 			)}
 			{tab === 'config' && (
 				<ConfigForm
-					key={project.root}
-					project={project}
+					key={`${project.root}|${env}`}
+					project={{
+						root: project.root,
+						devProperties: project.devProperties,
+						base: rawProject.devProperties,
+						environment: env,
+					}}
 					active={formActive}
 					width={narrow ? columns : columns - sidebar}
 					height={contentHeight}
@@ -559,7 +637,7 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 			{tab === 'versions' && (
 				<Versions
 					project={project}
-					state={versions[project.root]}
+					state={versions[versionsKey]}
 					selected={versionRow}
 				/>
 			)}
@@ -580,6 +658,10 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 				context={contextLabel}
 				domain={project.devProperties?.domain}
 				auth={authState(project)}
+				environment={{
+					name: env,
+					color: environmentColor(env, rawProject.devProperties),
+				}}
 				version={version}
 			/>
 			<Box
@@ -721,6 +803,20 @@ function renderOverlay(
 					}}
 				/>
 			);
+		case 'prompt':
+			return (
+				<TextPrompt
+					label={overlay.label}
+					onSubmit={value => {
+						closeOverlay();
+						overlay.resolve(value);
+					}}
+					onCancel={() => {
+						closeOverlay();
+						overlay.resolve(null);
+					}}
+				/>
+			);
 		case 'settings':
 			return (
 				<SettingsScreen
@@ -770,6 +866,40 @@ function Confirm({
 		>
 			<Text>{message}</Text>
 			<Text dimColor>{t('y confirm · n cancel')}</Text>
+		</Box>
+	);
+}
+
+function TextPrompt({
+	label,
+	onSubmit,
+	onCancel,
+}: {
+	label: string;
+	onSubmit: (value: string) => void;
+	onCancel: () => void;
+}) {
+	const [value, setValue] = useState('');
+	useInput((input, key) => {
+		if (key.escape) onCancel();
+		else if (key.return) onSubmit(value);
+		else if (key.backspace || key.delete) setValue(v => v.slice(0, -1));
+		else if (input && !key.ctrl && !key.meta) setValue(v => v + input);
+	});
+	return (
+		<Box
+			flexDirection="column"
+			borderStyle="round"
+			borderColor={ACCENT}
+			paddingX={1}
+		>
+			<Text bold>{label}</Text>
+			<Text>
+				<Text color={ACCENT}>❯ </Text>
+				{value}
+				<Text inverse> </Text>
+			</Text>
+			<Text dimColor>{t('Press Enter to submit, Esc to cancel')}</Text>
 		</Box>
 	);
 }

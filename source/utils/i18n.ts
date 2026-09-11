@@ -112,9 +112,24 @@ const sv: Record<string, string> = {
 	Watch: 'Watch',
 	Build: 'Build',
 	Sign: 'Sign',
-	'Deploy to dev': 'Driftsätt till dev',
-	'Deploy to dev (force)': 'Driftsätt till dev (tvinga)',
-	'Deploy to production': 'Driftsätt till produktion',
+	Deploy: 'Driftsätt',
+	'Deploy (force)': 'Driftsätt (tvinga)',
+	'to {env}': 'till {env}',
+	'Switch environment': 'Byt miljö',
+	'Add environment': 'Lägg till miljö',
+	'e.g. test or prod, overriding domain and auth':
+		't.ex. test eller prod, med egen domän och auth',
+	'Environment name (e.g. test, prod)': 'Miljönamn (t.ex. test, prod)',
+	'Deploy the signed {id} to {env} and activate it?':
+		'Driftsätt signerade {id} till {env} och aktivera?',
+	'Dev never deploys to a production environment ({env}). Switch with E.':
+		'Dev driftsätter aldrig till en produktionsmiljö ({env}). Byt med E.',
+	'switched to {env}': 'bytte till {env}',
+	'environment {env} added': 'miljön {env} tillagd',
+	environment: 'miljö',
+	production: 'produktion',
+	env: 'miljö',
+	'↑ dev': '↑ dev',
 	'Activate a remote version': 'Aktivera en fjärrversion',
 	'Stop running task': 'Stoppa pågående uppgift',
 	'Edit config': 'Redigera konfig',
@@ -158,8 +173,6 @@ const sv: Record<string, string> = {
 		'Signeringslösenord för {user} (developer.sitevision.se)',
 	'A dev/watch task is already running for this app (K stops it).':
 		'En dev/watch-uppgift körs redan för appen (K stoppar den).',
-	'Deploy the signed {id} to production and activate it?':
-		'Driftsätt signerade {id} till produktion och aktivera?',
 	'stopped {n} task(s)': 'stoppade {n} uppgift(er)',
 	'nothing running': 'inget körs',
 	'Not in a workspace: run svc at the repo root.':
@@ -187,11 +200,19 @@ const sv: Record<string, string> = {
 	Certificate: 'Certifikat',
 	'Signing password': 'Signeringslösenord',
 	'^O pick from repo': '^O välj från förråd',
-	'blank = client default': 'tomt = klientens standard',
+	'Space-separated scopes to request. ALL grants the Sitevision API and offline_access adds a refresh token so later runs log in silently. Match the casing your client expects.':
+		'Scopes att begära, separerade med mellanslag. ALL ger Sitevision-API:et och offline_access ger en refresh-token så att senare körningar loggar in tyst. Använd det skiftläge klienten förväntar sig.',
 	'blank = site root': 'tomt = webbplatsens rot',
 	'required for signed deploys': 'krävs för signerad driftsättning',
 	'blank = prompt each run': 'tomt = fråga varje gång',
 	SIGNING: 'SIGNERING',
+	ENVIRONMENT: 'MILJÖ',
+	'Environment name': 'Miljönamn',
+	Production: 'Produktion',
+	'What this base configuration is: dev, test, prod… Other environments are added on top of it with E or the palette and override only what differs.':
+		'Vad denna grundkonfiguration är: dev, test, prod… Andra miljöer läggs ovanpå med E eller paletten och skriver bara över det som skiljer.',
+	'Treat deploys to this base environment as production: signed zip, confirmation, activation, and no dev loop. Off by default even when the name says prod, so a repo with only a production site still gets a dev loop.':
+		'Behandla driftsättningar till grundmiljön som produktion: signerad zip, bekräftelse, aktivering och ingen dev-loop. Av som standard även om namnet säger prod, så att ett repo med bara en produktionssajt ändå får en dev-loop.',
 	'Saved {label}.': 'Sparade {label}.',
 	'Looking up OAuth2 endpoints…': 'Slår upp OAuth2-endpoints…',
 	'Endpoints filled from the site OpenID config.':
@@ -268,8 +289,6 @@ const sv: Record<string, string> = {
 		'Providerns auktoriserings-URL. Fylls i från webbplatsens OpenID-konfiguration när den kan hittas.',
 	"The provider's token URL. Filled in from the site's OpenID configuration when it can be discovered.":
 		'Providerns token-URL. Fylls i från webbplatsens OpenID-konfiguration när den kan hittas.',
-	"Space-separated scopes to request. Leave empty for the client's defaults. Add offline_access (in the client's casing) to get a refresh token.":
-		'Scopes att begära, separerade med mellanslag. Tomt = klientens standard. Lägg till offline_access (med klientens skiftläge) för refresh-token.',
 	'Secret of a confidential OAuth2 client, stored in the OS keychain. Leave empty for a public client.':
 		'Hemlighet för en konfidentiell OAuth2-klient, sparas i nyckelringen. Lämna tomt för en publik klient.',
 	'Page opened in the browser for the SSO login. Leave empty to use the site root.':

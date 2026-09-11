@@ -12,6 +12,9 @@ import {
 
 /** Default loopback port. Fixed so a single redirect URI can be whitelisted. */
 export const DEFAULT_REDIRECT_PORT = 8137;
+// Sitevision's provider grants everything under ALL; offline_access adds the
+// refresh token so later runs log in silently.
+export const DEFAULT_SCOPES = ['ALL', 'offline_access'];
 
 /** Seconds to wait for the user to finish logging in before giving up. */
 const LOGIN_TIMEOUT_MS = 300_000;
@@ -280,9 +283,7 @@ export function beginOAuth2Login(dev: DevProperties): {
 	url.searchParams.set('state', state);
 	url.searchParams.set('code_challenge', challenge);
 	url.searchParams.set('code_challenge_method', 'S256');
-	if (config.scopes?.length) {
-		url.searchParams.set('scope', config.scopes.join(' '));
-	}
+	url.searchParams.set('scope', (config.scopes ?? DEFAULT_SCOPES).join(' '));
 
 	const loopback = startLoopback(port, state);
 

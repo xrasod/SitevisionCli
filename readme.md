@@ -65,6 +65,36 @@ which also picks the manifest name language) and whether the intro animation
 plays. In workspace mode the same screen has a row that jumps to the shared
 workspace config.
 
+### Environments
+
+The top-level fields of `.dev_properties.json` are one environment, called
+**dev** unless `baseEnvironment` says otherwise (a repo that only has a
+production site can set `"baseEnvironment": "prod"`). Add more under
+`environments`, overriding only what differs:
+
+```json
+{
+	"domain": "acme-use.sitevision-cloud.se",
+	"siteName": "Intranet",
+	"username": "me@acme.se",
+	"environments": {
+		"test": {"domain": "acme-tse.sitevision-cloud.se"},
+		"prod": {"domain": "acme.sitevision-cloud.se", "authMethod": "oauth2"}
+	}
+}
+```
+
+`E` cycles the active environment (also "Switch environment" and "Add
+environment" in the palette); the choice is remembered in `.svcconfig`. The
+top bar shows a badge, green for dev, yellow for others, red for production.
+Versions, deploy, login state and the Config tab all follow the active
+environment; on a non-dev environment the Config tab edits that environment's
+overrides. Override names containing `prod`, or any environment with `"production":
+true`, are production: deploy needs the signed zip, confirms, and activates,
+and dev or watch refuse to run against them. The base environment is never
+production by name, only by the flag, so a prod-only repo keeps its dev loop.
+Both settings have rows in the Config tab under ENVIRONMENT.
+
 ### Shared configuration in a workspace
 
 `.dev_properties.json` is resolved by merging every ancestor directory's file

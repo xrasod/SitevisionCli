@@ -22,9 +22,17 @@ export interface TopBarProps {
 	domain?: string;
 	auth: {ready: boolean; label: string};
 	version: string;
+	// Active environment badge; colour says how careful to be.
+	environment?: {name: string; color: 'green' | 'yellow' | 'red'};
 }
 
-export function TopBar({context, domain, auth, version}: TopBarProps) {
+export function TopBar({
+	context,
+	domain,
+	auth,
+	version,
+	environment,
+}: TopBarProps) {
 	return (
 		<Box paddingX={1} justifyContent="space-between" height={1}>
 			<Box flexShrink={1} marginRight={2}>
@@ -32,6 +40,14 @@ export function TopBar({context, domain, auth, version}: TopBarProps) {
 					<Text bold color={ACCENT}>
 						svc
 					</Text>
+					{environment && (
+						<Text>
+							{' '}
+							<Text backgroundColor={environment.color} color="black" bold>
+								{` ${environment.name.toUpperCase()} `}
+							</Text>
+						</Text>
+					)}
 					<Text dimColor> {context}</Text>
 				</Text>
 			</Box>

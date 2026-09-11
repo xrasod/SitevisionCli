@@ -66,10 +66,41 @@ export interface DevProperties {
 	oauth2?: OAuth2Config;
 	// URL to open for the session-cookie login (defaults to the site root).
 	sessionLoginUrl?: string;
+	// What the top-level values describe. Defaults to "dev"; set it to "prod"
+	// when the base config is the production site.
+	baseEnvironment?: string;
+	// The base is production only when this says so (never inferred from its
+	// name, so a repo whose only environment is "prod" still gets a dev loop).
+	production?: boolean;
+	// Per-environment overrides of the fields above. Keys are environment
+	// names, e.g. "test", "prod".
+	environments?: Record<string, EnvironmentOverride>;
 	// Runtime-only, never persisted: resolved from env/keychain like `password`.
 	accessToken?: string;
 	sessionCookie?: string;
+	// Runtime-only: which environment these values were resolved for.
+	environmentName?: string;
+	productionEnvironment?: boolean;
 }
+
+/** Fields an environment may override; everything else comes from the base. */
+export type EnvironmentOverride = Partial<
+	Pick<
+		DevProperties,
+		| 'domain'
+		| 'siteName'
+		| 'addonName'
+		| 'username'
+		| 'authMethod'
+		| 'oauth2'
+		| 'sessionLoginUrl'
+		| 'useHTTPForDevDeploy'
+	>
+> & {
+	// Treat deploys here as production (signed zip, confirm, activate).
+	// Defaults to true for names containing "prod".
+	production?: boolean;
+};
 
 /**
  * OAuth2 provider config for bearer-token deploys.

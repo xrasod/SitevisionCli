@@ -148,6 +148,11 @@ export function Overview({
 				dim={src('siteName')}
 			/>
 			<Row
+				label={t('environment')}
+				value={dev?.environmentName ?? 'dev'}
+				dim={dev?.productionEnvironment ? t('production') : undefined}
+			/>
+			<Row
 				label={t('domain')}
 				value={dev?.domain ?? notSet}
 				dim={src('domain')}

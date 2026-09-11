@@ -16,8 +16,12 @@ import {
 	setSigningPassword,
 	deleteSigningPassword,
 } from '../utils/keychain.js';
-import {discoverOAuth2Config} from '../utils/oauth2-auth.js';
+import {DEFAULT_SCOPES, discoverOAuth2Config} from '../utils/oauth2-auth.js';
 import {ACCENT} from './Frame.js';
+import {
+	baseEnvironment,
+	withEnvironmentOverride,
+} from '../utils/environments.js';
 import {t} from '../utils/i18n.js';
 
 type Method = 'basic' | 'oauth2' | 'cookie';
@@ -100,10 +104,10 @@ const FIELDS: Field[] = [
 	},
 	{
 		key: 'scopes',
-		help: "Space-separated scopes to request. Leave empty for the client's defaults. Add offline_access (in the client's casing) to get a refresh token.",
+		help: 'Space-separated scopes to request. ALL grants the Sitevision API and offline_access adds a refresh token so later runs log in silently. Match the casing your client expects.',
 		label: 'Scopes',
 		when: 'oauth2',
-		hint: 'blank = client default',
+		hint: 'ALL offline_access',
 	},
 	{
 		key: 'clientSecret',
@@ -124,6 +128,20 @@ const FIELDS: Field[] = [
 		help: 'Use plain HTTP instead of HTTPS for deploys. Only for local or test servers without TLS.',
 		label: 'Use HTTP',
 		kind: 'bool',
+	},
+	{
+		key: 'baseEnvironment',
+		label: 'Environment name',
+		section: 'ENVIRONMENT',
+		hint: 'dev',
+		help: 'What this base configuration is: dev, test, prod… Other environments are added on top of it with E or the palette and override only what differs.',
+	},
+	{
+		key: 'production',
+		label: 'Production',
+		kind: 'bool',
+		section: 'ENVIRONMENT',
+		help: 'Treat deploys to this base environment as production: signed zip, confirmation, activation, and no dev loop. Off by default even when the name says prod, so a repo with only a production site still gets a dev loop.',
 	},
 	{
 		key: 'signingUsername',
@@ -153,9 +171,29 @@ type Values = Record<string, string>;
 /** What the form edits: an app, or the workspace root (no addon, no package.json). */
 export interface ConfigTarget {
 	root: string;
+	// Effective values for the environment being edited.
 	devProperties?: Partial<DevProperties>;
+	// The raw base (with `environments`) when editing a non-dev environment.
+	base?: Partial<DevProperties>;
+	environment?: string;
 	workspace?: boolean;
 }
+
+const ENV_KEYS = new Set([
+	'domain',
+	'siteName',
+	'addonName',
+	'username',
+	'authMethod',
+	'useHTTPForDevDeploy',
+	'clientId',
+	'authorizationEndpoint',
+	'tokenEndpoint',
+	'scopes',
+	'clientSecret',
+	'sessionLoginUrl',
+	'password',
+]);
 
 // Wide enough for the longest source text ("^O pick from repo").
 const SOURCE_WIDTH = 18;
@@ -172,10 +210,12 @@ function fromProject(project: ConfigTarget): Values {
 		clientId: dev.oauth2?.clientId ?? '',
 		authorizationEndpoint: dev.oauth2?.authorizationEndpoint ?? '',
 		tokenEndpoint: dev.oauth2?.tokenEndpoint ?? '',
-		scopes: dev.oauth2?.scopes?.join(' ') ?? '',
+		scopes: (dev.oauth2?.scopes ?? DEFAULT_SCOPES).join(' '),
 		clientSecret: '',
 		sessionLoginUrl: dev.sessionLoginUrl ?? '',
 		useHTTPForDevDeploy: dev.useHTTPForDevDeploy ? 'yes' : 'no',
+		baseEnvironment: dev.baseEnvironment ?? '',
+		production: dev.production ? 'yes' : 'no',
 		signingUsername: dev.signingUsername ?? '',
 		certificateName: dev.certificateName ?? '',
 		signingPassword: '',
@@ -214,6 +254,9 @@ export function saveConfig(
 		authMethod: method,
 		useHTTPForDevDeploy: values['useHTTPForDevDeploy'] === 'yes',
 	};
+	if (values['baseEnvironment'])
+		next.baseEnvironment = values['baseEnvironment'].trim().toLowerCase();
+	if (values['production'] === 'yes') next.production = true;
 	if (values['signingUsername'])
 		next.signingUsername = values['signingUsername'];
 	if (values['certificateName'])
@@ -233,7 +276,35 @@ export function saveConfig(
 		next.sessionLoginUrl = values['sessionLoginUrl'];
 	}
 
-	writeDevProperties(project.root, next);
+	const env = project.environment;
+	if (env && env !== baseEnvironment(project.base) && project.base) {
+		// Non-dev environment: site/auth fields become an override, signing
+		// fields still live on the base.
+		const base = {...project.base} as DevProperties;
+		base.signingUsername = next.signingUsername;
+		base.certificateName = next.certificateName;
+		base.baseEnvironment = next.baseEnvironment;
+		base.production = next.production;
+		writeDevProperties(
+			project.root,
+			withEnvironmentOverride(base, env, {
+				domain: next.domain,
+				siteName: next.siteName,
+				addonName: next.addonName,
+				username: next.username,
+				authMethod: next.authMethod,
+				useHTTPForDevDeploy: next.useHTTPForDevDeploy,
+				oauth2: next.oauth2,
+				sessionLoginUrl: next.sessionLoginUrl,
+			}),
+		);
+	} else {
+		writeDevProperties(project.root, {
+			...next,
+			environments:
+				project.base?.environments ?? project.devProperties?.environments,
+		});
+	}
 
 	const secret = (
 		key: string,
@@ -270,9 +341,16 @@ export function saveConfig(
 	}
 }
 
-export function visibleFields(method: Method, workspace = false): Field[] {
+export function visibleFields(
+	method: Method,
+	workspace = false,
+	envMode = false,
+): Field[] {
 	return FIELDS.filter(
-		f => (!f.when || f.when === method) && !(workspace && f.perApp),
+		f =>
+			(!f.when || f.when === method) &&
+			!(workspace && f.perApp) &&
+			!(envMode && (f.section === 'SIGNING' || f.section === 'ENVIRONMENT')),
 	);
 }
 
@@ -316,7 +394,12 @@ export function ConfigForm({
 	}, [editing, onEditingChange]);
 
 	const method = values['authMethod'] as Method;
-	const fields = visibleFields(method, project.workspace);
+	const envMode = Boolean(
+		project.environment &&
+		project.environment !==
+			baseEnvironment(project.base ?? project.devProperties),
+	);
+	const fields = visibleFields(method, project.workspace, envMode);
 	const current = fields[Math.min(cursor, fields.length - 1)]!;
 	const inherited = readInheritedDevProperties(project.root) as Record<
 		string,
@@ -437,6 +520,24 @@ export function ConfigForm({
 		}
 
 		const value = f.kind === 'bool' ? values[f.key] === 'yes' : values[f.key];
+		if (envMode && ENV_KEYS.has(f.key)) {
+			const override = project.base?.environments?.[project.environment!];
+			const overridden =
+				override &&
+				([
+					'clientId',
+					'authorizationEndpoint',
+					'tokenEndpoint',
+					'scopes',
+				].includes(f.key)
+					? Object.hasOwn(override, 'oauth2')
+					: Object.hasOwn(override, f.key));
+			return {
+				text: overridden ? project.environment! : t('↑ dev'),
+				color: overridden ? 'yellow' : undefined,
+			};
+		}
+
 		const inheritedValue = [
 			'clientId',
 			'authorizationEndpoint',
