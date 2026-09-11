@@ -274,6 +274,8 @@ const sv: Record<string, string> = {
 	idle: 'inaktiv',
 	'workspace config saved': 'arbetsytans konfig sparad',
 	'config saved': 'konfig sparad',
+	'Saved {label} as {value} — a domain is a host only.':
+		'Sparade {label} som {value} — en domän är enbart ett värdnamn.',
 	' · shared .dev_properties.json at the root':
 		' · delad .dev_properties.json i roten',
 	' · new workspace: fill in once, every app inherits · Esc skips':
@@ -333,5 +335,13 @@ const sv: Record<string, string> = {
 	'Log in in the opened browser, then press Enter to capture the session.':
 		'Logga in i webbläsaren och tryck sedan Enter för att fånga sessionen.',
 	'Capturing session…': 'Fångar session…',
+	'A Chrome window is open at:': 'Ett Chrome-fönster är öppet på:',
+	'1. Log in to the site there, single sign-on included.':
+		'1. Logga in på webbplatsen där, även med enkel inloggning.',
+	'2. Wait until the site itself has finished loading.':
+		'2. Vänta tills själva webbplatsen har laddat klart.',
+	'3. Come back here and press Enter.': '3. Kom tillbaka hit och tryck Enter.',
+	'Leave the browser window open; it closes once the session is captured.':
+		'Låt webbläsarfönstret vara öppet; det stängs när sessionen har hämtats.',
 	'Press Esc to cancel.': 'Tryck Esc för att avbryta.',
 };

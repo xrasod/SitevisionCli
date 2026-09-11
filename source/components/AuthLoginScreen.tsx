@@ -40,6 +40,7 @@ export function AuthLoginScreen({
 	const [phase, setPhase] = React.useState<Phase>('starting');
 	const [authUrl, setAuthUrl] = React.useState('');
 	const [note, setNote] = React.useState('');
+	const [loginUrl, setLoginUrl] = React.useState('');
 	const cookieRef = React.useRef<CookieLoginSession | null>(null);
 	const cancelOAuthRef = React.useRef<(() => void) | null>(null);
 
@@ -75,6 +76,7 @@ export function AuthLoginScreen({
 				}
 
 				cookieRef.current = session;
+				setLoginUrl(session.loginUrl);
 				setPhase('awaiting');
 			}
 		})();
@@ -150,11 +152,26 @@ export function AuthLoginScreen({
 						</Box>
 					)}
 					{phase === 'awaiting' && (
-						<Text>
-							{t(
-								'Log in in the opened browser, then press Enter to capture the session.',
-							)}
-						</Text>
+						<Box flexDirection="column">
+							<Text>{t('A Chrome window is open at:')}</Text>
+							<Text color="cyan">{loginUrl}</Text>
+							<Box marginTop={1} flexDirection="column">
+								<Text>
+									{t('1. Log in to the site there, single sign-on included.')}
+								</Text>
+								<Text>
+									{t('2. Wait until the site itself has finished loading.')}
+								</Text>
+								<Text>{t('3. Come back here and press Enter.')}</Text>
+							</Box>
+							<Box marginTop={1}>
+								<Text dimColor>
+									{t(
+										'Leave the browser window open; it closes once the session is captured.',
+									)}
+								</Text>
+							</Box>
+						</Box>
 					)}
 					{phase === 'capturing' && (
 						<Box>

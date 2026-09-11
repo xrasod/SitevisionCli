@@ -116,11 +116,27 @@ function ancestorDirs(root: string): string[] {
 	return dirs;
 }
 
+/** A bare host: no scheme, no path, no stray spaces. */
+export function normalizeDomain(value: string): string {
+	const host = value
+		.trim()
+		.replace(/^[a-z]+:\/\//i, '')
+		.replaceAll(/\s/g, '');
+	const slash = host.indexOf('/');
+	return slash === -1 ? host : host.slice(0, slash);
+}
+
 function readDevPropertiesFile(dir: string): Partial<DevProperties> | null {
 	const file = findDevPropertiesPath(dir);
 	if (!file) return null;
 	try {
-		return JSON.parse(fs.readFileSync(file, 'utf-8')) as Partial<DevProperties>;
+		const dev = JSON.parse(
+			fs.readFileSync(file, 'utf-8'),
+		) as Partial<DevProperties>;
+		// ponytail: top level only; a hand-edited environment override keeps its
+		// scheme until it is saved from the config form.
+		dev.domain &&= normalizeDomain(dev.domain);
+		return dev;
 	} catch {
 		return null;
 	}

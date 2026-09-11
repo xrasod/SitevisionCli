@@ -16,6 +16,8 @@ export interface CaptureResult {
 export interface CookieLoginSession {
 	capture: () => Promise<CaptureResult>;
 	close: () => Promise<void>;
+	// Where the browser was sent, so the screen can name it.
+	loginUrl: string;
 }
 
 function bareDomain(domain: string): string {
@@ -122,7 +124,7 @@ export async function beginCookieLogin(
 			});
 		};
 
-		return {capture, close};
+		return {capture, close, loginUrl};
 	} catch {
 		if (browser) {
 			await browser.close().catch(() => {

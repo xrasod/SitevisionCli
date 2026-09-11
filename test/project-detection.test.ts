@@ -98,3 +98,18 @@ test('.svcconfig round-trips and preserves unknown keys', t => {
 
 	t.deepEqual(readSvcConfig(dir), {other: 1, syncPackageJson: false});
 });
+
+test('a domain read from a file loses any scheme or path', t => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-dom-'));
+	fs.mkdirSync(path.join(root, '.git'));
+	fs.writeFileSync(
+		path.join(root, 'manifest.json'),
+		JSON.stringify({id: 'x', name: 'X', version: '1.0.0', type: 'WebApp'}),
+	);
+	fs.writeFileSync(path.join(root, 'package.json'), '{}');
+	fs.writeFileSync(
+		path.join(root, '.dev_properties.json'),
+		JSON.stringify({domain: 'https://site.example/start', siteName: 'Site'}),
+	);
+	t.is(detectProject(root)?.devProperties?.domain, 'site.example');
+});

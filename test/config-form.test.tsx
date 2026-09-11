@@ -6,6 +6,7 @@ import path from 'node:path';
 import {render} from 'ink-testing-library';
 import {
 	detectProject,
+	normalizeDomain,
 	writeDevProperties,
 } from '../source/utils/project-detection.js';
 import {ConfigForm, saveConfig} from '../source/shell/ConfigForm.js';
@@ -205,4 +206,54 @@ test('saving the workspace target writes the root file and apps inherit it', t =
 	t.is(project.devProperties?.domain, 'new.example');
 	t.is(project.devProperties?.oauth2?.clientId, 'svc');
 	t.true(project.inheritedKeys.includes('oauth2'));
+});
+
+test('normalizeDomain strips scheme, path and stray whitespace', t => {
+	t.is(
+		normalizeDomain('https://my-use.sitevision-cloud.se'),
+		'my-use.sitevision-cloud.se',
+	);
+	t.is(normalizeDomain('  HTTP://a.example/sites/x '), 'a.example');
+	t.is(normalizeDomain('a.example/'), 'a.example');
+	t.is(normalizeDomain('a.example:8080'), 'a.example:8080');
+	t.is(normalizeDomain('a.example'), 'a.example');
+	t.is(normalizeDomain(''), '');
+});
+
+test('a domain typed with a protocol is saved as a bare host', async t => {
+	const app = workspaceApp();
+	const {stdin, lastFrame} = render(
+		<ConfigForm
+			project={detectProject(app)!}
+			active
+			width={100}
+			height={40}
+			pickAddon={async () => null}
+			onSaved={() => {}}
+			onEditingChange={() => {}}
+		/>,
+	);
+	await delay(20);
+	// The domain row is focused on mount; clear it and retype with a scheme.
+	stdin.write('\r');
+	await delay(10);
+	for (let i = 0; i < 20; i++) {
+		stdin.write('\u007f');
+		// eslint-disable-next-line no-await-in-loop
+		await delay(4);
+	}
+
+	stdin.write('https://new.example/sites/x');
+	await delay(20);
+	stdin.write('\r');
+	await delay(30);
+	const file = JSON.parse(
+		fs.readFileSync(path.join(app, '.dev_properties.json'), 'utf8'),
+	);
+	t.is(file.domain, 'new.example');
+	const frame = lastFrame() ?? '';
+	t.true(frame.includes('new.example'));
+	// The note explains why what was typed is not what was stored.
+	t.true(frame.includes('a domain is a host only'));
+	t.false(frame.includes('✗ host only'));
 });

@@ -3,6 +3,7 @@ import {Box, Text, useInput} from 'ink';
 import type {DevProperties} from '../types/index.js';
 import {
 	getPackageJsonSyncChanges,
+	normalizeDomain,
 	readInheritedDevProperties,
 	writeDevProperties,
 } from '../utils/project-detection.js';
@@ -417,10 +418,18 @@ export function ConfigForm({
 
 	// Write one field to disk (and the keychain for secrets) right away.
 	const commit = (key: string, value: string, label = current.label) => {
-		const next = {...values, [key]: value};
+		const clean = key === 'domain' ? normalizeDomain(value) : value;
+		const next = {...values, [key]: clean};
 		setValues(next);
 		saveConfig(project, next, new Set([key]));
-		setNote(t('Saved {label}.', {label: t(label)}));
+		setNote(
+			clean === value
+				? t('Saved {label}.', {label: t(label)})
+				: t('Saved {label} as {value} — a domain is a host only.', {
+						label: t(label),
+						value: clean,
+					}),
+		);
 		onSaved();
 	};
 
