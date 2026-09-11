@@ -318,19 +318,43 @@ export function NavigatorStrip({
 	apps,
 	selected,
 	focused,
-}: Pick<NavigatorProps, 'apps' | 'selected' | 'focused'>) {
+	width,
+	filter = '',
+}: Pick<NavigatorProps, 'apps' | 'selected' | 'focused' | 'width' | 'filter'>) {
+	const label = (app: ProjectInfo) =>
+		` ${typeGlyph(app.manifest)} ${appLabel(app)} `;
+	// Scroll the strip so the selection stays on screen: walk left from it
+	// until the row is full.
+	const budget = width - 2 - (filter ? filter.length + 5 : 0);
+	const from = Math.min(Math.max(0, selected), apps.length - 1);
+	let start = from;
+	let used = 0;
+	for (let i = from; i >= 0; i--) {
+		used += label(apps[i]!).length;
+		if (used > budget) break;
+		start = i;
+	}
+
 	return (
 		<Box paddingX={1}>
 			<Text wrap="truncate">
-				{apps.map((app, index) => (
+				{filter && (
+					<Text>
+						<Text color={ACCENT}>❯ </Text>
+						{filter}
+						<Text dimColor> ·</Text>
+					</Text>
+				)}
+				{apps.slice(start).map((app, index) => (
 					<Text
 						key={app.root}
-						backgroundColor={index === selected && focused ? ACCENT : undefined}
-						color={index === selected && focused ? 'black' : undefined}
-						bold={index === selected}
+						backgroundColor={
+							index + start === selected && focused ? ACCENT : undefined
+						}
+						color={index + start === selected && focused ? 'black' : undefined}
+						bold={index + start === selected}
 					>
-						{' '}
-						{typeGlyph(app.manifest)} {appLabel(app)}{' '}
+						{label(app)}
 					</Text>
 				))}
 			</Text>

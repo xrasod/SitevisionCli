@@ -4,11 +4,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {render} from 'ink-testing-library';
+import {Box} from 'ink';
 import {detectProject} from '../source/utils/project-detection.js';
 import {Shell} from '../source/shell/Shell.js';
 import {CommandPalette} from '../source/shell/CommandPalette.js';
+import {Overview} from '../source/shell/Tabs.js';
 import {fuzzyMatch, type Action} from '../source/shell/actions.js';
-import {navMatches, navMove} from '../source/shell/Frame.js';
+import {navMatches, navMove, NavigatorStrip} from '../source/shell/Frame.js';
 
 const delay = async (ms: number) =>
 	new Promise(resolve => {
@@ -130,4 +132,30 @@ test('typing in the navigator filters instead of firing shortcuts', async t => {
 	stdin.write('\r');
 	await delay(20);
 	t.true(lastFrame()?.includes('Alpha'));
+});
+
+test('the narrow strip scrolls to keep the selected app visible', t => {
+	const apps = Array.from({length: 20}, (_, i) =>
+		project(`App ${String(i).padStart(2, '0')}`),
+	);
+	const {lastFrame} = render(
+		<NavigatorStrip apps={apps} selected={15} focused width={60} />,
+	);
+	const frame = lastFrame() ?? '';
+	t.true(frame.includes('App 15'));
+	t.false(frame.includes('App 00'));
+});
+
+test('a short content pane clips the overview instead of squeezing rows', t => {
+	const {lastFrame} = render(
+		<Box flexDirection="column" height={6} overflow="hidden">
+			<Overview project={project('Demo')} tasks={[]} height={6} />
+		</Box>,
+	);
+	const frame = lastFrame() ?? '';
+	// The first rows survive intact and the rest are cut, not merged.
+	t.true(frame.includes('id '));
+	t.true(frame.includes('version'));
+	t.false(frame.includes('signing user'));
+	t.is(frame.split('\n').length, 6);
 });

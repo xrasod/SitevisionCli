@@ -51,11 +51,13 @@ const cli = meow(
 	  info          Show project information
 
 	Options
+	  --minimal     Shell: compact layout for small terminals
 	  --help        Show this help message
 	  --version     Show version number
 
 	Examples
 	  $ svc                     # Shell: run inside an app, or at the repo root
+	  $ svc --minimal           # Shell without the sidebar, for a small pane
 	  $ svc dev
 	  $ svc dev --signed
 	  $ svc watch
@@ -87,6 +89,10 @@ const cli = meow(
 			},
 			cookie: {
 				type: 'string',
+			},
+			minimal: {
+				type: 'boolean',
+				default: false,
 			},
 		},
 	},
@@ -169,7 +175,7 @@ async function runShell(apps: ProjectInfo[], workspaceRoot?: string) {
 	process.stdout.write('\x1b[?1049h\x1b[H');
 	try {
 		const art =
-			process.stdin.isTTY && settings.introAnimation
+			process.stdin.isTTY && settings.introAnimation && !cli.flags.minimal
 				? pickIntroArt(process.stdout.columns ?? 0)
 				: undefined;
 		if (art) {
@@ -178,7 +184,12 @@ async function runShell(apps: ProjectInfo[], workspaceRoot?: string) {
 		}
 
 		const app = render(
-			<Shell apps={apps} workspaceRoot={workspaceRoot} version={pkg.version} />,
+			<Shell
+				apps={apps}
+				workspaceRoot={workspaceRoot}
+				version={pkg.version}
+				minimal={cli.flags.minimal}
+			/>,
 		);
 		await app.waitUntilExit();
 	} finally {

@@ -58,11 +58,15 @@ function Row({
 	dim?: string;
 }) {
 	return (
-		<Text wrap="truncate">
-			<Text dimColor>{label.padEnd(14)}</Text>
-			{value}
-			{dim && <Text dimColor> {dim}</Text>}
-		</Text>
+		// One line that never shrinks, so a short pane clips the list instead of
+		// squeezing rows into each other.
+		<Box height={1} flexShrink={0}>
+			<Text wrap="truncate">
+				<Text dimColor>{label.padEnd(14)}</Text>
+				{value}
+				{dim && <Text dimColor> {dim}</Text>}
+			</Text>
+		</Box>
 	);
 }
 
@@ -124,13 +128,15 @@ export function Overview({
 
 	return (
 		<Box flexDirection="column" paddingX={1} overflow="hidden">
-			<Text bold>
-				{localizedText(project.manifest.name) || project.manifest.id}{' '}
-				<Text dimColor>
-					{project.manifest.type}
-					{project.manifest.bundled ? t(' · bundled') : ''}
+			<Box height={1} flexShrink={0}>
+				<Text bold wrap="truncate">
+					{localizedText(project.manifest.name) || project.manifest.id}{' '}
+					<Text dimColor>
+						{project.manifest.type}
+						{project.manifest.bundled ? t(' · bundled') : ''}
+					</Text>
 				</Text>
-			</Text>
+			</Box>
 			<Row label={t('id')} value={project.manifest.id} />
 			<Row label={t('version')} value={project.manifest.version} />
 			<Row
@@ -167,7 +173,7 @@ export function Overview({
 				value={dev?.signingUsername ?? notSet}
 				dim={src('signingUsername')}
 			/>
-			<Box marginTop={1} flexDirection="column">
+			<Box marginTop={1} flexDirection="column" flexShrink={0}>
 				<Text dimColor>
 					{t('deps').padEnd(10)}
 					{status(

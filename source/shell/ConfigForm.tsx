@@ -585,7 +585,7 @@ export function ConfigForm({
 	for (const f of fields) {
 		if (f.section && f.section !== lastSection) {
 			rows.push(
-				<Box key={`s-${f.section}`} marginTop={1}>
+				<Box key={`s-${f.section}`} marginTop={1} flexShrink={0}>
 					<Text bold dimColor>
 						{t(f.section)}
 					</Text>
@@ -656,7 +656,7 @@ export function ConfigForm({
 
 		const src = source(f);
 		rows.push(
-			<Box key={f.key} height={1}>
+			<Box key={f.key} height={1} flexShrink={0}>
 				<Text
 					color={focused ? ACCENT : undefined}
 					bold={focused}
@@ -678,14 +678,16 @@ export function ConfigForm({
 
 	return (
 		<Box flexDirection="column" paddingX={1} overflow="hidden" height={height}>
-			<Text dimColor>
-				{('  ' + t('FIELD')).padEnd(24)}
-				{t('VALUE').padEnd(valueWidth)}
-				{t('SOURCE')}
-			</Text>
+			<Box height={1} flexShrink={0}>
+				<Text dimColor wrap="truncate">
+					{('  ' + t('FIELD')).padEnd(24)}
+					{t('VALUE').padEnd(valueWidth)}
+					{t('SOURCE')}
+				</Text>
+			</Box>
 			{rows}
 			{project.workspace && (
-				<Box marginTop={1}>
+				<Box marginTop={1} flexShrink={0}>
 					<Text dimColor>
 						{t("Shared by every app below {root}. An app's own value wins.", {
 							root: project.root,
@@ -694,7 +696,7 @@ export function ConfigForm({
 				</Box>
 			)}
 			{!project.workspace && (
-				<Box marginTop={1} flexDirection="column">
+				<Box marginTop={1} flexDirection="column" flexShrink={0}>
 					<Text bold dimColor>
 						{t('PACKAGE.JSON SYNC')}{' '}
 						<Text color={changes.length > 0 ? 'yellow' : 'green'}>

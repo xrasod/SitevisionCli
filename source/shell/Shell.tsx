@@ -98,6 +98,8 @@ interface Props {
 	apps: ProjectInfo[];
 	workspaceRoot?: string;
 	version: string;
+	// `--minimal`: use the compact layout however wide the terminal is.
+	minimal?: boolean;
 }
 
 function useSize() {
@@ -115,7 +117,12 @@ function useSize() {
 	return size;
 }
 
-export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
+export function Shell({
+	apps: initialApps,
+	workspaceRoot,
+	version,
+	minimal = false,
+}: Props) {
 	const {exit} = useApp();
 	const {columns, rows} = useSize();
 	const tasks = useTasks();
@@ -181,7 +188,7 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[workspaceRoot, apps, env],
 	);
-	const narrow = columns < NARROW_BELOW;
+	const narrow = minimal || columns < NARROW_BELOW;
 	const sidebar = navWidth(columns);
 	// The navigator shows the fuzzy matches; `selected` stays an index into
 	// `apps` (with `apps.length` meaning the workspace settings row).
@@ -513,7 +520,9 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 	);
 
 	// Frame geometry: one row for Ink's trailing newline, top bar, bottom bar.
-	const frameRows = Math.max(10, rows - 1);
+	// The sidebar layout needs 10 rows to stack its own fixed rows without
+	// overflowing; the compact one has no sidebar and fits in 6.
+	const frameRows = Math.max(narrow ? 6 : 10, rows - 1);
 	const mainHeight = frameRows - 2;
 	const contentHeight = mainHeight - 1 - (narrow ? 1 : 0);
 	const groupOf = (app: ProjectInfo) =>
@@ -763,6 +772,8 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 							apps={matches.map(i => apps[i]!)}
 							selected={matches.indexOf(selected)}
 							focused={focus === 'nav'}
+							width={columns}
+							filter={filter}
 						/>
 					)}
 					{settings ? (
@@ -781,7 +792,12 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 					) : (
 						<TabBar tab={tab} narrow={narrow} focused={focus === 'content'} />
 					)}
-					<Box height={contentHeight} overflow="hidden" alignItems="flex-start">
+					<Box
+						flexDirection="column"
+						height={contentHeight}
+						overflow="hidden"
+						alignItems="flex-start"
+					>
 						{content}
 					</Box>
 				</Box>
