@@ -1,6 +1,6 @@
 import http from 'http';
 import crypto from 'crypto';
-import {spawn} from 'child_process';
+import open from 'open';
 import type {DevProperties, OAuth2Config} from '../types/index.js';
 import {makeRequest, summarizeErrorBody} from './sitevision-api.js';
 import {
@@ -131,15 +131,11 @@ export async function discoverOAuth2Config(
 }
 
 export function openBrowser(url: string): void {
-	const isWin = process.platform === 'win32';
-	const cmd =
-		process.platform === 'darwin' ? 'open' : isWin ? 'cmd' : 'xdg-open';
-	const args = isWin ? ['/c', 'start', '', url] : [url];
-	try {
-		spawn(cmd, args, {stdio: 'ignore', detached: true}).unref();
-	} catch {
+	// Preserve the full OAuth URL, including & and percent-encoded parameters,
+	// through Windows shell parsing. `open` handles platform-specific escaping.
+	void open(url).catch(() => {
 		// Fall back to the printed URL.
-	}
+	});
 }
 
 /**
