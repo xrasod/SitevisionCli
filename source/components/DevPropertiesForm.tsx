@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useState, useEffect} from 'react';
 import {Box, Text, useInput} from 'ink';
 import {TextInput} from './TextInput.js';
 import type {DevProperties, PackageJson} from '../types/index.js';
@@ -8,7 +8,10 @@ import {
 	deleteDeployPassword,
 	setOAuth2ClientSecret,
 } from '../utils/keychain.js';
-import {DEFAULT_REDIRECT_PORT} from '../utils/oauth2-auth.js';
+import {
+	DEFAULT_REDIRECT_PORT,
+	discoverOAuth2Config,
+} from '../utils/oauth2-auth.js';
 
 interface Props {
 	projectRoot: string;
@@ -103,8 +106,47 @@ export function DevPropertiesForm({
 		clientSecret: '',
 	}));
 
+	const [discoveryNote, setDiscoveryNote] = useState('');
+
 	const method: AuthMethod = properties.authMethod ?? 'basic';
 	const isOAuth = method === 'oauth2';
+
+	// When OAuth2 is chosen, auto-fill the endpoints from the site's OpenID
+	// configuration (unauthenticated) so the user doesn't type them in.
+	useEffect(() => {
+		if (method !== 'oauth2' || !properties.domain) return;
+		if (oauth.authorizationEndpoint && oauth.tokenEndpoint) return;
+
+		let cancelled = false;
+		setDiscoveryNote('Looking up OAuth2 endpoints…');
+		void discoverOAuth2Config(
+			properties.domain,
+			properties.useHTTPForDevDeploy,
+		).then(discovered => {
+			if (cancelled) return;
+			if (discovered) {
+				setOauth(previous => ({
+					...previous,
+					authorizationEndpoint:
+						previous.authorizationEndpoint || discovered.authorizationEndpoint,
+					tokenEndpoint: previous.tokenEndpoint || discovered.tokenEndpoint,
+					scopes:
+						previous.scopes || (discovered.scopesSupported?.join(' ') ?? ''),
+				}));
+				setDiscoveryNote('Endpoints auto-filled from the site OpenID config.');
+			} else {
+				setDiscoveryNote(
+					'Could not auto-discover endpoints — enter them below.',
+				);
+			}
+		});
+
+		return () => {
+			cancelled = true;
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [method, properties.domain]);
+
 	const methodSteps: Step[] =
 		method === 'oauth2'
 			? [
@@ -357,11 +399,12 @@ export function DevPropertiesForm({
 			</Box>
 
 			{isOAuth && (
-				<Box marginBottom={1}>
+				<Box marginBottom={1} flexDirection="column">
 					<Text dimColor>
 						Whitelist this redirect URI on the OAuth2 client: http://127.0.0.1:
 						{redirectPort}/callback
 					</Text>
+					{discoveryNote && <Text color="yellow">{discoveryNote}</Text>}
 				</Box>
 			)}
 

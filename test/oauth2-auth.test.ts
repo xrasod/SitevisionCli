@@ -1,9 +1,14 @@
 import crypto from 'node:crypto';
+import http from 'node:http';
+import {AddressInfo} from 'node:net';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'ava';
-import {createPkcePair} from '../source/utils/oauth2-auth.js';
+import {
+	createPkcePair,
+	discoverOAuth2Config,
+} from '../source/utils/oauth2-auth.js';
 import {
 	configAuth,
 	unauthorizedMessage,
@@ -102,4 +107,48 @@ test('writeDevProperties never persists secrets', t => {
 	t.false(raw.includes('super-secret'));
 	t.false(raw.includes('live-token'));
 	t.false(raw.includes('deadbeef'));
+});
+
+test('discoverOAuth2Config parses the site OpenID configuration', async t => {
+	const server = http.createServer((req, res) => {
+		if (req.url === '/.well-known/openid-configuration') {
+			res.writeHead(200, {'content-type': 'application/json'});
+			res.end(
+				JSON.stringify({
+					issuer: 'http://x',
+					authorization_endpoint: 'http://x/oauth2-provider/authorize',
+					token_endpoint: 'http://x/oauth2-provider/token',
+					scopes_supported: ['all', 'offline_access'],
+				}),
+			);
+		} else {
+			res.writeHead(404).end();
+		}
+	});
+	await new Promise<void>(resolve => {
+		server.listen(0, '127.0.0.1', resolve);
+	});
+	const {port} = server.address() as AddressInfo;
+
+	const result = await discoverOAuth2Config(`127.0.0.1:${port}`, true);
+	server.close();
+
+	t.is(result?.authorizationEndpoint, 'http://x/oauth2-provider/authorize');
+	t.is(result?.tokenEndpoint, 'http://x/oauth2-provider/token');
+	t.deepEqual(result?.scopesSupported, ['all', 'offline_access']);
+});
+
+test('discoverOAuth2Config returns null when the config is not published', async t => {
+	const server = http.createServer((_req, res) => {
+		res.writeHead(404).end();
+	});
+	await new Promise<void>(resolve => {
+		server.listen(0, '127.0.0.1', resolve);
+	});
+	const {port} = server.address() as AddressInfo;
+
+	const result = await discoverOAuth2Config(`127.0.0.1:${port}`, true);
+	server.close();
+
+	t.is(result, null);
 });

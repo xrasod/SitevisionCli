@@ -70,6 +70,51 @@ async function postToken(
 	}
 }
 
+/** OpenID configuration path (published at the issuer root once the provider is saved). */
+const DISCOVERY_PATH = '/.well-known/openid-configuration';
+
+export interface DiscoveredOAuth2 {
+	authorizationEndpoint: string;
+	tokenEndpoint: string;
+	scopesSupported?: string[];
+}
+
+/**
+ * Fetch the site's OpenID configuration (unauthenticated) to auto-fill the
+ * authorization/token endpoints. Returns null if it isn't published (provider
+ * not enabled) or the response isn't a valid config, so callers fall back to
+ * manual entry.
+ */
+export async function discoverOAuth2Config(
+	domain: string,
+	useHTTP = false,
+): Promise<DiscoveredOAuth2 | null> {
+	if (!domain) return null;
+	const protocol = useHTTP ? 'http' : 'https';
+	try {
+		const response = await makeRequest(
+			`${protocol}://${domain}${DISCOVERY_PATH}`,
+			{method: 'GET'},
+		);
+		if (response.statusCode !== 200) return null;
+		const doc = JSON.parse(response.body.toString()) as {
+			authorization_endpoint?: string;
+			token_endpoint?: string;
+			scopes_supported?: string[];
+		};
+		if (!doc.authorization_endpoint || !doc.token_endpoint) return null;
+		return {
+			authorizationEndpoint: doc.authorization_endpoint,
+			tokenEndpoint: doc.token_endpoint,
+			scopesSupported: Array.isArray(doc.scopes_supported)
+				? doc.scopes_supported
+				: undefined,
+		};
+	} catch {
+		return null;
+	}
+}
+
 export function openBrowser(url: string): void {
 	const isWin = process.platform === 'win32';
 	const cmd =
