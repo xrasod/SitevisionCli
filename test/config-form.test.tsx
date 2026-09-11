@@ -79,6 +79,7 @@ test('the form marks inherited fields, edits the focused field and saves on Ente
 			project={project}
 			active
 			width={100}
+			height={40}
 			pickAddon={async () => null}
 			onSaved={() => {
 				saved++;

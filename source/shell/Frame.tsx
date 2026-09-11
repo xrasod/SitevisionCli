@@ -3,11 +3,12 @@ import {Box, Text} from 'ink';
 import Spinner from 'ink-spinner';
 import type {ProjectInfo} from '../types/index.js';
 import {
-	getAppType,
+	appTypeOf,
 	getPackageJsonSyncChanges,
 	localizedText,
 } from '../utils/project-detection.js';
 import {type Task} from '../utils/tasks.js';
+import {t} from '../utils/i18n.js';
 
 export const ACCENT = 'cyan';
 export const NARROW_BELOW = 100;
@@ -48,7 +49,18 @@ export function TopBar({context, domain, auth, version}: TopBarProps) {
 	);
 }
 
-export const TYPE_GLYPH = {web: 'web', widget: 'wgt', rest: 'rst'} as const;
+const TYPE_GLYPH = {
+	web: 'web',
+	widget: 'wgt',
+	rest: 'rst',
+	mcp: 'mcp',
+} as const;
+
+/** Three-letter type marker; unknown manifest types show as "???". */
+export function typeGlyph(manifest: ProjectInfo['manifest']): string {
+	const type = appTypeOf(manifest);
+	return type ? TYPE_GLYPH[type] : '???';
+}
 
 export function appStatus(project: ProjectInfo) {
 	const sync = project.devProperties
@@ -104,7 +116,7 @@ export function Navigator({
 }: NavigatorProps) {
 	// Row: marker(1) glyph(3) sp name sp version(6) sp dots(4) inside the padding.
 	const nameWidth = width - 2 - 17;
-	const running = tasks.filter(t => t.status === 'running');
+	const running = tasks.filter(task => task.status === 'running');
 	// Every row is exactly one line; nothing may shrink or the rows overlap.
 	const rows: ReactNode[] = [];
 	const rowApp: number[] = [];
@@ -127,7 +139,7 @@ export function Navigator({
 		rowApp.push(index);
 
 		const active = index === selected;
-		const busy = running.some(t => t.appRoot === app.root);
+		const busy = running.some(task => task.appRoot === app.root);
 		const name = localizedText(app.manifest.name) || app.manifest.id;
 		rows.push(
 			<Box key={app.root} width={width - 2} height={1} flexShrink={0}>
@@ -138,9 +150,7 @@ export function Navigator({
 					wrap="truncate"
 				>
 					{active ? '▎' : ' '}
-					<Text dimColor={!active}>
-						{TYPE_GLYPH[getAppType(app.manifest)]}
-					</Text>{' '}
+					<Text dimColor={!active}>{typeGlyph(app.manifest)}</Text>{' '}
 					{name.padEnd(nameWidth).slice(0, nameWidth)}{' '}
 					<Text dimColor>
 						{app.manifest.version.padStart(6).slice(0, 6)}
@@ -177,7 +187,7 @@ export function Navigator({
 			<Box key={`more-${arrow}`} height={1} flexShrink={0}>
 				<Text dimColor>
 					{'  '}
-					{arrow} {n} more
+					{t('{arrow} {n} more', {arrow, n})}
 				</Text>
 			</Box>
 		);
@@ -201,11 +211,13 @@ export function Navigator({
 		>
 			<Text bold dimColor>
 				{single
-					? 'APP'
-					: `WORKSPACE ${apps.length} app${apps.length === 1 ? '' : 's'}`}
+					? t('APP')
+					: apps.length === 1
+						? t('WORKSPACE 1 app')
+						: t('WORKSPACE {n} apps', {n: apps.length})}
 			</Text>
 			{shown}
-			<Text dimColor>{'  deps·config·sync·signing'}</Text>
+			<Text dimColor>{'  ' + t('deps·config·sync·signing')}</Text>
 			{!single && (
 				<Box marginTop={1}>
 					<Text
@@ -213,22 +225,21 @@ export function Navigator({
 						color={settingsSelected && focused ? 'black' : undefined}
 						bold={settingsSelected}
 					>
-						{settingsSelected ? '▎' : ' '}⚙ Workspace settings
+						{settingsSelected ? '▎' : ' '}⚙ {t('Workspace settings')}
 					</Text>
-					<Text dimColor> ,</Text>
 				</Box>
 			)}
 			{running.length > 0 && (
 				<Box flexDirection="column" marginTop={1}>
 					<Text bold dimColor>
-						TASKS
+						{t('TASKS')}
 					</Text>
-					{running.map(t => (
-						<Text key={t.id} wrap="truncate">
+					{running.map(task => (
+						<Text key={task.id} wrap="truncate">
 							<Text color={ACCENT}>
 								<Spinner type="dots" />
 							</Text>{' '}
-							{t.label} {t.appName} <Text dimColor>{elapsed(t)}</Text>
+							{task.label} {task.appName} <Text dimColor>{elapsed(task)}</Text>
 						</Text>
 					))}
 				</Box>
@@ -253,7 +264,7 @@ export function NavigatorStrip({
 						bold={index === selected}
 					>
 						{' '}
-						{TYPE_GLYPH[getAppType(app.manifest)]}{' '}
+						{typeGlyph(app.manifest)}{' '}
 						{localizedText(app.manifest.name) || app.manifest.id}{' '}
 					</Text>
 				))}

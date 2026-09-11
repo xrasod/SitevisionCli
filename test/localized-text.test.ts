@@ -5,8 +5,12 @@ test('returns a plain string unchanged', t => {
 	t.is(localizedText('My App'), 'My App');
 });
 
-test('prefers Swedish for a localized object', t => {
-	t.is(localizedText({sv: 'Mitt tillägg', en: 'My addon'}), 'Mitt tillägg');
+test('prefers the UI language for a localized object', t => {
+	t.is(
+		localizedText({sv: 'Mitt tillägg', en: 'My addon'}, 'sv'),
+		'Mitt tillägg',
+	);
+	t.is(localizedText({sv: 'Mitt tillägg', en: 'My addon'}), 'My addon');
 });
 
 test('falls back to English when Swedish is absent', t => {

@@ -1,6 +1,7 @@
 import React from 'react';
 import {Box, Text, useInput} from 'ink';
 import Spinner from 'ink-spinner';
+import {t} from '../utils/i18n.js';
 import type {DevProperties} from '../types/index.js';
 import {beginOAuth2Login, openBrowser} from '../utils/oauth2-auth.js';
 import {
@@ -119,7 +120,7 @@ export function AuthLoginScreen({
 		<Box flexDirection="column" padding={1}>
 			<Box marginBottom={1}>
 				<Text bold color="cyan">
-					{method === 'oauth2' ? 'OAuth2 login' : 'Session cookie login'}
+					{method === 'oauth2' ? t('OAuth2 login') : t('Session cookie login')}
 				</Text>
 			</Box>
 
@@ -129,11 +130,11 @@ export function AuthLoginScreen({
 						<Text color="green">
 							<Spinner type="dots" />
 						</Text>
-						<Text> Waiting for you to finish login in the browser…</Text>
+						<Text> {t('Waiting for you to finish login in the browser…')}</Text>
 					</Box>
 					{authUrl && (
 						<Box marginTop={1} flexDirection="column">
-							<Text dimColor>If the browser didn't open, visit:</Text>
+							<Text dimColor>{t("If the browser didn't open, visit:")}</Text>
 							<Text>{authUrl}</Text>
 						</Box>
 					)}
@@ -145,13 +146,14 @@ export function AuthLoginScreen({
 							<Text color="green">
 								<Spinner type="dots" />
 							</Text>
-							<Text> Opening browser…</Text>
+							<Text> {t('Opening browser…')}</Text>
 						</Box>
 					)}
 					{phase === 'awaiting' && (
 						<Text>
-							Log in in the opened browser, then press Enter to capture the
-							session.
+							{t(
+								'Log in in the opened browser, then press Enter to capture the session.',
+							)}
 						</Text>
 					)}
 					{phase === 'capturing' && (
@@ -159,7 +161,7 @@ export function AuthLoginScreen({
 							<Text color="green">
 								<Spinner type="dots" />
 							</Text>
-							<Text> Capturing session…</Text>
+							<Text> {t('Capturing session…')}</Text>
 						</Box>
 					)}
 					{note && (
@@ -171,7 +173,7 @@ export function AuthLoginScreen({
 			)}
 
 			<Box marginTop={1}>
-				<Text dimColor>Press Esc to cancel.</Text>
+				<Text dimColor>{t('Press Esc to cancel.')}</Text>
 			</Box>
 		</Box>
 	);

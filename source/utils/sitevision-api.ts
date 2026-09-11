@@ -811,6 +811,7 @@ const ADDON_TYPES: Record<string, SimpleAppType> = {
 	'sv:marketplaceWidgetCustomModule': 'widget',
 	'sv:headlessCustomModule': 'rest',
 	'sv:marketplaceHeadlessCustomModule': 'rest',
+	'sv:mcpServerCustomModule': 'mcp',
 };
 
 /**

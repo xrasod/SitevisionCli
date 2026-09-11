@@ -2,7 +2,7 @@ import {Box, Text} from 'ink';
 import Spinner from 'ink-spinner';
 import type {ProjectInfo} from '../types/index.js';
 import {
-	getAppType,
+	appTypeOf,
 	getPackageJsonSyncChanges,
 	localizedText,
 } from '../utils/project-detection.js';
@@ -11,6 +11,7 @@ import {type Task, type LogLine} from '../utils/tasks.js';
 import {type Executable} from '../utils/sitevision-api.js';
 import {ACCENT, elapsed} from './Frame.js';
 import {type Tab} from './actions.js';
+import {t} from '../utils/i18n.js';
 
 export const TABS: {id: Tab; label: string; short: string}[] = [
 	{id: 'overview', label: 'Overview', short: 'Ovw'},
@@ -30,15 +31,15 @@ export function TabBar({
 }) {
 	return (
 		<Box paddingX={1}>
-			{TABS.map((t, i) => (
-				<Text key={t.id}>
+			{TABS.map((entry, i) => (
+				<Text key={entry.id}>
 					<Text
-						bold={t.id === tab}
-						color={t.id === tab ? ACCENT : undefined}
-						dimColor={t.id !== tab}
-						underline={t.id === tab && focused}
+						bold={entry.id === tab}
+						color={entry.id === tab ? ACCENT : undefined}
+						dimColor={entry.id !== tab}
+						underline={entry.id === tab && focused}
 					>
-						{i + 1} {narrow ? t.short : t.label}
+						{i + 1} {t(narrow ? entry.short : entry.label)}
 					</Text>
 					{' '.repeat(3)}
 				</Text>
@@ -98,11 +99,12 @@ export function Overview({
 }) {
 	const dev = project.devProperties;
 	const inherited = new Set(project.inheritedKeys);
-	const src = (key: string) => (inherited.has(key) ? '↑ root' : undefined);
+	const src = (key: string) => (inherited.has(key) ? t('↑ root') : undefined);
+	const notSet = t('not set');
 	const sync = dev ? getPackageJsonSyncChanges(project.root, dev).length : 0;
 	const scripts = checkSitevisionScriptsCompatibility(project.root);
 	const recent = tasks
-		.filter(t => t.appRoot === project.root && t.status !== 'running')
+		.filter(task => task.appRoot === project.root && task.status !== 'running')
 		.slice(-Math.max(1, height - 18))
 		.toReversed();
 
@@ -126,98 +128,100 @@ export function Overview({
 				{localizedText(project.manifest.name) || project.manifest.id}{' '}
 				<Text dimColor>
 					{project.manifest.type}
-					{project.manifest.bundled ? ' · bundled' : ''}
+					{project.manifest.bundled ? t(' · bundled') : ''}
 				</Text>
 			</Text>
-			<Row label="id" value={project.manifest.id} />
-			<Row label="version" value={project.manifest.version} />
+			<Row label={t('id')} value={project.manifest.id} />
+			<Row label={t('version')} value={project.manifest.version} />
 			<Row
-				label="type"
-				value={`${project.manifest.type} (${getAppType(project.manifest)})`}
+				label={t('type')}
+				value={`${project.manifest.type} (${appTypeOf(project.manifest) ?? '?'})`}
 			/>
 			<Row
-				label="addon"
-				value={dev?.addonName ?? 'not set'}
+				label={t('addon')}
+				value={dev?.addonName ?? notSet}
 				dim={src('addonName')}
 			/>
 			<Row
-				label="site"
-				value={dev?.siteName ?? 'not set'}
+				label={t('site')}
+				value={dev?.siteName ?? notSet}
 				dim={src('siteName')}
 			/>
 			<Row
-				label="domain"
-				value={dev?.domain ?? 'not set'}
+				label={t('domain')}
+				value={dev?.domain ?? notSet}
 				dim={src('domain')}
 			/>
 			<Row
-				label="auth"
-				value={dev?.authMethod ?? (dev ? 'basic' : 'not set')}
+				label={t('auth')}
+				value={dev?.authMethod ?? (dev ? 'basic' : notSet)}
 				dim={src('authMethod')}
 			/>
 			<Row
-				label="signing user"
-				value={dev?.signingUsername ?? 'not set'}
+				label={t('signing user')}
+				value={dev?.signingUsername ?? notSet}
 				dim={src('signingUsername')}
 			/>
 			<Box marginTop={1} flexDirection="column">
 				<Text dimColor>
-					{'deps    '}
+					{t('deps').padEnd(10)}
 					{status(
 						project.hasNodeModules,
 						'node_modules',
-						'missing · run install',
+						t('missing · run install'),
 					)}
 				</Text>
 				<Text dimColor>
-					{'config  '}
-					{status(Boolean(dev), 'dev properties', 'missing · e to edit')}
+					{t('config').padEnd(10)}
+					{status(Boolean(dev), t('dev properties'), t('missing · e to edit'))}
 				</Text>
 				<Text dimColor>
-					{'sync    '}
+					{t('sync').padEnd(10)}
 					{status(
 						sync === 0,
 						'package.json',
-						`${sync} diff${sync === 1 ? '' : 's'} · y to apply`,
+						sync === 1
+							? t('1 diff · y to apply')
+							: t('{n} diffs · y to apply', {n: sync}),
 						true,
 					)}
 				</Text>
 				<Text dimColor>
-					{'signing '}
+					{t('signing').padEnd(10)}
 					{status(
 						project.hasSigningProperties,
 						dev?.signingUsername ?? '',
-						'missing · / set up signing',
+						t('missing · / set up signing'),
 					)}
 				</Text>
 				<Text dimColor>
-					{'scripts '}
+					{t('scripts').padEnd(10)}
 					{status(
 						scripts.status === 'ok',
 						scripts.installed ?? '',
 						scripts.installed
 							? `${scripts.installed} · ${scripts.status}`
-							: 'not installed',
+							: t('not installed'),
 						scripts.status !== 'not-installed',
 					)}
 				</Text>
 				{project.hasLegacyPassword && (
 					<Text color="yellow">
-						{' '.repeat(8)}⚠ plaintext password in .dev_properties.json · /
-						migrate
+						{' '.repeat(10)}
+						{t('⚠ plaintext password in .dev_properties.json · / migrate')}
 					</Text>
 				)}
 			</Box>
 			{recent.length > 0 && (
 				<Box marginTop={1} flexDirection="column">
 					<Text bold dimColor>
-						RECENT
+						{t('RECENT')}
 					</Text>
-					{recent.map(t => (
-						<Text key={t.id} wrap="truncate">
-							<Text dimColor>{time(t.endedAt ?? t.startedAt)} </Text>
-							{STATUS_GLYPH[t.status]} {t.label}{' '}
-							<Text dimColor>{t.error ?? elapsed(t)}</Text>
+					{recent.map(task => (
+						<Text key={task.id} wrap="truncate">
+							<Text dimColor>{time(task.endedAt ?? task.startedAt)} </Text>
+							{STATUS_GLYPH[task.status]} {task.label}{' '}
+							<Text dimColor>{task.error ?? elapsed(task)}</Text>
 						</Text>
 					))}
 				</Box>
@@ -245,7 +249,7 @@ export function Versions({
 	if (!project.devProperties) {
 		return (
 			<Box paddingX={1}>
-				<Text color="yellow">⚠ Configure dev properties first (e).</Text>
+				<Text color="yellow">{t('⚠ Configure dev properties first (e).')}</Text>
 			</Box>
 		);
 	}
@@ -254,7 +258,9 @@ export function Versions({
 		return (
 			<Box paddingX={1}>
 				<Text dimColor>
-					Press R to fetch versions from {project.devProperties.domain}.
+					{t('Press R to fetch versions from {domain}.', {
+						domain: project.devProperties.domain,
+					})}
 				</Text>
 			</Box>
 		);
@@ -264,8 +270,9 @@ export function Versions({
 	return (
 		<Box flexDirection="column" paddingX={1} overflow="hidden">
 			<Text dimColor>
-				{'APP IDENTIFIER'.padEnd(30)}
-				{'VERSION'.padEnd(12)}ACTIVE
+				{t('APP IDENTIFIER').padEnd(30)}
+				{t('VERSION').padEnd(12)}
+				{t('ACTIVE')}
 				{state.loading && (
 					<Text color={ACCENT}>
 						{' '.repeat(3)}
@@ -289,14 +296,21 @@ export function Versions({
 			))}
 			{!state.loading && !state.error && list.length === 0 && (
 				<Text dimColor>
-					No versions uploaded to {project.devProperties.addonName}.
+					{t('No versions uploaded to {addon}.', {
+						addon: project.devProperties.addonName,
+					})}
 				</Text>
 			)}
 			<Box marginTop={1}>
 				<Text dimColor>
-					{list.length} version{list.length === 1 ? '' : 's'} · a activate
-					selected · R refresh
-					{state.fetchedAt ? ` · fetched ${time(state.fetchedAt)}` : ''}
+					{list.length === 1
+						? t('1 version · a activate selected · R refresh')
+						: t('{n} versions · a activate selected · R refresh', {
+								n: list.length,
+							})}
+					{state.fetchedAt
+						? t(' · fetched {time}', {time: time(state.fetchedAt)})
+						: ''}
 				</Text>
 			</Box>
 		</Box>
@@ -318,7 +332,7 @@ export function Log({
 		return (
 			<Box paddingX={1}>
 				<Text dimColor>
-					No task yet. d dev · w watch · b build · s sign · p deploy
+					{t('No task yet. d dev · w watch · b build · s sign · p deploy')}
 				</Text>
 			</Box>
 		);
@@ -333,7 +347,7 @@ export function Log({
 				{STATUS_GLYPH[task.status]} {task.label} {task.appName}{' '}
 				<Text dimColor>
 					{task.phase} · {elapsed(task)}
-					{scroll > 0 ? ` · ↑${scroll}` : ' · following'}
+					{scroll > 0 ? ` · ↑${scroll}` : t(' · following')}
 				</Text>
 			</Text>
 			{lines.map((line, i) => (

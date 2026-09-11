@@ -11,12 +11,12 @@
 /**
  * App types supported by Sitevision
  */
-export type AppType = 'WebApp' | 'Widget' | 'RESTApp';
+export type AppType = 'WebApp' | 'Widget' | 'RESTApp' | 'MCPServer';
 
 /**
  * Simplified app type for internal use
  */
-export type SimpleAppType = 'web' | 'widget' | 'rest';
+export type SimpleAppType = 'web' | 'widget' | 'rest' | 'mcp';
 
 /**
  * A manifest text field that may be a plain string or a localized object keyed

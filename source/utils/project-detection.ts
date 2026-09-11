@@ -16,6 +16,7 @@ import {
 	getSessionCookie,
 } from './keychain.js';
 import {parseJsonc} from './jsonc.js';
+import {getLanguage} from './i18n.js';
 
 // Re-export types for backward compatibility
 export type {
@@ -39,7 +40,7 @@ export type {
  */
 export function localizedText(
 	value: LocalizedString | undefined,
-	preferred = 'sv',
+	preferred: string = getLanguage(),
 ): string {
 	if (!value) return '';
 	if (typeof value === 'string') return value;
@@ -249,6 +250,11 @@ export function getApiEndpoints(appType: SimpleAppType): ApiEndpoints {
 			return {
 				addon: 'headlesscustommodule',
 				import: 'restAppImport',
+			};
+		case 'mcp':
+			return {
+				addon: 'mcpServerCustomModule',
+				import: 'mcpServerImport',
 			};
 	}
 }
@@ -491,23 +497,29 @@ export function requireProject(cwd?: string): ProjectInfo {
 }
 
 /**
- * Get the app type (web, widget, rest)
+ * The app type (web, widget, rest, mcp), or undefined for a manifest type
+ * this CLI does not know. Display code uses this so one odd app never takes
+ * the whole shell down.
+ */
+export function appTypeOf(
+	manifest: SitevisionManifest,
+): SimpleAppType | undefined {
+	const type = manifest.type.toLowerCase();
+	if (type.startsWith('web')) return 'web';
+	if (type.startsWith('widget')) return 'widget';
+	if (type.startsWith('rest')) return 'rest';
+	if (type.startsWith('mcp')) return 'mcp';
+	return undefined;
+}
+
+/**
+ * Get the app type (web, widget, rest, mcp). Throws for unknown types, since
+ * build and deploy cannot proceed without knowing the endpoints.
  */
 export function getAppType(manifest: SitevisionManifest): SimpleAppType {
-	const type = manifest.type.toLowerCase();
-	if (type.startsWith('web')) {
-		return 'web';
-	}
-
-	if (type.startsWith('widget')) {
-		return 'widget';
-	}
-
-	if (type.startsWith('rest')) {
-		return 'rest';
-	}
-
-	throw new Error(`Unknown app type: ${manifest.type}`);
+	const type = appTypeOf(manifest);
+	if (!type) throw new Error(`Unknown app type: ${manifest.type}`);
+	return type;
 }
 
 /**

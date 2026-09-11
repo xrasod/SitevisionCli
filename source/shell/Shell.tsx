@@ -5,7 +5,7 @@ import Spinner from 'ink-spinner';
 import type {ProjectInfo, DevProperties} from '../types/index.js';
 import {
 	detectProject,
-	getAppType,
+	appTypeOf,
 	localizedText,
 	readWorkspaceDevProperties,
 } from '../utils/project-detection.js';
@@ -45,6 +45,8 @@ import {
 import {CommandPalette} from './CommandPalette.js';
 import {ConfigForm, type ConfigTarget} from './ConfigForm.js';
 import {AddonPicker} from './AddonPicker.js';
+import {SettingsScreen} from './Settings.js';
+import {t} from '../utils/i18n.js';
 import {
 	actionForKey,
 	authState,
@@ -70,7 +72,8 @@ type Overlay =
 			resolve: (v: Credential | null) => void;
 	  }
 	| {kind: 'confirm'; message: string; resolve: (v: boolean) => void}
-	| {kind: 'picker'; resolve: (v: string | null) => void};
+	| {kind: 'picker'; resolve: (v: string | null) => void}
+	| {kind: 'settings'};
 
 interface Props {
 	apps: ProjectInfo[];
@@ -176,6 +179,9 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 				setTab(next);
 				setFocus('content');
 			},
+			openSettings() {
+				setOverlay({kind: 'settings'});
+			},
 			openWorkspaceSettings: workspaceRoot
 				? () => {
 						setSelected(apps.length);
@@ -208,7 +214,7 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 			setOverlay(null);
 			if (action.enabled && !action.enabled(project)) {
 				notify(
-					`${action.label}: ${action.detail?.(project) ?? 'not available'}`,
+					`${t(action.label)}: ${action.detail?.(project) ?? t('not available')}`,
 					'warn',
 				);
 				return;
@@ -249,7 +255,7 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 		const executable = versions[project.root]?.executables?.[versionRow];
 		if (!executable) return;
 		if (executable.active) {
-			notify(`${executable.appVersion} is already active`);
+			notify(t('{v} is already active', {v: executable.appVersion}));
 			return;
 		}
 
@@ -269,7 +275,7 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 			});
 		await wait();
 		notify(
-			task.error ?? `${executable.appVersion} activated`,
+			task.error ?? t('{v} activated', {v: executable.appVersion}),
 			task.error ? 'error' : 'ok',
 		);
 		await fetchVersions();
@@ -286,15 +292,22 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 	);
 	const loadAddons = useCallback(async () => {
 		const config = await resolveDeployConfig(context);
-		return config ? listAddons(config) : {error: 'No credentials.'};
+		return config ? listAddons(config) : {error: t('No credentials.')};
 	}, [context]);
 
-	const appTasks = tasks.filter(t => t.appRoot === project.root);
+	const appTasks = tasks.filter(task => task.appRoot === project.root);
 	const logTask: Task | undefined =
-		appTasks.find(t => t.status === 'running') ?? appTasks.at(-1);
+		appTasks.find(task => task.status === 'running') ?? appTasks.at(-1);
 
 	useInput(
-		(input, key) => {
+		(raw, key) => {
+			// Terminals speaking the kitty keyboard protocol report shift+s as
+			// "s" plus a shift flag; fold that back into the uppercase letter so
+			// P, K, R behave the same everywhere.
+			const input =
+				key.shift && raw.length === 1 && /[a-z]/.test(raw)
+					? raw.toUpperCase()
+					: raw;
 			if (key.escape) {
 				setFocus(single ? 'content' : 'nav');
 				return;
@@ -327,7 +340,7 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 			}
 
 			if (key.leftArrow || key.rightArrow) {
-				const i = TABS.findIndex(t => t.id === tab);
+				const i = TABS.findIndex(entry => entry.id === tab);
 				setTab(
 					TABS[(i + (key.rightArrow ? 1 : TABS.length - 1)) % TABS.length]!.id,
 				);
@@ -375,82 +388,85 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 	const groupOf = (app: ProjectInfo) =>
 		workspaceRoot ? appGroup(workspaceRoot, app.root) : '.';
 	const appName = localizedText(project.manifest.name) || project.manifest.id;
+	const tabName = t(TABS.find(entry => entry.id === tab)!.label).toLowerCase();
 	const contextLabel = settings
-		? 'workspace ▸ settings'
+		? `${t('workspace')} ▸ ${t('settings')}`
 		: workspaceRoot
-			? `workspace ▸ ${path.relative(workspaceRoot, project.root)} ▸ ${tab}`
-			: `${appName} ▸ ${tab}`;
+			? `${t('workspace')} ▸ ${path.relative(workspaceRoot, project.root)} ▸ ${tabName}`
+			: `${appName} ▸ ${tabName}`;
 
+	const h = (pairs: Array<[string, string]>): Hint[] =>
+		pairs.map(([key, label]) => ({key, label: t(label)}));
 	const settingsHints: Hint[] = editing
-		? [
-				{key: 'Enter', label: 'save'},
-				{key: 'Esc', label: 'cancel'},
-			]
+		? h([
+				['Enter', 'save'],
+				['Esc', 'cancel'],
+			])
 		: formActive
-			? [
-					{key: '↑↓', label: 'field'},
-					{key: 'Enter', label: 'edit'},
-					{key: 'Esc', label: 'back'},
-					{key: 'q', label: 'quit'},
-				]
-			: [
-					{key: 'Enter', label: 'edit settings'},
-					{key: '↑↓', label: 'apps'},
-					{key: 'q', label: 'quit'},
-				];
+			? h([
+					['↑↓', 'field'],
+					['Enter', 'edit'],
+					['Esc', 'back'],
+					['q', 'quit'],
+				])
+			: h([
+					['Enter', 'edit settings'],
+					['↑↓', 'apps'],
+					['q', 'quit'],
+				]);
 	const hints: Hint[] = overlay
-		? [{key: 'Esc', label: 'cancel'}]
+		? h([['Esc', 'cancel']])
 		: settings
 			? settingsHints
 			: tab === 'versions'
-				? [
-						{key: 'a', label: 'activate'},
-						{key: 'R', label: 'refresh'},
-						{key: 'p', label: 'deploy'},
-						{key: '/', label: 'commands'},
-						{key: 'q', label: 'quit'},
-					]
+				? h([
+						['a', 'activate'],
+						['R', 'refresh'],
+						['p', 'deploy'],
+						['/', 'commands'],
+						['q', 'quit'],
+					])
 				: tab === 'log'
-					? [
-							{key: 'f', label: 'follow'},
-							{key: 'x', label: 'wrap'},
-							{key: 'K', label: 'stop'},
-							{key: 'p', label: 'deploy'},
-							{key: '/', label: 'commands'},
-							{key: 'q', label: 'quit'},
-						]
+					? h([
+							['f', 'follow'],
+							['x', 'wrap'],
+							['K', 'stop'],
+							['p', 'deploy'],
+							['/', 'commands'],
+							['q', 'quit'],
+						])
 					: tab === 'config'
 						? editing
-							? [
-									{key: 'Enter', label: 'save'},
-									{key: 'Esc', label: 'cancel'},
-								]
+							? h([
+									['Enter', 'save'],
+									['Esc', 'cancel'],
+								])
 							: formActive
-								? [
-										{key: '↑↓', label: 'field'},
-										{key: 'Enter', label: 'edit'},
-										{key: '^O', label: 'pick addon'},
-										{key: 'y', label: 'sync'},
-										{key: '/', label: 'commands'},
-										{key: 'q', label: 'quit'},
-									]
-								: [
-										{key: 'Tab', label: 'edit'},
-										{key: 'y', label: 'sync'},
-										{key: 'l', label: 'login'},
-										{key: '/', label: 'commands'},
-										{key: 'q', label: 'quit'},
-									]
-						: [
-								{key: 'd', label: 'dev'},
-								{key: 'w', label: 'watch'},
-								{key: 'b', label: 'build'},
-								{key: 's', label: 'sign'},
-								{key: 'p', label: 'deploy'},
-								{key: 'a', label: 'activate'},
-								{key: '/', label: 'commands'},
-								{key: 'q', label: 'quit'},
-							];
+								? h([
+										['↑↓', 'field'],
+										['Enter', 'edit'],
+										['^O', 'pick addon'],
+										['y', 'sync'],
+										['/', 'commands'],
+										['q', 'quit'],
+									])
+								: h([
+										['Tab', 'edit'],
+										['y', 'sync'],
+										['l', 'login'],
+										['/', 'commands'],
+										['q', 'quit'],
+									])
+						: h([
+								['d', 'dev'],
+								['w', 'watch'],
+								['b', 'build'],
+								['s', 'sign'],
+								['p', 'deploy'],
+								['a', 'activate'],
+								['/', 'commands'],
+								['q', 'quit'],
+							]);
 
 	const right =
 		running.length > 0 ? (
@@ -459,7 +475,9 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 					<Spinner type="dots" />
 				</Text>{' '}
 				{running[0]!.label} {running[0]!.appName}
-				{running.length > 1 && <Text dimColor> · {running.length} tasks</Text>}
+				{running.length > 1 && (
+					<Text dimColor> · {t('{n} tasks', {n: running.length})}</Text>
+				)}
 			</Text>
 		) : notice ? (
 			<Text
@@ -473,7 +491,7 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 				{notice.text}
 			</Text>
 		) : (
-			<Text dimColor>idle</Text>
+			<Text dimColor>{t('idle')}</Text>
 		);
 
 	const closeOverlay = () => setOverlay(null);
@@ -485,6 +503,14 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 			notify,
 			loadAddons,
 			height: contentHeight,
+			rerender: tick,
+			openWorkspace: workspaceRoot
+				? () => {
+						setOverlay(null);
+						setSelected(apps.length);
+						setFocus('content');
+					}
+				: undefined,
 		})
 	) : settings && workspaceTarget ? (
 		<ConfigForm
@@ -492,10 +518,11 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 			project={workspaceTarget}
 			active={formActive}
 			width={narrow ? columns : columns - sidebar}
+			height={contentHeight}
 			pickAddon={async () => null}
 			onSaved={() => {
 				reload();
-				notify('workspace config saved', 'ok');
+				notify(t('workspace config saved'), 'ok');
 			}}
 			onEditingChange={setEditing}
 		/>
@@ -510,10 +537,11 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 					project={project}
 					active={formActive}
 					width={narrow ? columns : columns - sidebar}
+					height={contentHeight}
 					pickAddon={pickAddon}
 					onSaved={() => {
 						reload();
-						notify('config saved', 'ok');
+						notify(t('config saved'), 'ok');
 					}}
 					onEditingChange={setEditing}
 				/>
@@ -581,9 +609,11 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 					{settings ? (
 						<Box paddingX={1}>
 							<Text bold color={ACCENT}>
-								Workspace settings
+								{t('Workspace settings')}
 							</Text>
-							<Text dimColor> · shared .dev_properties.json at the root</Text>
+							<Text dimColor>
+								{t(' · shared .dev_properties.json at the root')}
+							</Text>
 						</Box>
 					) : (
 						<TabBar tab={tab} narrow={narrow} focused={focus === 'content'} />
@@ -607,9 +637,20 @@ function renderOverlay(
 		notify: (text: string, level?: 'info' | 'ok' | 'warn' | 'error') => void;
 		loadAddons: () => Promise<{addons?: AddonNode[]; error?: string}>;
 		height: number;
+		rerender: () => void;
+		openWorkspace?: () => void;
 	},
 ) {
-	const {project, closeOverlay, run, notify, loadAddons, height} = env;
+	const {
+		project,
+		closeOverlay,
+		run,
+		notify,
+		loadAddons,
+		height,
+		rerender,
+		openWorkspace,
+	} = env;
 
 	switch (overlay.kind) {
 		case 'palette':
@@ -670,11 +711,19 @@ function renderOverlay(
 					}}
 				/>
 			);
+		case 'settings':
+			return (
+				<SettingsScreen
+					onChanged={rerender}
+					onClose={closeOverlay}
+					onOpenWorkspace={openWorkspace}
+				/>
+			);
 		case 'picker':
 			return (
 				<AddonPicker
 					domain={project.devProperties?.domain ?? ''}
-					appType={getAppType(project.manifest)}
+					appType={appTypeOf(project.manifest)}
 					initialQuery={localizedText(project.manifest.name)}
 					load={loadAddons}
 					height={height}
@@ -710,7 +759,7 @@ function Confirm({
 			paddingX={1}
 		>
 			<Text>{message}</Text>
-			<Text dimColor>y confirm · n cancel</Text>
+			<Text dimColor>{t('y confirm · n cancel')}</Text>
 		</Box>
 	);
 }

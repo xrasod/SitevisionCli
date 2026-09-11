@@ -3,6 +3,7 @@ import {Box, Text, useInput} from 'ink';
 import type {ProjectInfo} from '../types/index.js';
 import {ACCENT} from './Frame.js';
 import {actions, fuzzyMatch, type Action} from './actions.js';
+import {t} from '../utils/i18n.js';
 
 const GROUPS: {id: Action['group']; label: string}[] = [
 	{id: 'app', label: 'APP'},
@@ -24,7 +25,7 @@ export function CommandPalette({
 	const [query, setQuery] = useState('');
 	const [index, setIndex] = useState(0);
 
-	const matches = actions.filter(a => fuzzyMatch(query, a.label));
+	const matches = actions.filter(a => fuzzyMatch(query, t(a.label)));
 	const ordered = GROUPS.flatMap(g => matches.filter(a => a.group === g.id));
 
 	useInput((input, key) => {
@@ -59,7 +60,7 @@ export function CommandPalette({
 		if (action.group !== lastGroup) {
 			rows.push(
 				<Text key={`g-${action.group}`} bold dimColor>
-					{GROUPS.find(g => g.id === action.group)!.label}
+					{t(GROUPS.find(g => g.id === action.group)!.label)}
 				</Text>,
 			);
 			lastGroup = action.group;
@@ -69,19 +70,23 @@ export function CommandPalette({
 		const detail = action.detail?.(project);
 		rows.push(
 			<Box key={action.id} justifyContent="space-between">
-				<Text
-					backgroundColor={i === index ? ACCENT : undefined}
-					color={i === index ? 'black' : undefined}
-					dimColor={!enabled && i !== index}
-					wrap="truncate"
-				>
-					{'  '}
-					{action.label}
-					{detail && <Text dimColor={i !== index}> · {detail}</Text>}
-				</Text>
-				<Text bold color={ACCENT}>
-					{action.key ?? '—'}
-				</Text>
+				<Box flexShrink={1} marginRight={1}>
+					<Text
+						backgroundColor={i === index ? ACCENT : undefined}
+						color={i === index ? 'black' : undefined}
+						dimColor={!enabled && i !== index}
+						wrap="truncate"
+					>
+						{'  '}
+						{t(action.label)}
+						{detail && <Text dimColor={i !== index}> · {detail}</Text>}
+					</Text>
+				</Box>
+				<Box flexShrink={0}>
+					<Text bold color={ACCENT}>
+						{action.key ?? '—'}
+					</Text>
+				</Box>
 			</Box>,
 		);
 	}
@@ -96,17 +101,19 @@ export function CommandPalette({
 			height={rows.length + 5}
 		>
 			<Text>
-				<Text bold>Commands</Text>
+				<Text bold>{t('Commands')}</Text>
 				<Text dimColor> {project.manifest.id}</Text>
 			</Text>
 			<Text>
 				<Text color={ACCENT}>❯ </Text>
 				{query}
 				<Text inverse> </Text>
-				<Text dimColor> {ordered.length} actions</Text>
+				<Text dimColor> {t('{n} actions', {n: ordered.length})}</Text>
 			</Text>
 			{rows}
-			<Text dimColor>type to filter · ↑↓ move · Enter run · Esc close</Text>
+			<Text dimColor>
+				{t('type to filter · ↑↓ move · Enter run · Esc close')}
+			</Text>
 		</Box>
 	);
 }

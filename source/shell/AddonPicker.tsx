@@ -5,6 +5,7 @@ import type {SimpleAppType} from '../types/index.js';
 import {type AddonNode} from '../utils/sitevision-api.js';
 import {ACCENT} from './Frame.js';
 import {fuzzyMatch} from './actions.js';
+import {t} from '../utils/i18n.js';
 
 export function AddonPicker({
 	domain,
@@ -16,7 +17,7 @@ export function AddonPicker({
 	height,
 }: {
 	domain: string;
-	appType: SimpleAppType;
+	appType?: SimpleAppType;
 	initialQuery: string;
 	load: () => Promise<{addons?: AddonNode[]; error?: string}>;
 	onSelect: (name: string) => void;
@@ -79,7 +80,7 @@ export function AddonPicker({
 			height={Math.min(height, matches.length + 6)}
 		>
 			<Text>
-				<Text bold>Addon Repository</Text>
+				<Text bold>{t('Addon Repository')}</Text>
 				<Text dimColor> {domain}</Text>
 			</Text>
 			<Text>
@@ -88,12 +89,12 @@ export function AddonPicker({
 				<Text inverse> </Text>
 				<Text dimColor>
 					{'  '}
-					{addons ? `${matches.length} of ${addons.length}` : ''}
+					{addons ? t('{n} of {m}', {n: matches.length, m: addons.length}) : ''}
 				</Text>
 			</Text>
 			{!addons && !error && (
 				<Text color={ACCENT}>
-					<Spinner type="dots" /> <Text dimColor>fetching addons</Text>
+					<Spinner type="dots" /> <Text dimColor>{t('fetching addons')}</Text>
 				</Text>
 			)}
 			{error && <Text color="red">{error}</Text>}
@@ -101,19 +102,23 @@ export function AddonPicker({
 				const selected = start + i === index;
 				return (
 					<Box key={a.id} justifyContent="space-between">
-						<Text
-							backgroundColor={selected ? ACCENT : undefined}
-							color={selected ? 'black' : undefined}
-							wrap="truncate"
-						>
-							{'  '}
-							{a.name}
-						</Text>
-						<Text dimColor>{a.appType ?? a.type}</Text>
+						<Box flexShrink={1} marginRight={1}>
+							<Text
+								backgroundColor={selected ? ACCENT : undefined}
+								color={selected ? 'black' : undefined}
+								wrap="truncate"
+							>
+								{'  '}
+								{a.name}
+							</Text>
+						</Box>
+						<Box flexShrink={0}>
+							<Text dimColor>{a.appType ?? a.type}</Text>
+						</Box>
 					</Box>
 				);
 			})}
-			<Text dimColor>↑↓ move · Enter select · Esc cancel</Text>
+			<Text dimColor>{t('↑↓ move · Enter select · Esc cancel')}</Text>
 		</Box>
 	);
 }

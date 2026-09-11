@@ -154,7 +154,7 @@ export function BuildScreen({
 					const runner = new WebpackRunner(projectRoot, {
 						mode: 'production',
 						cssPrefix: manifest.id,
-						restApp: appType === 'rest',
+						restApp: appType !== 'web' && appType !== 'widget',
 					});
 
 					const result = await runner.run();

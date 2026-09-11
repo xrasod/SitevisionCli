@@ -5,6 +5,8 @@ import path from 'node:path';
 import {
 	detectProject,
 	writeDevProperties,
+	appTypeOf,
+	getApiEndpoints,
 } from '../source/utils/project-detection.js';
 import {discoverApps, appGroup} from '../source/utils/workspace.js';
 
@@ -80,4 +82,32 @@ test('discoverApps finds apps below the root and skips node_modules', t => {
 		['two', 'one'],
 	);
 	t.is(appGroup(root, apps[1]!.root), 'webapps');
+});
+
+test('an MCPServer manifest is a known app type and an unknown type does not crash detection', t => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-mcp-'));
+	app(path.join(root, 'mcp'), 'my-mcp');
+	fs.writeFileSync(
+		path.join(root, 'mcp', 'manifest.json'),
+		JSON.stringify({
+			id: 'my-mcp',
+			name: 'MCP',
+			version: '1.0.0',
+			type: 'MCPServer',
+		}),
+	);
+	app(path.join(root, 'odd'), 'odd');
+	fs.writeFileSync(
+		path.join(root, 'odd', 'manifest.json'),
+		JSON.stringify({
+			id: 'odd',
+			name: 'Odd',
+			version: '1.0.0',
+			type: 'Hologram',
+		}),
+	);
+	const apps = discoverApps(root);
+	t.is(appTypeOf(apps[0]!.manifest), 'mcp');
+	t.is(appTypeOf(apps[1]!.manifest), undefined);
+	t.is(getApiEndpoints('mcp').import, 'mcpServerImport');
 });

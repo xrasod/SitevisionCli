@@ -1,5 +1,6 @@
 import {useState} from 'react';
 import {Box, Text, useInput} from 'ink';
+import {t} from '../utils/i18n.js';
 
 interface Props {
 	label?: string;
@@ -64,11 +65,11 @@ export function PasswordInput({
 					<Text color={remember ? 'green' : 'gray'}>
 						[{remember ? 'x' : ' '}]
 					</Text>
-					<Text dimColor> (Tab to toggle)</Text>
+					<Text dimColor> {t('(Tab to toggle)')}</Text>
 				</Box>
 			)}
 			<Box marginTop={1}>
-				<Text dimColor>Press Enter to submit, Esc to cancel</Text>
+				<Text dimColor>{t('Press Enter to submit, Esc to cancel')}</Text>
 			</Box>
 		</Box>
 	);

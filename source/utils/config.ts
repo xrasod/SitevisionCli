@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import {type Language} from './i18n.js';
 
 /**
  * Global (machine-wide) CLI configuration, stored outside any project so the
@@ -9,6 +10,14 @@ import os from 'node:os';
 interface CliConfig {
 	firstRunCompleted?: boolean;
 	lastSeenVersion?: string;
+	language?: Language;
+	introAnimation?: boolean;
+}
+
+/** User-facing preferences editable from the shell's Settings screen. */
+export interface Settings {
+	language: Language;
+	introAnimation: boolean;
 }
 
 function configDir(): string {
@@ -37,6 +46,23 @@ function writeConfig(config: CliConfig): void {
 		// Best-effort: if we can't persist the flag the welcome screen simply
 		// shows again next time, which is harmless.
 	}
+}
+
+export function getSettings(): Settings {
+	const config = readConfig();
+	return {
+		language: config.language ?? 'en',
+		introAnimation: config.introAnimation ?? true,
+	};
+}
+
+export function setSettings(patch: Partial<Settings>): void {
+	writeConfig({...readConfig(), ...patch});
+}
+
+/** Path of the config file, for display. */
+export function settingsFile(): string {
+	return configFile();
 }
 
 /**

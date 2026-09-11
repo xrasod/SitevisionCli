@@ -19,7 +19,9 @@ import {
 	markFirstRunComplete,
 	getLastSeenVersion,
 	setLastSeenVersion,
+	getSettings,
 } from './utils/config.js';
+import {setLanguage} from './utils/i18n.js';
 import {WelcomeScreen} from './components/WelcomeScreen.js';
 import {AnimatedLogo} from './components/AnimatedLogo.js';
 import {
@@ -91,6 +93,8 @@ const cli = meow(
 );
 
 const [commandName, ...args] = cli.input;
+const settings = getSettings();
+setLanguage(settings.language);
 
 const CYAN = '\x1b[36m';
 const BOLD = '\x1b[1m';
@@ -164,9 +168,10 @@ async function playIntro(art: string[]): Promise<void> {
 async function runShell(apps: ProjectInfo[], workspaceRoot?: string) {
 	process.stdout.write('\x1b[?1049h\x1b[H');
 	try {
-		const art = process.stdin.isTTY
-			? pickIntroArt(process.stdout.columns ?? 0)
-			: undefined;
+		const art =
+			process.stdin.isTTY && settings.introAnimation
+				? pickIntroArt(process.stdout.columns ?? 0)
+				: undefined;
 		if (art) {
 			await playIntro(art);
 			process.stdout.write('\x1b[2J\x1b[H');

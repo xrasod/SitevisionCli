@@ -57,6 +57,14 @@ navigator and the content pane, `1`–`4` pick a tab, `q` quits.
 | `e` / `y` / `l` | Edit dev properties / apply package.json sync / log in            |
 | `K`             | Stop the running task for the selected app                        |
 
+### Settings
+
+`,` (or "Settings" in the palette) opens the global preferences, stored in
+`~/.config/sitevision-cli/config.json`: the UI language (English or Swedish,
+which also picks the manifest name language) and whether the intro animation
+plays. In workspace mode the same screen has a row that jumps to the shared
+workspace config.
+
 ### Shared configuration in a workspace
 
 `.dev_properties.json` is resolved by merging every ancestor directory's file

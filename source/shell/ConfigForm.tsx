@@ -18,6 +18,7 @@ import {
 } from '../utils/keychain.js';
 import {discoverOAuth2Config} from '../utils/oauth2-auth.js';
 import {ACCENT} from './Frame.js';
+import {t} from '../utils/i18n.js';
 
 type Method = 'basic' | 'oauth2' | 'cookie';
 const METHODS: Method[] = ['basic', 'oauth2', 'cookie'];
@@ -32,57 +33,114 @@ interface Field {
 	hint?: string;
 	// Only meaningful for an app, hidden when editing the workspace root.
 	perApp?: boolean;
+	// Guidance shown in the help panel while the row is focused.
+	help: string;
 }
 
 const FIELDS: Field[] = [
-	{key: 'domain', label: 'Development domain', required: true},
-	{key: 'siteName', label: 'Site name', required: true},
+	{
+		key: 'domain',
+		help: 'Domain of the development environment (USE or TSE) without https://, e.g. myorg-use.sitevision-cloud.se. Deploys and version lookups go here.',
+		label: 'Development domain',
+		required: true,
+	},
+	{
+		key: 'siteName',
+		help: "Name of the site's root node in Sitevision, exactly as shown in the site tree. It becomes part of the REST API path.",
+		label: 'Site name',
+		required: true,
+	},
 	{
 		key: 'addonName',
+		help: "Name of the addon (custom module) in the site's Addon Repository that this app is uploaded into. Ctrl+O lists the existing ones.",
 		label: 'Addon name',
 		required: true,
 		hint: '^O pick from repo',
 		perApp: true,
 	},
-	{key: 'username', label: 'Username', required: true},
-	{key: 'authMethod', label: 'Auth method', kind: 'method'},
-	{key: 'password', label: 'Password', kind: 'secret', when: 'basic'},
-	{key: 'clientId', label: 'OAuth2 client id', required: true, when: 'oauth2'},
+	{
+		key: 'username',
+		help: 'Sitevision account used for deploys, usually your Sitevision Cloud e-mail. It needs DEVELOPER or MANAGE_ADDONS permission on the site.',
+		label: 'Username',
+		required: true,
+	},
+	{
+		key: 'authMethod',
+		help: "How deploys authenticate: basic = username and password; oauth2 = bearer token from the site's OAuth2 provider (PKCE, opens a browser); cookie = reuse a browser SSO/SAML session.",
+		label: 'Auth method',
+		kind: 'method',
+	},
+	{
+		key: 'password',
+		help: 'Deploy password for the account above. Stored in the OS keychain, never in a file. Leave empty to be asked on each run.',
+		label: 'Password',
+		kind: 'secret',
+		when: 'basic',
+	},
+	{
+		key: 'clientId',
+		help: 'Client id of the OAuth2 client registered on the site. Its redirect URI must be http://127.0.0.1:8137/callback.',
+		label: 'OAuth2 client id',
+		required: true,
+		when: 'oauth2',
+	},
 	{
 		key: 'authorizationEndpoint',
+		help: "The provider's authorization URL. Filled in from the site's OpenID configuration when it can be discovered.",
 		label: 'Authorization endpoint',
 		required: true,
 		when: 'oauth2',
 	},
 	{
 		key: 'tokenEndpoint',
+		help: "The provider's token URL. Filled in from the site's OpenID configuration when it can be discovered.",
 		label: 'Token endpoint',
 		required: true,
 		when: 'oauth2',
 	},
 	{
 		key: 'scopes',
+		help: "Space-separated scopes to request. Leave empty for the client's defaults. Add offline_access (in the client's casing) to get a refresh token.",
 		label: 'Scopes',
 		when: 'oauth2',
 		hint: 'blank = client default',
 	},
-	{key: 'clientSecret', label: 'Client secret', kind: 'secret', when: 'oauth2'},
+	{
+		key: 'clientSecret',
+		help: 'Secret of a confidential OAuth2 client, stored in the OS keychain. Leave empty for a public client.',
+		label: 'Client secret',
+		kind: 'secret',
+		when: 'oauth2',
+	},
 	{
 		key: 'sessionLoginUrl',
+		help: 'Page opened in the browser for the SSO login. Leave empty to use the site root.',
 		label: 'Login URL',
 		when: 'cookie',
 		hint: 'blank = site root',
 	},
-	{key: 'useHTTPForDevDeploy', label: 'Use HTTP', kind: 'bool'},
+	{
+		key: 'useHTTPForDevDeploy',
+		help: 'Use plain HTTP instead of HTTPS for deploys. Only for local or test servers without TLS.',
+		label: 'Use HTTP',
+		kind: 'bool',
+	},
 	{
 		key: 'signingUsername',
+		help: 'Your developer.sitevision.se account. Production deploys need the app signed by it.',
 		label: 'Signing user',
 		section: 'SIGNING',
 		hint: 'required for signed deploys',
 	},
-	{key: 'certificateName', label: 'Certificate', section: 'SIGNING'},
+	{
+		key: 'certificateName',
+		help: 'Which certificate to sign with when your developer account has several. Leave empty for the default.',
+		label: 'Certificate',
+		section: 'SIGNING',
+	},
 	{
 		key: 'signingPassword',
+		help: 'Password for the signing account, stored in the OS keychain. Leave empty to be asked on each run.',
 		label: 'Signing password',
 		kind: 'secret',
 		section: 'SIGNING',
@@ -222,6 +280,7 @@ export function ConfigForm({
 	project,
 	active,
 	width,
+	height,
 	pickAddon,
 	onSaved,
 	onEditingChange,
@@ -231,6 +290,7 @@ export function ConfigForm({
 	// Pane width in columns; the value column takes whatever the label and
 	// source columns leave.
 	width: number;
+	height: number;
 	pickAddon: () => Promise<string | null>;
 	onSaved: () => void;
 	// True while a text field is being typed into; the shell then leaves every
@@ -275,7 +335,7 @@ export function ConfigForm({
 		const next = {...values, [key]: value};
 		setValues(next);
 		saveConfig(project, next, new Set([key]));
-		setNote(`Saved ${label}.`);
+		setNote(t('Saved {label}.', {label: t(label)}));
 		onSaved();
 	};
 
@@ -284,7 +344,7 @@ export function ConfigForm({
 		if (method !== 'oauth2' || !values['domain']) return;
 		if (values['authorizationEndpoint'] && values['tokenEndpoint']) return;
 		let cancelled = false;
-		setNote('Looking up OAuth2 endpoints…');
+		setNote(t('Looking up OAuth2 endpoints…'));
 		void discoverOAuth2Config(
 			values['domain'],
 			values['useHTTPForDevDeploy'] === 'yes',
@@ -300,9 +360,9 @@ export function ConfigForm({
 				setValues(next);
 				saveConfig(project, next, new Set());
 				onSaved();
-				setNote('Endpoints filled from the site OpenID config.');
+				setNote(t('Endpoints filled from the site OpenID config.'));
 			} else {
-				setNote('Could not discover OAuth2 endpoints; enter them by hand.');
+				setNote(t('Could not discover OAuth2 endpoints; enter them by hand.'));
 			}
 		});
 		return () => {
@@ -371,9 +431,9 @@ export function ConfigForm({
 
 	const source = (f: Field): {text: string; color?: string} => {
 		if (f.required && !(values[f.key] ?? ''))
-			return {text: '✗ required', color: 'red'};
+			return {text: t('✗ required'), color: 'red'};
 		if (f.kind === 'secret') {
-			return {text: storedSecret(project, f.key) ? 'keychain' : '—'};
+			return {text: storedSecret(project, f.key) ? t('keychain') : '—'};
 		}
 
 		const value = f.kind === 'bool' ? values[f.key] === 'yes' : values[f.key];
@@ -388,10 +448,10 @@ export function ConfigForm({
 			inheritedValue !== undefined &&
 			JSON.stringify(inheritedValue) === JSON.stringify(value)
 		) {
-			return {text: '↑ root'};
+			return {text: t('↑ root')};
 		}
 
-		return {text: (values[f.key] ?? '') ? 'local' : ''};
+		return {text: (values[f.key] ?? '') ? t('local') : ''};
 	};
 
 	// label column (24) + source column + paddings; never below 20.
@@ -403,7 +463,7 @@ export function ConfigForm({
 			rows.push(
 				<Box key={`s-${f.section}`} marginTop={1}>
 					<Text bold dimColor>
-						{f.section}
+						{t(f.section)}
 					</Text>
 				</Box>,
 			);
@@ -429,7 +489,7 @@ export function ConfigForm({
 						inverse={typing && m === chosen}
 						dimColor={m !== chosen}
 					>
-						{m}
+						{f.kind === 'bool' ? t(m) : m}
 					</Text>
 					{i < choices.length - 1 && <Text dimColor> · </Text>}
 				</Text>
@@ -439,7 +499,11 @@ export function ConfigForm({
 				<Text>{tail('•'.repeat(draft.length))}</Text>
 			) : (
 				<Text dimColor>
-					{storedSecret(project, f.key) ? '•••••••• keychain' : (f.hint ?? '')}
+					{storedSecret(project, f.key)
+						? t('•••••••• keychain')
+						: f.hint
+							? t(f.hint)
+							: ''}
 				</Text>
 			);
 		} else {
@@ -447,7 +511,7 @@ export function ConfigForm({
 			display = value ? (
 				<Text>{tail(value)}</Text>
 			) : (
-				<Text dimColor>{typing ? '' : (f.hint ?? '—')}</Text>
+				<Text dimColor>{typing ? '' : f.hint ? t(f.hint) : '—'}</Text>
 			);
 		}
 
@@ -459,7 +523,7 @@ export function ConfigForm({
 					bold={focused}
 					dimColor={!focused}
 				>
-					{(focused ? '▸ ' : '  ') + f.label.padEnd(22)}
+					{(focused ? '▸ ' : '  ') + t(f.label).padEnd(22)}
 				</Text>
 				<Box width={valueWidth} flexShrink={0}>
 					<Text wrap="truncate">
@@ -469,7 +533,7 @@ export function ConfigForm({
 				</Box>
 				<Box width={SOURCE_WIDTH} flexShrink={0}>
 					<Text dimColor={!src.color} color={src.color} wrap="truncate">
-						{focused && f.hint && f.key === 'addonName' ? f.hint : src.text}
+						{focused && f.hint && f.key === 'addonName' ? t(f.hint) : src.text}
 					</Text>
 				</Box>
 			</Box>,
@@ -477,27 +541,32 @@ export function ConfigForm({
 	}
 
 	return (
-		<Box flexDirection="column" paddingX={1} overflow="hidden">
+		<Box flexDirection="column" paddingX={1} overflow="hidden" height={height}>
 			<Text dimColor>
-				{'  FIELD'.padEnd(24)}
-				{'VALUE'.padEnd(valueWidth)}SOURCE
+				{('  ' + t('FIELD')).padEnd(24)}
+				{t('VALUE').padEnd(valueWidth)}
+				{t('SOURCE')}
 			</Text>
 			{rows}
 			{project.workspace && (
 				<Box marginTop={1}>
 					<Text dimColor>
-						Shared by every app below {project.root}. An app's own value wins.
+						{t("Shared by every app below {root}. An app's own value wins.", {
+							root: project.root,
+						})}
 					</Text>
 				</Box>
 			)}
 			{!project.workspace && (
 				<Box marginTop={1} flexDirection="column">
 					<Text bold dimColor>
-						PACKAGE.JSON SYNC{' '}
+						{t('PACKAGE.JSON SYNC')}{' '}
 						<Text color={changes.length > 0 ? 'yellow' : 'green'}>
-							{changes.length > 0
-								? `${changes.length} diff${changes.length === 1 ? '' : 's'} · y to apply`
-								: 'in sync'}
+							{changes.length === 0
+								? t('in sync')
+								: changes.length === 1
+									? t('1 diff · y to apply')
+									: t('{n} diffs · y to apply', {n: changes.length})}
 						</Text>
 					</Text>
 					{changes.map(c => (
@@ -512,18 +581,23 @@ export function ConfigForm({
 					))}
 				</Box>
 			)}
-			<Box marginTop={1}>
-				<Text color="yellow">{note}</Text>
+			<Box flexGrow={1} />
+			<Box
+				flexDirection="column"
+				borderStyle="single"
+				borderDimColor
+				borderLeft={false}
+				borderRight={false}
+				borderBottom={false}
+			>
+				<Text wrap="wrap">
+					<Text bold color={ACCENT}>
+						{t(current.label)}
+					</Text>
+					<Text dimColor> · {t(current.help)}</Text>
+				</Text>
 			</Box>
-			<Text dimColor>
-				{editing
-					? options(current).length > 0
-						? '←→ choose · Enter confirm · Esc cancel'
-						: 'Enter save · Esc cancel'
-					: active
-						? '↑↓ field · Enter edit · ^O pick addon'
-						: 'Tab to edit'}
-			</Text>
+			<Text color="yellow">{note}</Text>
 		</Box>
 	);
 }

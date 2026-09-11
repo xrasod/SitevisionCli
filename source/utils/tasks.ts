@@ -215,7 +215,8 @@ async function buildOnce(
 		const runner = new WebpackRunner(root, {
 			mode,
 			cssPrefix: manifest.id,
-			restApp: getAppType(manifest) === 'rest',
+			restApp:
+				getAppType(manifest) !== 'web' && getAppType(manifest) !== 'widget',
 		});
 		const result = await runner.run();
 		await runner.close();
@@ -554,7 +555,8 @@ export function startDev(project: ProjectInfo, options: DevOptions): Task {
 					mode: 'development',
 					watch: true,
 					cssPrefix: manifest.id,
-					restApp: getAppType(manifest) === 'rest',
+					restApp:
+						getAppType(manifest) !== 'web' && getAppType(manifest) !== 'widget',
 				});
 				await webpack.watch(result => {
 					void (async () => {
