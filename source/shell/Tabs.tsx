@@ -168,7 +168,7 @@ export function Overview({
 					{status(
 						project.hasNodeModules,
 						'node_modules',
-						t('missing · run install'),
+						t('missing · i to install'),
 					)}
 				</Text>
 				<Text dimColor>
@@ -201,7 +201,7 @@ export function Overview({
 						scripts.installed ?? '',
 						scripts.installed
 							? `${scripts.installed} · ${scripts.status}`
-							: t('not installed'),
+							: t('not installed · i to install'),
 						scripts.status !== 'not-installed',
 					)}
 				</Text>

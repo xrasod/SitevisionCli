@@ -157,6 +157,15 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 		);
 	}, []);
 
+	// A finished npm install changes what detection sees (node_modules,
+	// sitevision-scripts); re-detect so the status strip flips.
+	const installsDone = tasks.filter(
+		task => task.kind === 'install' && task.status !== 'running',
+	).length;
+	useEffect(() => {
+		if (installsDone > 0) reload();
+	}, [installsDone, reload]);
+
 	const notify = useCallback(
 		(text: string, level: 'info' | 'ok' | 'warn' | 'error' = 'info') => {
 			setNotice({text, level});
@@ -464,6 +473,7 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 								['s', 'sign'],
 								['p', 'deploy'],
 								['a', 'activate'],
+								['i', 'install'],
 								['/', 'commands'],
 								['q', 'quit'],
 							]);
