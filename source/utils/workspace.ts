@@ -1,6 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {detectProject, type ProjectInfo} from './project-detection.js';
+import {
+	detectProject,
+	readWorkspaceDevProperties,
+	type ProjectInfo,
+} from './project-detection.js';
+import type {DevProperties} from '../types/index.js';
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build']);
 const MAX_DEPTH = 3;
@@ -46,4 +51,23 @@ export function discoverApps(root: string): ProjectInfo[] {
 export function appGroup(root: string, appRoot: string): string {
 	const relative = path.relative(root, path.dirname(appRoot));
 	return relative === '' ? '.' : relative;
+}
+
+/** Missing something nothing can deploy without. */
+export function configIncomplete(dev?: Partial<DevProperties>): boolean {
+	if (!dev?.domain || !dev.siteName) return true;
+	return (dev.authMethod ?? 'basic') === 'basic' && !dev.username;
+}
+
+/**
+ * True when a workspace has apps but nothing usable to deploy with: neither the
+ * shared root config nor the apps themselves carry domain/site/username. The
+ * shell then opens on Workspace settings instead of the first app.
+ */
+export function needsOnboarding(root: string, apps: ProjectInfo[]): boolean {
+	return (
+		apps.length > 0 &&
+		configIncomplete(readWorkspaceDevProperties(root)) &&
+		apps.some(app => configIncomplete(app.devProperties))
+	);
 }

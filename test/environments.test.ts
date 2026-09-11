@@ -76,6 +76,24 @@ test('saveConfig in a non-dev environment writes an override, not the base', t =
 	);
 	const project = detectProject(root)!;
 	const prod = resolveEnvironment(project.devProperties!, 'prod');
+	const values = {
+		domain: 'live.acme.se',
+		siteName: 'Intranet',
+		addonName: 'Booking',
+		username: 'me@acme.se',
+		authMethod: 'basic',
+		password: '',
+		clientId: '',
+		authorizationEndpoint: '',
+		tokenEndpoint: '',
+		scopes: '',
+		clientSecret: '',
+		sessionLoginUrl: '',
+		useHTTPForDevDeploy: 'no',
+		signingUsername: 'signer@acme.se',
+		certificateName: '',
+		signingPassword: '',
+	};
 	saveConfig(
 		{
 			root,
@@ -83,24 +101,7 @@ test('saveConfig in a non-dev environment writes an override, not the base', t =
 			base: project.devProperties,
 			environment: 'prod',
 		},
-		{
-			domain: 'live.acme.se',
-			siteName: 'Intranet',
-			addonName: 'Booking',
-			username: 'me@acme.se',
-			authMethod: 'basic',
-			password: '',
-			clientId: '',
-			authorizationEndpoint: '',
-			tokenEndpoint: '',
-			scopes: '',
-			clientSecret: '',
-			sessionLoginUrl: '',
-			useHTTPForDevDeploy: 'no',
-			signingUsername: 'signer@acme.se',
-			certificateName: '',
-			signingPassword: '',
-		},
+		values,
 		new Set(['domain']),
 	);
 	const file = JSON.parse(
@@ -113,4 +114,21 @@ test('saveConfig in a non-dev environment writes an override, not the base', t =
 		useHTTPForDevDeploy: false,
 	});
 	t.deepEqual(file.environments?.['test'], base.environments?.['test']);
+
+	// Clearing the field drops the override instead of writing "" into it.
+	saveConfig(
+		{
+			root,
+			devProperties: prod,
+			base: detectProject(root)!.devProperties,
+			environment: 'prod',
+		},
+		{...values, domain: ''},
+		new Set(['domain']),
+	);
+	const cleared = JSON.parse(
+		fs.readFileSync(path.join(root, '.dev_properties.json'), 'utf8'),
+	) as DevProperties;
+	t.is(cleared.environments?.['prod']?.domain, undefined);
+	t.is(cleared.domain, base.domain);
 });

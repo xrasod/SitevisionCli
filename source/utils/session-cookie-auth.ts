@@ -88,7 +88,7 @@ export async function beginCookieLogin(
 	dev: DevProperties,
 ): Promise<CookieLoginSession | null> {
 	const {domain, username} = dev;
-	if (!domain || !username) return null;
+	if (!domain) return null;
 
 	let puppeteer;
 	try {

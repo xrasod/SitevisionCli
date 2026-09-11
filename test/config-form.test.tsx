@@ -4,7 +4,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {render} from 'ink-testing-library';
-import {detectProject} from '../source/utils/project-detection.js';
+import {
+	detectProject,
+	writeDevProperties,
+} from '../source/utils/project-detection.js';
 import {ConfigForm, saveConfig} from '../source/shell/ConfigForm.js';
 
 const delay = async (ms: number) =>
@@ -109,6 +112,68 @@ test('the form marks inherited fields, edits the focused field and saves on Ente
 	);
 	t.is(file.addonName, 'Booking');
 	t.is(file.domain, undefined);
+});
+
+test('arrow keys move the caret so edits land mid-string', async t => {
+	const app = workspaceApp();
+	const project = detectProject(app)!;
+	const {stdin} = render(
+		<ConfigForm
+			project={project}
+			active
+			width={100}
+			height={40}
+			pickAddon={async () => null}
+			onSaved={() => {}}
+			onEditingChange={() => {}}
+		/>,
+	);
+	const press = async (keys: string) => {
+		stdin.write(keys);
+		await delay(15);
+	};
+
+	await delay(20);
+	// Tab to the addon field, open it and type a value with a typo.
+	await press('\t');
+	await press('\t');
+	await press('\r');
+	await press('Bokning');
+	// Walk the caret back between "B" and "k", then insert the missing "o".
+	const left = '\u001B[D';
+	for (let i = 0; i < 5; i++) {
+		// eslint-disable-next-line no-await-in-loop
+		await press(left);
+	}
+	await press('o');
+	// Backspace removes the character before the caret, not the last one typed.
+	await press('\u007F');
+	await press('o');
+	await press('\r');
+	await delay(20);
+	const file = JSON.parse(
+		fs.readFileSync(path.join(app, '.dev_properties.json'), 'utf8'),
+	);
+	t.is(file.addonName, 'Bookning');
+});
+
+test('clearing an app value falls back to the workspace one', t => {
+	const app = workspaceApp();
+	writeDevProperties(app, {
+		...detectProject(app)!.devProperties!,
+		domain: 'app.example',
+	});
+	t.is(detectProject(app)!.devProperties?.domain, 'app.example');
+
+	writeDevProperties(app, {
+		...detectProject(app)!.devProperties!,
+		domain: '',
+	});
+	const file = JSON.parse(
+		fs.readFileSync(path.join(app, '.dev_properties.json'), 'utf8'),
+	);
+	t.is(file.domain, undefined);
+	t.is(detectProject(app)!.devProperties?.domain, 'site.example');
 });
 
 test('saving the workspace target writes the root file and apps inherit it', t => {

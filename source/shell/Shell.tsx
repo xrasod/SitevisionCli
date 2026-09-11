@@ -12,7 +12,11 @@ import {
 	writeSvcConfig,
 	writeDevProperties,
 } from '../utils/project-detection.js';
-import {appGroup} from '../utils/workspace.js';
+import {
+	appGroup,
+	configIncomplete,
+	needsOnboarding,
+} from '../utils/workspace.js';
 import {
 	listAddons,
 	listExecutables,
@@ -113,10 +117,16 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 	const {columns, rows} = useSize();
 	const tasks = useTasks();
 	const [apps, setApps] = useState(initialApps);
-	const [selected, setSelected] = useState(0);
+	// A workspace with nothing to deploy against opens on its settings form.
+	const onboard = useMemo(
+		() =>
+			Boolean(workspaceRoot) && needsOnboarding(workspaceRoot!, initialApps),
+		[workspaceRoot, initialApps],
+	);
+	const [selected, setSelected] = useState(onboard ? initialApps.length : 0);
 	const [tab, setTab] = useState<Tab>('overview');
 	const [focus, setFocus] = useState<'nav' | 'content'>(
-		workspaceRoot ? 'nav' : 'content',
+		workspaceRoot && !onboard ? 'nav' : 'content',
 	);
 	const [overlay, setOverlay] = useState<Overlay | null>(null);
 	const [versions, setVersions] = useState<Record<string, VersionsState>>({});
@@ -390,6 +400,8 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 					? raw.toUpperCase()
 					: raw;
 			if (key.escape) {
+				// Esc backs out of the workspace settings pane, not just its focus.
+				if (settings) setSelected(0);
 				setFocus(single ? 'content' : 'nav');
 				return;
 			}
@@ -704,7 +716,11 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 								{t('Workspace settings')}
 							</Text>
 							<Text dimColor>
-								{t(' · shared .dev_properties.json at the root')}
+								{onboard && configIncomplete(workspaceTarget?.base)
+									? t(
+											' · new workspace: fill in once, every app inherits · Esc skips',
+										)
+									: t(' · shared .dev_properties.json at the root')}
 							</Text>
 						</Box>
 					) : (

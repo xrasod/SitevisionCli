@@ -458,7 +458,7 @@ export function resolveRuntimeSecrets(dev: DevProperties): DevProperties {
 		dev.accessToken = process.env['SITEVISION_ACCESS_TOKEN'] ?? undefined;
 	}
 
-	if (dev.authMethod === 'cookie' && dev.domain && dev.username) {
+	if (dev.authMethod === 'cookie' && dev.domain) {
 		dev.sessionCookie =
 			process.env['SITEVISION_SESSION_COOKIE'] ??
 			getSessionCookie(dev.domain, dev.username) ??
@@ -554,14 +554,17 @@ export function writeDevProperties(
 		...persisted
 	} = properties;
 	// Keep the app file minimal: values identical to the inherited ones stay
-	// at the workspace root instead of being copied into every app.
+	// at the workspace root instead of being copied into every app. An empty
+	// string means "unset", so it is dropped rather than written as an override
+	// that would shadow the inherited value.
 	const inherited: Record<string, unknown> =
 		readInheritedDevProperties(projectRoot);
 	const own = Object.fromEntries(
 		Object.entries(persisted).filter(
 			([key, value]) =>
-				!Object.hasOwn(inherited, key) ||
-				JSON.stringify(inherited[key]) !== JSON.stringify(value),
+				value !== '' &&
+				(!Object.hasOwn(inherited, key) ||
+					JSON.stringify(inherited[key]) !== JSON.stringify(value)),
 		),
 	);
 

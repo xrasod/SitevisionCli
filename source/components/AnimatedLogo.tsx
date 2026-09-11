@@ -1,5 +1,5 @@
 import {Fragment, useEffect, useRef, useState} from 'react';
-import {Box, Text} from 'ink';
+import {Box, Text, useStdout} from 'ink';
 import {AUTHOR, BIG_LOGO} from '../utils/branding.js';
 
 interface Props {
@@ -113,24 +113,38 @@ export function AnimatedLogo({art = BIG_LOGO, onDone}: Props) {
 
 	const edge = (frame + 1) * SWEEP_COLS_PER_FRAME;
 
+	// Centre the wordmark on the alternate screen. `rows - 1` leaves room for
+	// Ink's trailing newline; a terminal too short for the art just renders it
+	// top-aligned rather than scrolling.
+	const {stdout} = useStdout();
+	const height = (stdout.rows || 24) - 1;
+	const fits = height >= art.length + 2;
+
 	return (
-		<Box flexDirection="column" padding={1}>
-			{art.map((line, y) => (
-				<Text key={y}>
-					{buildSpans(line, y, frame, edge).map((span, index) => (
-						<Fragment key={index}>
-							{span.color ? (
-								<Text color={span.color}>{span.text}</Text>
-							) : (
-								<Text>{span.text}</Text>
-							)}
-						</Fragment>
-					))}
-				</Text>
-			))}
-			<Box marginTop={1}>
-				<Text dimColor>{'  a tool by '}</Text>
-				<Text bold>{AUTHOR}</Text>
+		<Box
+			width={stdout.columns || 80}
+			height={fits ? height : undefined}
+			alignItems="center"
+			justifyContent="center"
+		>
+			<Box flexDirection="column" padding={1}>
+				{art.map((line, y) => (
+					<Text key={y}>
+						{buildSpans(line, y, frame, edge).map((span, index) => (
+							<Fragment key={index}>
+								{span.color ? (
+									<Text color={span.color}>{span.text}</Text>
+								) : (
+									<Text>{span.text}</Text>
+								)}
+							</Fragment>
+						))}
+					</Text>
+				))}
+				<Box marginTop={1}>
+					<Text dimColor>{'  a tool by '}</Text>
+					<Text bold>{AUTHOR}</Text>
+				</Box>
 			</Box>
 		</Box>
 	);

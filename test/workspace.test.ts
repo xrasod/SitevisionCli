@@ -8,7 +8,12 @@ import {
 	appTypeOf,
 	getApiEndpoints,
 } from '../source/utils/project-detection.js';
-import {discoverApps, appGroup} from '../source/utils/workspace.js';
+import {
+	discoverApps,
+	appGroup,
+	needsOnboarding,
+	configIncomplete,
+} from '../source/utils/workspace.js';
 
 function app(root: string, id: string, extra: Record<string, unknown> = {}) {
 	fs.mkdirSync(root, {recursive: true});
@@ -110,4 +115,25 @@ test('an MCPServer manifest is a known app type and an unknown type does not cra
 	t.is(appTypeOf(apps[0]!.manifest), 'mcp');
 	t.is(appTypeOf(apps[1]!.manifest), undefined);
 	t.is(getApiEndpoints('mcp').import, 'mcpServerImport');
+});
+
+test('onboarding fires for a bare workspace and not once the root is configured', t => {
+	const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-new-'));
+	fs.mkdirSync(path.join(bare, '.git'));
+	app(path.join(bare, 'webapps', 'one'), 'one');
+	t.true(needsOnboarding(bare, discoverApps(bare)));
+
+	const configured = workspace();
+	t.false(needsOnboarding(configured, discoverApps(configured)));
+
+	t.false(needsOnboarding(bare, []));
+});
+
+test('username is only required for basic auth', t => {
+	const site = {domain: 'a.example', siteName: 'Site'};
+	t.true(configIncomplete(site));
+	t.true(configIncomplete({...site, authMethod: 'basic'}));
+	t.false(configIncomplete({...site, username: 'me@x.se'}));
+	t.false(configIncomplete({...site, authMethod: 'oauth2'}));
+	t.false(configIncomplete({...site, authMethod: 'cookie'}));
 });

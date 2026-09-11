@@ -31,7 +31,8 @@ interface Field {
 	key: string;
 	label: string;
 	kind?: 'text' | 'method' | 'bool' | 'secret';
-	required?: boolean;
+	// `true` = always; a method name = required only for that auth method.
+	required?: boolean | Method;
 	when?: Method;
 	section?: string;
 	hint?: string;
@@ -44,8 +45,8 @@ interface Field {
 const FIELDS: Field[] = [
 	{
 		key: 'domain',
-		help: 'Domain of the development environment (USE or TSE) without https://, e.g. myorg-use.sitevision-cloud.se. Deploys and version lookups go here.',
-		label: 'Development domain',
+		help: "Domain of this environment's site (USE or TSE) without https://, e.g. myorg-use.sitevision-cloud.se. Deploys and version lookups go here.",
+		label: 'Domain',
 		required: true,
 	},
 	{
@@ -64,9 +65,9 @@ const FIELDS: Field[] = [
 	},
 	{
 		key: 'username',
-		help: 'Sitevision account used for deploys, usually your Sitevision Cloud e-mail. It needs DEVELOPER or MANAGE_ADDONS permission on the site.',
+		help: 'Sitevision account used for deploys, usually your Sitevision Cloud e-mail. It needs DEVELOPER or MANAGE_ADDONS permission on the site. Required for basic auth; with oauth2 or cookie it only labels the stored credential.',
 		label: 'Username',
-		required: true,
+		required: 'basic',
 	},
 	{
 		key: 'authMethod',
@@ -379,6 +380,7 @@ export function ConfigForm({
 	const [cursor, setCursor] = useState(0);
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState('');
+	const [caret, setCaret] = useState(0);
 	const [note, setNote] = useState('');
 
 	// Values always mirror the project; edits are committed field by field.
@@ -489,10 +491,18 @@ export function ConfigForm({
 					}
 				} else if (key.ctrl && input === 'o' && current.key === 'addonName') {
 					openPicker();
+				} else if (key.leftArrow) {
+					setCaret(Math.max(0, caret - 1));
+				} else if (key.rightArrow) {
+					setCaret(Math.min(draft.length, caret + 1));
 				} else if (key.backspace || key.delete) {
-					setDraft(d => d.slice(0, -1));
+					if (caret > 0) {
+						setDraft(draft.slice(0, caret - 1) + draft.slice(caret));
+						setCaret(caret - 1);
+					}
 				} else if (input && !key.ctrl && !key.meta) {
-					setDraft(d => d + input);
+					setDraft(draft.slice(0, caret) + input + draft.slice(caret));
+					setCaret(caret + input.length);
 				}
 
 				return;
@@ -505,7 +515,10 @@ export function ConfigForm({
 			} else if (key.ctrl && input === 'o' && current.key === 'addonName') {
 				openPicker();
 			} else if (key.return) {
-				setDraft(current.kind === 'secret' ? '' : (values[current.key] ?? ''));
+				const start =
+					current.kind === 'secret' ? '' : (values[current.key] ?? '');
+				setDraft(start);
+				setCaret(start.length);
 				setEditing(true);
 			}
 		},
@@ -513,7 +526,8 @@ export function ConfigForm({
 	);
 
 	const source = (f: Field): {text: string; color?: string} => {
-		if (f.required && !(values[f.key] ?? ''))
+		const required = f.required === true || f.required === method;
+		if (required && !(values[f.key] ?? ''))
 			return {text: t('✗ required'), color: 'red'};
 		if (f.kind === 'secret') {
 			return {text: storedSecret(project, f.key) ? t('keychain') : '—'};
@@ -573,11 +587,24 @@ export function ConfigForm({
 
 		const focused = active && f === current;
 		const typing = focused && editing;
-		// Keep the end of a long value (where the cursor is) visible while typing.
-		const tail = (text: string) =>
-			typing && text.length > valueWidth - 1
-				? `…${text.slice(-(valueWidth - 2))}`
-				: text;
+		// A value being typed into, scrolled so the caret stays in view and drawn
+		// with the caret as an inverted cell.
+		const withCaret = (text: string) => {
+			const max = Math.max(1, valueWidth - 1);
+			const start =
+				text.length > max
+					? Math.min(Math.max(0, caret - max + 1), text.length - max)
+					: 0;
+			const shown = text.slice(start, start + max);
+			const at = caret - start;
+			return (
+				<Text>
+					{shown.slice(0, at)}
+					<Text inverse>{shown[at] ?? ' '}</Text>
+					{shown.slice(at + 1)}
+				</Text>
+			);
+		};
 		let display: React.ReactNode;
 		if (f.kind === 'method' || f.kind === 'bool') {
 			const choices = options(f);
@@ -597,7 +624,7 @@ export function ConfigForm({
 			));
 		} else if (f.kind === 'secret') {
 			display = typing ? (
-				<Text>{tail('•'.repeat(draft.length))}</Text>
+				withCaret('•'.repeat(draft.length))
 			) : (
 				<Text dimColor>
 					{storedSecret(project, f.key)
@@ -608,11 +635,13 @@ export function ConfigForm({
 				</Text>
 			);
 		} else {
-			const value = typing ? draft : values[f.key]!;
-			display = value ? (
-				<Text>{tail(value)}</Text>
+			const value = values[f.key]!;
+			display = typing ? (
+				withCaret(draft)
+			) : value ? (
+				<Text>{value}</Text>
 			) : (
-				<Text dimColor>{typing ? '' : f.hint ? t(f.hint) : '—'}</Text>
+				<Text dimColor>{f.hint ? t(f.hint) : '—'}</Text>
 			);
 		}
 
@@ -627,10 +656,7 @@ export function ConfigForm({
 					{(focused ? '▸ ' : '  ') + t(f.label).padEnd(22)}
 				</Text>
 				<Box width={valueWidth} flexShrink={0}>
-					<Text wrap="truncate">
-						{display}
-						{typing && options(f).length === 0 && <Text inverse> </Text>}
-					</Text>
+					<Text wrap="truncate">{display}</Text>
 				</Box>
 				<Box width={SOURCE_WIDTH} flexShrink={0}>
 					<Text dimColor={!src.color} color={src.color} wrap="truncate">

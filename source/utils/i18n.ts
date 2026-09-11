@@ -183,7 +183,7 @@ const sv: Record<string, string> = {
 	'logged in': 'inloggad',
 	'credentials removed': 'uppgifter borttagna',
 	// Config form
-	'Development domain': 'Utvecklingsdomän',
+	Domain: 'Domän',
 	'Site name': 'Webbplatsnamn',
 	'Addon name': 'Tilläggsnamn',
 	Username: 'Användarnamn',
@@ -269,16 +269,18 @@ const sv: Record<string, string> = {
 	'config saved': 'konfig sparad',
 	' · shared .dev_properties.json at the root':
 		' · delad .dev_properties.json i roten',
+	' · new workspace: fill in once, every app inherits · Esc skips':
+		' · ny arbetsyta: fyll i en gång, alla appar ärver · Esc hoppar över',
 	'y confirm · n cancel': 'y bekräfta · n avbryt',
 	// Config help
-	'Domain of the development environment (USE or TSE) without https://, e.g. myorg-use.sitevision-cloud.se. Deploys and version lookups go here.':
-		'Domän för utvecklingsmiljön (USE eller TSE) utan https://, t.ex. myorg-use.sitevision-cloud.se. Driftsättningar och versionslistor går hit.',
+	"Domain of this environment's site (USE or TSE) without https://, e.g. myorg-use.sitevision-cloud.se. Deploys and version lookups go here.":
+		'Domän för den här miljöns webbplats (USE eller TSE) utan https://, t.ex. myorg-use.sitevision-cloud.se. Driftsättningar och versionslistor går hit.',
 	"Name of the site's root node in Sitevision, exactly as shown in the site tree. It becomes part of the REST API path.":
 		'Namnet på webbplatsens rotnod i Sitevision, exakt som i webbplatsträdet. Det blir en del av REST API-sökvägen.',
 	"Name of the addon (custom module) in the site's Addon Repository that this app is uploaded into. Ctrl+O lists the existing ones.":
 		'Namnet på tillägget (custom module) i webbplatsens tilläggsförråd som appen laddas upp till. Ctrl+O listar befintliga.',
-	'Sitevision account used for deploys, usually your Sitevision Cloud e-mail. It needs DEVELOPER or MANAGE_ADDONS permission on the site.':
-		'Sitevision-konto som används för driftsättning, oftast din Sitevision Cloud-e-post. Behöver DEVELOPER eller MANAGE_ADDONS på webbplatsen.',
+	'Sitevision account used for deploys, usually your Sitevision Cloud e-mail. It needs DEVELOPER or MANAGE_ADDONS permission on the site. Required for basic auth; with oauth2 or cookie it only labels the stored credential.':
+		'Sitevision-konto som används för driftsättning, oftast din Sitevision Cloud-e-post. Behöver DEVELOPER eller MANAGE_ADDONS på webbplatsen. Krävs för basic; med oauth2 eller cookie används det bara för att märka den sparade inloggningen.',
 	"How deploys authenticate: basic = username and password; oauth2 = bearer token from the site's OAuth2 provider (PKCE, opens a browser); cookie = reuse a browser SSO/SAML session.":
 		'Hur driftsättningar autentiseras: basic = användarnamn och lösenord; oauth2 = bearer-token från webbplatsens OAuth2-provider (PKCE, öppnar webbläsare); cookie = återanvänd en SSO/SAML-session från webbläsaren.',
 	'Deploy password for the account above. Stored in the OS keychain, never in a file. Leave empty to be asked on each run.':
