@@ -2,7 +2,7 @@ import http from 'http';
 import crypto from 'crypto';
 import {spawn} from 'child_process';
 import type {DevProperties, OAuth2Config} from '../types/index.js';
-import {makeRequest} from './sitevision-api.js';
+import {makeRequest, summarizeErrorBody} from './sitevision-api.js';
 import {
 	getOAuth2RefreshToken,
 	setOAuth2RefreshToken,
@@ -50,7 +50,7 @@ async function postToken(
 	config: OAuth2Config,
 	params: Record<string, string>,
 	secret?: string,
-): Promise<TokenResponse | null> {
+): Promise<{tokens?: TokenResponse; error?: string}> {
 	const body = Buffer.from(new URLSearchParams(params).toString());
 	try {
 		const response = await makeRequest(config.tokenEndpoint, {
@@ -63,10 +63,22 @@ async function postToken(
 			// client_secret_basic when confidential; public+PKCE clients omit it.
 			auth: secret ? {username: config.clientId, password: secret} : undefined,
 		});
-		if (response.statusCode !== 200) return null;
-		return JSON.parse(response.body.toString()) as TokenResponse;
-	} catch {
-		return null;
+		if (response.statusCode !== 200) {
+			return {
+				error: `Token endpoint returned ${response.statusCode}: ${summarizeErrorBody(
+					response.body,
+					response.headers,
+				)}`,
+			};
+		}
+
+		return {tokens: JSON.parse(response.body.toString()) as TokenResponse};
+	} catch (error) {
+		return {
+			error: `Token request failed: ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		};
 	}
 }
 
@@ -132,15 +144,62 @@ export function openBrowser(url: string): void {
  * that shuts the server down (freeing the port) if the login is cancelled — so
  * a retry doesn't hit an EADDRINUSE on the fixed redirect port.
  */
+interface LoopbackResult {
+	code?: string;
+	error?: string;
+}
+
+/**
+ * Turn a redirect's query params into a result, prioritizing the provider's own
+ * error (the most useful reason) over a generic "no code". Exported for testing.
+ */
+export function classifyRedirect(params: {
+	expectedState: string;
+	state: string | null;
+	error: string | null;
+	errorDescription: string | null;
+	code: string | null;
+}): LoopbackResult {
+	if (params.error) {
+		return {
+			error: `The OAuth2 provider rejected the login: ${
+				params.errorDescription
+					? `${params.error} — ${params.errorDescription}`
+					: params.error
+			}`,
+		};
+	}
+
+	if (params.state !== params.expectedState) {
+		return {
+			error:
+				'State mismatch — the login response did not match this request (a stale browser tab, or the wrong window).',
+		};
+	}
+
+	if (params.code) {
+		return {code: params.code};
+	}
+
+	return {error: 'No authorization code was returned by the provider.'};
+}
+
+function escapeHtml(text: string): string {
+	return text
+		.replaceAll('&', '&amp;')
+		.replaceAll('<', '&lt;')
+		.replaceAll('>', '&gt;');
+}
+
 function startLoopback(
 	port: number,
 	state: string,
-): {code: Promise<string | null>; close: () => void} {
-	let finish!: (code: string | null) => void;
+): {result: Promise<LoopbackResult>; close: (reason?: string) => void} {
+	let finish!: (result: LoopbackResult) => void;
 	let settled = false;
 
-	const code = new Promise<string | null>(resolve => {
-		finish = (value: string | null) => {
+	const result = new Promise<LoopbackResult>(resolve => {
+		finish = (value: LoopbackResult) => {
 			if (settled) return;
 			settled = true;
 			clearTimeout(timer);
@@ -156,22 +215,41 @@ function startLoopback(
 			return;
 		}
 
-		const ok = url.searchParams.get('state') === state;
-		const authCode = url.searchParams.get('code');
-		const message =
-			ok && authCode
-				? 'Login complete. You can close this window and return to the terminal.'
-				: 'Login failed. Check the terminal.';
+		const outcome = classifyRedirect({
+			expectedState: state,
+			state: url.searchParams.get('state'),
+			error: url.searchParams.get('error'),
+			errorDescription: url.searchParams.get('error_description'),
+			code: url.searchParams.get('code'),
+		});
+
+		const message = outcome.code
+			? 'Login complete. You can close this window and return to the terminal.'
+			: `Login failed: ${outcome.error}`;
 		res.writeHead(200, {'Content-Type': 'text/html'});
-		res.end(`<!doctype html><meta charset="utf-8"><p>${message}</p>`);
-		finish(ok ? authCode : null);
+		res.end(
+			`<!doctype html><meta charset="utf-8"><p>${escapeHtml(message)}</p>`,
+		);
+		finish(outcome);
 	});
 
-	const timer = setTimeout(() => finish(null), LOGIN_TIMEOUT_MS);
-	server.on('error', () => finish(null));
+	const timer = setTimeout(
+		() => finish({error: 'Timed out waiting for the login to complete.'}),
+		LOGIN_TIMEOUT_MS,
+	);
+	server.on('error', error =>
+		finish({
+			error: `Local login server error: ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		}),
+	);
 	server.listen(port, '127.0.0.1');
 
-	return {code, close: () => finish(null)};
+	return {
+		result,
+		close: (reason?: string) => finish({error: reason ?? 'Login cancelled.'}),
+	};
 }
 
 /**
@@ -182,7 +260,7 @@ function startLoopback(
  */
 export function beginOAuth2Login(dev: DevProperties): {
 	authUrl: string;
-	complete: () => Promise<string | null>;
+	complete: () => Promise<{token?: string; error?: string}>;
 	cancel: () => void;
 } | null {
 	const config = dev.oauth2;
@@ -208,28 +286,36 @@ export function beginOAuth2Login(dev: DevProperties): {
 
 	const loopback = startLoopback(port, state);
 
-	const complete = async (): Promise<string | null> => {
-		const code = await loopback.code;
-		if (!code) return null;
-		const tokens = await postToken(
+	const complete = async (): Promise<{token?: string; error?: string}> => {
+		const redirect = await loopback.result;
+		if (redirect.error || !redirect.code) {
+			return {error: redirect.error ?? 'Login failed.'};
+		}
+
+		const {tokens, error} = await postToken(
 			config,
 			{
 				grant_type: 'authorization_code',
-				code,
+				code: redirect.code,
 				redirect_uri: redirectUri,
 				client_id: config.clientId,
 				code_verifier: verifier,
 			},
 			secret,
 		);
-		if (!tokens?.access_token) return null;
+		if (error) return {error};
+		if (!tokens?.access_token) {
+			return {error: 'The token endpoint did not return an access token.'};
+		}
+
 		if (tokens.refresh_token) {
 			setOAuth2RefreshToken(domain, config.clientId, tokens.refresh_token);
 		}
-		return tokens.access_token;
+
+		return {token: tokens.access_token};
 	};
 
-	return {authUrl: url.href, complete, cancel: loopback.close};
+	return {authUrl: url.href, complete, cancel: () => loopback.close()};
 }
 
 /**
@@ -250,7 +336,7 @@ export async function resolveOAuth2AccessToken(
 	const storedRefresh = getOAuth2RefreshToken(domain, config.clientId);
 	if (!storedRefresh) return null;
 
-	const tokens = await postToken(
+	const {tokens} = await postToken(
 		config,
 		{
 			grant_type: 'refresh_token',

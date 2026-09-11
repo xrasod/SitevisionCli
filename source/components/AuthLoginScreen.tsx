@@ -57,12 +57,12 @@ export function AuthLoginScreen({
 				setAuthUrl(session.authUrl);
 				openBrowser(session.authUrl);
 				setPhase('awaiting');
-				const token = await session.complete();
+				const {token, error} = await session.complete();
 				cancelOAuthRef.current = null;
 				if (token) {
 					onComplete({accessToken: token});
 				} else {
-					onError('OAuth2 login failed, timed out, or was rejected.');
+					onError(error ?? 'OAuth2 login failed.');
 				}
 			} else {
 				const session = await beginCookieLogin(devProperties);

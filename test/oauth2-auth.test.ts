@@ -8,6 +8,7 @@ import test from 'ava';
 import {
 	createPkcePair,
 	discoverOAuth2Config,
+	classifyRedirect,
 } from '../source/utils/oauth2-auth.js';
 import {
 	configAuth,
@@ -151,4 +152,56 @@ test('discoverOAuth2Config returns null when the config is not published', async
 	server.close();
 
 	t.is(result, null);
+});
+
+test('classifyRedirect surfaces the provider error, then state, then missing code', t => {
+	const s = 'expected';
+
+	// Provider error wins, and includes the description.
+	t.regex(
+		classifyRedirect({
+			expectedState: s,
+			state: s,
+			error: 'invalid_scope',
+			errorDescription: 'scope all is not allowed',
+			code: null,
+		}).error ?? '',
+		/invalid_scope — scope all is not allowed/,
+	);
+
+	// State mismatch when there's no provider error.
+	t.regex(
+		classifyRedirect({
+			expectedState: s,
+			state: 'other',
+			error: null,
+			errorDescription: null,
+			code: 'abc',
+		}).error ?? '',
+		/State mismatch/,
+	);
+
+	// Success returns the code.
+	t.is(
+		classifyRedirect({
+			expectedState: s,
+			state: s,
+			error: null,
+			errorDescription: null,
+			code: 'abc',
+		}).code,
+		'abc',
+	);
+
+	// No code, no error.
+	t.regex(
+		classifyRedirect({
+			expectedState: s,
+			state: s,
+			error: null,
+			errorDescription: null,
+			code: null,
+		}).error ?? '',
+		/No authorization code/,
+	);
 });
