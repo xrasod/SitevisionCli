@@ -125,6 +125,28 @@ function readDevPropertiesFile(dir: string): Partial<DevProperties> | null {
 	}
 }
 
+/**
+ * The dev properties a workspace root defines (its own file merged over any
+ * ancestors'), with the deploy password resolved from the keychain like an
+ * app's would be. Used to edit shared config from the shell.
+ */
+export function readWorkspaceDevProperties(
+	root: string,
+): Partial<DevProperties> {
+	const merged = {
+		...readInheritedDevProperties(root),
+		...readDevPropertiesFile(root),
+	};
+	if (merged.domain && merged.username && !merged.password) {
+		merged.password =
+			process.env['SITEVISION_DEPLOY_PASSWORD'] ??
+			getDeployPassword(merged.domain, merged.username) ??
+			undefined;
+	}
+
+	return merged;
+}
+
 /** Dev properties inherited from ancestor directories only (no own file). */
 export function readInheritedDevProperties(
 	root: string,

@@ -36,10 +36,13 @@ places:
   the left navigator and per-app status dots (dependencies, config,
   package.json sync, signing).
 
-The right pane has four tabs: **Overview**, **Config**, **Versions** (the
-versions uploaded to the site, `a` activates one) and **Log** (streaming build
-and deploy output). Dev and watch keep running in the background while you
-navigate between apps.
+The right pane has four tabs: **Overview**, **Config** (the whole
+`.dev_properties.json` as one form, plus signing and keychain secrets; `Tab`
+moves between fields, `Enter` saves, `Ctrl+O` on the addon field picks an
+addon from the site's Addon Repository), **Versions** (the versions uploaded
+to the site, `a` activates one) and **Log** (streaming build and deploy
+output). Dev and watch keep running in the background while you navigate
+between apps.
 
 Single-letter keys drive everything; the bottom bar shows the ones that apply.
 `/` opens the command palette with every action, `Tab` switches between the

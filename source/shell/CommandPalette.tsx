@@ -46,15 +46,16 @@ export function CommandPalette({
 		}
 	});
 
-	const visible = Math.max(3, height - 5);
-	const start = Math.max(
-		0,
-		Math.min(index - visible + 1, ordered.length - visible),
-	);
+	// Rows available inside the box: borders (2), title, query, footer.
+	const maxRows = Math.max(3, height - 5);
 	const rows: ReactNode[] = [];
 	let lastGroup: string | undefined;
+	// Keep the selection visible: skip leading rows when it is far down.
+	let skip = 0;
+	while (index - skip + 1 + 3 > maxRows) skip += 1;
 	for (const [i, action] of ordered.entries()) {
-		if (i < start || i >= start + visible) continue;
+		if (i < skip) continue;
+		if (rows.length >= maxRows) break;
 		if (action.group !== lastGroup) {
 			rows.push(
 				<Text key={`g-${action.group}`} bold dimColor>
@@ -92,6 +93,7 @@ export function CommandPalette({
 			borderColor={ACCENT}
 			paddingX={1}
 			width={64}
+			height={rows.length + 5}
 		>
 			<Text>
 				<Text bold>Commands</Text>

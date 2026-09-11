@@ -5,6 +5,7 @@ import {createElement} from 'react';
 import test from 'ava';
 import {render} from 'ink-testing-library';
 import {WelcomeScreen} from './source/components/WelcomeScreen.js';
+import {AnimatedLogo} from './source/components/AnimatedLogo.js';
 import {AUTHOR} from './source/utils/branding.js';
 import {isFirstRun, markFirstRunComplete} from './source/utils/config.js';
 import type {ProjectInfo} from './source/types/index.js';
@@ -36,4 +37,13 @@ test('welcome screen renders the branding', t => {
 	t.true(frame.includes('a tool by'));
 	t.true(frame.includes(AUTHOR));
 	t.regex(frame, /Welcome to Sitevision CLI/);
+});
+
+test('animated startup logo credits the author', t => {
+	const {lastFrame} = render(
+		createElement(AnimatedLogo, {onDone: () => undefined}),
+	);
+	const frame = lastFrame() ?? '';
+	t.true(frame.includes('a tool by'));
+	t.true(frame.includes(AUTHOR));
 });

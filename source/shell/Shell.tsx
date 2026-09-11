@@ -3,9 +3,18 @@ import {useCallback, useEffect, useMemo, useReducer, useState} from 'react';
 import {Box, Text, useApp, useInput, useStdout} from 'ink';
 import Spinner from 'ink-spinner';
 import type {ProjectInfo, DevProperties} from '../types/index.js';
-import {detectProject, localizedText} from '../utils/project-detection.js';
+import {
+	detectProject,
+	getAppType,
+	localizedText,
+	readWorkspaceDevProperties,
+} from '../utils/project-detection.js';
 import {appGroup} from '../utils/workspace.js';
-import {listExecutables} from '../utils/sitevision-api.js';
+import {
+	listAddons,
+	listExecutables,
+	type AddonNode,
+} from '../utils/sitevision-api.js';
 import {
 	useTasks,
 	runningTasks,
@@ -15,14 +24,12 @@ import {
 } from '../utils/tasks.js';
 import {PasswordInput} from '../components/PasswordInput.js';
 import {AuthLoginScreen} from '../components/AuthLoginScreen.js';
-import {DevPropertiesForm} from '../components/DevPropertiesForm.js';
-import {SigningPropertiesForm} from '../components/SigningPropertiesForm.js';
 import {
 	TopBar,
 	Navigator,
 	NavigatorStrip,
 	BottomBar,
-	NAV_WIDTH,
+	navWidth,
 	NARROW_BELOW,
 	ACCENT,
 	type Hint,
@@ -31,12 +38,13 @@ import {
 	TabBar,
 	TABS,
 	Overview,
-	Config,
 	Versions,
 	Log,
 	type VersionsState,
 } from './Tabs.js';
 import {CommandPalette} from './CommandPalette.js';
+import {ConfigForm, type ConfigTarget} from './ConfigForm.js';
+import {AddonPicker} from './AddonPicker.js';
 import {
 	actionForKey,
 	authState,
@@ -44,7 +52,6 @@ import {
 	type Action,
 	type ActionContext,
 	type Credential,
-	type FormKind,
 	type Tab,
 } from './actions.js';
 
@@ -63,7 +70,7 @@ type Overlay =
 			resolve: (v: Credential | null) => void;
 	  }
 	| {kind: 'confirm'; message: string; resolve: (v: boolean) => void}
-	| {kind: 'form'; form: FormKind};
+	| {kind: 'picker'; resolve: (v: string | null) => void};
 
 interface Props {
 	apps: ProjectInfo[];
@@ -107,9 +114,25 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 	} | null>(null);
 	const [, tick] = useReducer((n: number) => n + 1, 0);
 
-	const project = apps[selected]!;
+	// In workspace mode the row after the last app is "Workspace settings".
+	const settings = Boolean(workspaceRoot) && selected === apps.length;
+	const project = apps[Math.min(selected, apps.length - 1)]!;
 	const single = !workspaceRoot;
+	const workspaceTarget = useMemo<ConfigTarget | undefined>(
+		() =>
+			workspaceRoot
+				? {
+						root: workspaceRoot,
+						devProperties: readWorkspaceDevProperties(workspaceRoot),
+						workspace: true,
+					}
+				: undefined,
+		// Re-read after any reload so saved values show up.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[workspaceRoot, apps],
+	);
 	const narrow = columns < NARROW_BELOW;
+	const sidebar = navWidth(columns);
 	const running = runningTasks();
 
 	// Re-render once a second while something runs so elapsed times move.
@@ -149,8 +172,16 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 			reload,
 			notify,
 			quit,
-			setTab,
-			openForm: form => setOverlay({kind: 'form', form}),
+			setTab(next) {
+				setTab(next);
+				setFocus('content');
+			},
+			openWorkspaceSettings: workspaceRoot
+				? () => {
+						setSelected(apps.length);
+						setFocus('content');
+					}
+				: undefined,
 			askPassword: (label, rememberLabel) =>
 				new Promise(resolve => {
 					setOverlay({kind: 'password', label, rememberLabel, resolve});
@@ -169,7 +200,7 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 					setOverlay({kind: 'confirm', message, resolve});
 				}),
 		}),
-		[project, reload, notify, quit],
+		[project, reload, notify, quit, workspaceRoot, apps.length],
 	);
 
 	const run = useCallback(
@@ -244,6 +275,20 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 		await fetchVersions();
 	}, [versions, project, versionRow, context, notify, fetchVersions]);
 
+	const formActive = (tab === 'config' || settings) && focus === 'content';
+	const [editing, setEditing] = useState(false);
+	const pickAddon = useCallback(
+		async () =>
+			new Promise<string | null>(resolve => {
+				setOverlay({kind: 'picker', resolve});
+			}),
+		[],
+	);
+	const loadAddons = useCallback(async () => {
+		const config = await resolveDeployConfig(context);
+		return config ? listAddons(config) : {error: 'No credentials.'};
+	}, [context]);
+
 	const appTasks = tasks.filter(t => t.appRoot === project.root);
 	const logTask: Task | undefined =
 		appTasks.find(t => t.status === 'running') ?? appTasks.at(-1);
@@ -289,9 +334,16 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 				return;
 			}
 
+			if (settings && focus === 'content') {
+				// Settings pane: the form owns everything but q and Tab/Esc above.
+				if (input === 'q') quit();
+				return;
+			}
+
 			if (focus === 'nav') {
-				if (key.upArrow) setSelected(s => (s > 0 ? s - 1 : apps.length - 1));
-				if (key.downArrow) setSelected(s => (s < apps.length - 1 ? s + 1 : 0));
+				const last = single ? apps.length - 1 : apps.length;
+				if (key.upArrow) setSelected(s => (s > 0 ? s - 1 : last));
+				if (key.downArrow) setSelected(s => (s < last ? s + 1 : 0));
 				if (key.return) setFocus('content');
 			} else if (tab === 'versions') {
 				const count = versions[project.root]?.executables?.length ?? 0;
@@ -313,7 +365,7 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 			const action = actionForKey(input);
 			if (action) run(action);
 		},
-		{isActive: overlay === null},
+		{isActive: overlay === null && !editing},
 	);
 
 	// Frame geometry: one row for Ink's trailing newline, top bar, bottom bar.
@@ -323,47 +375,82 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 	const groupOf = (app: ProjectInfo) =>
 		workspaceRoot ? appGroup(workspaceRoot, app.root) : '.';
 	const appName = localizedText(project.manifest.name) || project.manifest.id;
-	const contextLabel = workspaceRoot
-		? `workspace ▸ ${path.relative(workspaceRoot, project.root)} ▸ ${tab}`
-		: `${appName} ▸ ${tab}`;
+	const contextLabel = settings
+		? 'workspace ▸ settings'
+		: workspaceRoot
+			? `workspace ▸ ${path.relative(workspaceRoot, project.root)} ▸ ${tab}`
+			: `${appName} ▸ ${tab}`;
 
-	const hints: Hint[] = overlay
-		? [{key: 'Esc', label: 'cancel'}]
-		: tab === 'versions'
+	const settingsHints: Hint[] = editing
+		? [
+				{key: 'Enter', label: 'save'},
+				{key: 'Esc', label: 'cancel'},
+			]
+		: formActive
 			? [
-					{key: 'a', label: 'activate'},
-					{key: 'R', label: 'refresh'},
-					{key: 'p', label: 'deploy'},
-					{key: '/', label: 'commands'},
+					{key: '↑↓', label: 'field'},
+					{key: 'Enter', label: 'edit'},
+					{key: 'Esc', label: 'back'},
 					{key: 'q', label: 'quit'},
 				]
-			: tab === 'log'
+			: [
+					{key: 'Enter', label: 'edit settings'},
+					{key: '↑↓', label: 'apps'},
+					{key: 'q', label: 'quit'},
+				];
+	const hints: Hint[] = overlay
+		? [{key: 'Esc', label: 'cancel'}]
+		: settings
+			? settingsHints
+			: tab === 'versions'
 				? [
-						{key: 'f', label: 'follow'},
-						{key: 'x', label: 'wrap'},
-						{key: 'K', label: 'stop'},
+						{key: 'a', label: 'activate'},
+						{key: 'R', label: 'refresh'},
 						{key: 'p', label: 'deploy'},
 						{key: '/', label: 'commands'},
 						{key: 'q', label: 'quit'},
 					]
-				: tab === 'config'
+				: tab === 'log'
 					? [
-							{key: 'e', label: 'edit'},
-							{key: 'y', label: 'sync'},
-							{key: 'l', label: 'login'},
+							{key: 'f', label: 'follow'},
+							{key: 'x', label: 'wrap'},
+							{key: 'K', label: 'stop'},
+							{key: 'p', label: 'deploy'},
 							{key: '/', label: 'commands'},
 							{key: 'q', label: 'quit'},
 						]
-					: [
-							{key: 'd', label: 'dev'},
-							{key: 'w', label: 'watch'},
-							{key: 'b', label: 'build'},
-							{key: 's', label: 'sign'},
-							{key: 'p', label: 'deploy'},
-							{key: 'a', label: 'activate'},
-							{key: '/', label: 'commands'},
-							{key: 'q', label: 'quit'},
-						];
+					: tab === 'config'
+						? editing
+							? [
+									{key: 'Enter', label: 'save'},
+									{key: 'Esc', label: 'cancel'},
+								]
+							: formActive
+								? [
+										{key: '↑↓', label: 'field'},
+										{key: 'Enter', label: 'edit'},
+										{key: '^O', label: 'pick addon'},
+										{key: 'y', label: 'sync'},
+										{key: '/', label: 'commands'},
+										{key: 'q', label: 'quit'},
+									]
+								: [
+										{key: 'Tab', label: 'edit'},
+										{key: 'y', label: 'sync'},
+										{key: 'l', label: 'login'},
+										{key: '/', label: 'commands'},
+										{key: 'q', label: 'quit'},
+									]
+						: [
+								{key: 'd', label: 'dev'},
+								{key: 'w', label: 'watch'},
+								{key: 'b', label: 'build'},
+								{key: 's', label: 'sign'},
+								{key: 'p', label: 'deploy'},
+								{key: 'a', label: 'activate'},
+								{key: '/', label: 'commands'},
+								{key: 'q', label: 'quit'},
+							];
 
 	const right =
 		running.length > 0 ? (
@@ -395,16 +482,42 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 			project,
 			closeOverlay,
 			run,
-			reload,
 			notify,
+			loadAddons,
 			height: contentHeight,
 		})
+	) : settings && workspaceTarget ? (
+		<ConfigForm
+			key="workspace"
+			project={workspaceTarget}
+			active={formActive}
+			width={narrow ? columns : columns - sidebar}
+			pickAddon={async () => null}
+			onSaved={() => {
+				reload();
+				notify('workspace config saved', 'ok');
+			}}
+			onEditingChange={setEditing}
+		/>
 	) : (
 		<>
 			{tab === 'overview' && (
 				<Overview project={project} tasks={tasks} height={contentHeight} />
 			)}
-			{tab === 'config' && <Config project={project} />}
+			{tab === 'config' && (
+				<ConfigForm
+					key={project.root}
+					project={project}
+					active={formActive}
+					width={narrow ? columns : columns - sidebar}
+					pickAddon={pickAddon}
+					onSaved={() => {
+						reload();
+						notify('config saved', 'ok');
+					}}
+					onEditingChange={setEditing}
+				/>
+			)}
 			{tab === 'versions' && (
 				<Versions
 					project={project}
@@ -449,11 +562,13 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 						tasks={tasks}
 						height={mainHeight - 1}
 						single={single}
+						settingsSelected={settings}
+						width={sidebar}
 					/>
 				)}
 				<Box
 					flexDirection="column"
-					width={narrow ? columns : columns - NAV_WIDTH}
+					width={narrow ? columns : columns - sidebar}
 					overflow="hidden"
 				>
 					{narrow && !single && (
@@ -463,8 +578,17 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 							focused={focus === 'nav'}
 						/>
 					)}
-					<TabBar tab={tab} narrow={narrow} focused={focus === 'content'} />
-					<Box height={contentHeight} overflow="hidden">
+					{settings ? (
+						<Box paddingX={1}>
+							<Text bold color={ACCENT}>
+								Workspace settings
+							</Text>
+							<Text dimColor> · shared .dev_properties.json at the root</Text>
+						</Box>
+					) : (
+						<TabBar tab={tab} narrow={narrow} focused={focus === 'content'} />
+					)}
+					<Box height={contentHeight} overflow="hidden" alignItems="flex-start">
 						{content}
 					</Box>
 				</Box>
@@ -480,16 +604,12 @@ function renderOverlay(
 		project: ProjectInfo;
 		closeOverlay: () => void;
 		run: (action: Action) => void;
-		reload: () => void;
 		notify: (text: string, level?: 'info' | 'ok' | 'warn' | 'error') => void;
+		loadAddons: () => Promise<{addons?: AddonNode[]; error?: string}>;
 		height: number;
 	},
 ) {
-	const {project, closeOverlay, run, reload, notify, height} = env;
-	const done = () => {
-		closeOverlay();
-		reload();
-	};
+	const {project, closeOverlay, run, notify, loadAddons, height} = env;
 
 	switch (overlay.kind) {
 		case 'palette':
@@ -550,25 +670,22 @@ function renderOverlay(
 					}}
 				/>
 			);
-		case 'form':
-			if (overlay.form === 'signing') {
-				return (
-					<SigningPropertiesForm
-						projectRoot={project.root}
-						onComplete={done}
-						onCancel={closeOverlay}
-					/>
-				);
-			}
-
+		case 'picker':
 			return (
-				<DevPropertiesForm
-					projectRoot={project.root}
-					initialProperties={project.devProperties}
-					packageJson={project.packageJson}
-					authOnly={overlay.form === 'auth-method'}
-					onComplete={done}
-					onCancel={closeOverlay}
+				<AddonPicker
+					domain={project.devProperties?.domain ?? ''}
+					appType={getAppType(project.manifest)}
+					initialQuery={localizedText(project.manifest.name)}
+					load={loadAddons}
+					height={height}
+					onSelect={name => {
+						closeOverlay();
+						overlay.resolve(name);
+					}}
+					onClose={() => {
+						closeOverlay();
+						overlay.resolve(null);
+					}}
 				/>
 			);
 	}

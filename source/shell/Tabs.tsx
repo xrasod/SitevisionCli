@@ -5,7 +5,6 @@ import {
 	getAppType,
 	getPackageJsonSyncChanges,
 	localizedText,
-	type PackageJsonSyncChange,
 } from '../utils/project-detection.js';
 import {checkSitevisionScriptsCompatibility} from '../utils/sitevision-scripts-runner.js';
 import {type Task, type LogLine} from '../utils/tasks.js';
@@ -223,110 +222,6 @@ export function Overview({
 					))}
 				</Box>
 			)}
-		</Box>
-	);
-}
-
-export function Config({project}: {project: ProjectInfo}) {
-	const dev = project.devProperties;
-	const inherited = new Set(project.inheritedKeys);
-	const changes: PackageJsonSyncChange[] = dev
-		? getPackageJsonSyncChanges(project.root, dev)
-		: [];
-	const field = (
-		label: string,
-		key: string,
-		value: string | undefined,
-		bad = false,
-	) => (
-		<Text key={key} wrap="truncate">
-			<Text dimColor>{label.padEnd(22)}</Text>
-			<Text color={bad ? 'red' : undefined}>
-				{(value ?? '—').padEnd(34).slice(0, 34)}
-			</Text>
-			<Text dimColor>
-				{inherited.has(key) ? '↑ root' : value === undefined ? '' : 'local'}
-			</Text>
-		</Text>
-	);
-
-	if (!dev) {
-		return (
-			<Box paddingX={1} flexDirection="column">
-				<Text color="yellow">⚠ No dev properties for this app.</Text>
-				<Text dimColor>Press e to create .dev_properties.json.</Text>
-			</Box>
-		);
-	}
-
-	const method = dev.authMethod ?? 'basic';
-	return (
-		<Box flexDirection="column" paddingX={1} overflow="hidden">
-			<Text dimColor>
-				{'FIELD'.padEnd(22)}
-				{'VALUE'.padEnd(34)}SOURCE
-			</Text>
-			{field('Development domain', 'domain', dev.domain)}
-			{field('Site name', 'siteName', dev.siteName)}
-			{field('Addon name', 'addonName', dev.addonName)}
-			{field('Username', 'username', dev.username)}
-			{field('Auth method', 'authMethod', method)}
-			{method === 'basic' &&
-				field(
-					'Password',
-					'password',
-					dev.password ? '•••••••• keychain' : 'prompted at run',
-					!dev.password,
-				)}
-			{method === 'oauth2' &&
-				field('OAuth2 client id', 'oauth2', dev.oauth2?.clientId)}
-			{method === 'oauth2' &&
-				field('Token endpoint', 'oauth2', dev.oauth2?.tokenEndpoint)}
-			{method === 'cookie' &&
-				field(
-					'Login URL',
-					'sessionLoginUrl',
-					dev.sessionLoginUrl ?? `https://${dev.domain}/`,
-				)}
-			{field(
-				'Use HTTP',
-				'useHTTPForDevDeploy',
-				dev.useHTTPForDevDeploy ? 'yes' : 'no',
-			)}
-			<Box marginTop={1} flexDirection="column">
-				<Text bold dimColor>
-					SIGNING
-				</Text>
-				{field(
-					'Signing user',
-					'signingUsername',
-					dev.signingUsername,
-					!dev.signingUsername,
-				)}
-				{field('Certificate', 'certificateName', dev.certificateName)}
-			</Box>
-			<Box marginTop={1} flexDirection="column">
-				<Text bold dimColor>
-					PACKAGE.JSON SYNC{' '}
-					<Text color={changes.length > 0 ? 'yellow' : 'green'}>
-						{changes.length > 0
-							? `${changes.length} diff${changes.length === 1 ? '' : 's'}`
-							: 'in sync'}
-					</Text>
-				</Text>
-				{changes.map(c => (
-					<Text key={c.key} wrap="truncate">
-						<Text color={c.from === undefined ? 'green' : 'yellow'}>
-							{c.from === undefined ? '+ ' : '~ '}
-						</Text>
-						{c.key}: {c.from !== undefined && <Text dimColor>{c.from} → </Text>}
-						{c.to}
-					</Text>
-				))}
-			</Box>
-			<Box marginTop={1}>
-				<Text dimColor>e edit · y apply sync diffs · / set up signing</Text>
-			</Box>
 		</Box>
 	);
 }

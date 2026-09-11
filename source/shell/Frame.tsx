@@ -10,11 +10,12 @@ import {
 import {type Task} from '../utils/tasks.js';
 
 export const ACCENT = 'cyan';
-export const NAV_WIDTH = 32;
-// Row: marker(1) glyph(3) sp name sp version(6) sp dots(4) inside NAV_WIDTH - 2.
-const NAME_WIDTH = NAV_WIDTH - 2 - 17;
 export const NARROW_BELOW = 100;
 
+/** Navigator width for a terminal: a quarter of the columns, within 32..48. */
+export function navWidth(columns: number): number {
+	return Math.min(48, Math.max(32, Math.floor(columns / 4)));
+}
 export interface TopBarProps {
 	context: string;
 	domain?: string;
@@ -85,6 +86,9 @@ export interface NavigatorProps {
 	tasks: Task[];
 	height: number;
 	single: boolean;
+	// Workspace mode: `selected === apps.length` highlights the settings row.
+	settingsSelected?: boolean;
+	width: number;
 }
 
 export function Navigator({
@@ -95,28 +99,38 @@ export function Navigator({
 	tasks,
 	height,
 	single,
+	settingsSelected = false,
+	width,
 }: NavigatorProps) {
+	// Row: marker(1) glyph(3) sp name sp version(6) sp dots(4) inside the padding.
+	const nameWidth = width - 2 - 17;
+	const running = tasks.filter(t => t.status === 'running');
+	// Every row is exactly one line; nothing may shrink or the rows overlap.
 	const rows: ReactNode[] = [];
+	const rowApp: number[] = [];
 	let lastGroup: string | undefined;
 	for (const [index, app] of apps.entries()) {
 		const group = groupOf(app);
 		if (!single && group !== lastGroup) {
 			rows.push(
-				<Text key={`g-${group}`} dimColor>
-					{'  '}
-					{group}
-				</Text>,
+				<Box key={`g-${group}`} height={1} flexShrink={0}>
+					<Text dimColor wrap="truncate">
+						{'  '}
+						{group}
+					</Text>
+				</Box>,
 			);
+			rowApp.push(-1);
 			lastGroup = group;
 		}
 
+		rowApp.push(index);
+
 		const active = index === selected;
-		const running = tasks.some(
-			t => t.appRoot === app.root && t.status === 'running',
-		);
+		const busy = running.some(t => t.appRoot === app.root);
 		const name = localizedText(app.manifest.name) || app.manifest.id;
 		rows.push(
-			<Box key={app.root} width={NAV_WIDTH - 2} height={1}>
+			<Box key={app.root} width={width - 2} height={1} flexShrink={0}>
 				<Text
 					backgroundColor={active && focused ? ACCENT : undefined}
 					color={active && focused ? 'black' : undefined}
@@ -127,12 +141,12 @@ export function Navigator({
 					<Text dimColor={!active}>
 						{TYPE_GLYPH[getAppType(app.manifest)]}
 					</Text>{' '}
-					{name.padEnd(NAME_WIDTH).slice(0, NAME_WIDTH)}{' '}
+					{name.padEnd(nameWidth).slice(0, nameWidth)}{' '}
 					<Text dimColor>
 						{app.manifest.version.padStart(6).slice(0, 6)}
 					</Text>{' '}
 				</Text>
-				{running ? (
+				{busy ? (
 					<Text color={ACCENT}>
 						<Spinner type="dots" />
 					</Text>
@@ -143,11 +157,39 @@ export function Navigator({
 		);
 	}
 
-	const running = tasks.filter(t => t.status === 'running');
+	// Window the list so the selected app stays visible; the lines outside
+	// are summarised as "… n more".
+	const fixed =
+		1 + 1 + (single ? 0 : 2) + (running.length > 0 ? running.length + 2 : 0);
+	const avail = Math.max(3, height - fixed);
+	let shown = rows;
+	if (rows.length > avail) {
+		const target = settingsSelected
+			? rows.length - 1
+			: rowApp.indexOf(selected);
+		const start = Math.max(
+			0,
+			Math.min(target - Math.floor(avail / 2), rows.length - avail),
+		);
+		const end = start + avail;
+		shown = rows.slice(start, end);
+		const more = (n: number, arrow: string) => (
+			<Box key={`more-${arrow}`} height={1} flexShrink={0}>
+				<Text dimColor>
+					{'  '}
+					{arrow} {n} more
+				</Text>
+			</Box>
+		);
+		if (start > 0) shown[0] = more(start, '↑');
+		if (end < rows.length)
+			shown[shown.length - 1] = more(rows.length - end, '↓');
+	}
+
 	return (
 		<Box
 			flexDirection="column"
-			width={NAV_WIDTH}
+			width={width}
 			height={height}
 			borderStyle="single"
 			borderDimColor
@@ -162,8 +204,20 @@ export function Navigator({
 					? 'APP'
 					: `WORKSPACE ${apps.length} app${apps.length === 1 ? '' : 's'}`}
 			</Text>
-			{rows}
+			{shown}
 			<Text dimColor>{'  deps·config·sync·signing'}</Text>
+			{!single && (
+				<Box marginTop={1}>
+					<Text
+						backgroundColor={settingsSelected && focused ? ACCENT : undefined}
+						color={settingsSelected && focused ? 'black' : undefined}
+						bold={settingsSelected}
+					>
+						{settingsSelected ? '▎' : ' '}⚙ Workspace settings
+					</Text>
+					<Text dimColor> ,</Text>
+				</Box>
+			)}
 			{running.length > 0 && (
 				<Box flexDirection="column" marginTop={1}>
 					<Text bold dimColor>

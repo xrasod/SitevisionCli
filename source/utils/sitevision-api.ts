@@ -26,6 +26,7 @@ import type {
 import {
 	buildImportEndpointUrl,
 	buildAddonEndpointUrl,
+	buildApiBaseUrl,
 } from './project-detection.js';
 
 // =============================================================================
@@ -792,6 +793,59 @@ export async function listExecutables(
 		return {
 			success: false,
 			error: `Listing versions failed: ${error instanceof Error ? error.message : String(error)}`,
+		};
+	}
+}
+
+export interface AddonNode {
+	id: string;
+	name: string;
+	type: string;
+	appType?: SimpleAppType;
+}
+
+const ADDON_TYPES: Record<string, SimpleAppType> = {
+	'sv:customModule': 'web',
+	'sv:marketplaceCustomModule': 'web',
+	'sv:widgetCustomModule': 'widget',
+	'sv:marketplaceWidgetCustomModule': 'widget',
+	'sv:headlessCustomModule': 'rest',
+	'sv:marketplaceHeadlessCustomModule': 'rest',
+};
+
+/**
+ * List the addons (custom modules) in the site's Addon Repository.
+ */
+export async function listAddons(
+	config: DeployConfig,
+): Promise<{success: boolean; addons?: AddonNode[]; error?: string}> {
+	const url = `${buildApiBaseUrl(config.domain, config.siteName, config.useHTTP)}/Addon%20Repository/nodes`;
+	const {auth, kind} = configAuth(config);
+
+	try {
+		const response = await makeRequest(url, {method: 'GET', auth});
+		if (response.statusCode === 401) {
+			return {success: false, error: unauthorizedMessage(kind)};
+		}
+
+		if (response.statusCode !== 200) {
+			return {
+				success: false,
+				error: `Listing addons failed with status ${response.statusCode}: ${summarizeErrorBody(response.body, response.headers)}`,
+			};
+		}
+
+		const nodes = JSON.parse(response.body.toString()) as AddonNode[];
+		return {
+			success: true,
+			addons: nodes
+				.filter(node => Object.hasOwn(ADDON_TYPES, node.type))
+				.map(node => ({...node, appType: ADDON_TYPES[node.type]})),
+		};
+	} catch (error) {
+		return {
+			success: false,
+			error: `Listing addons failed: ${error instanceof Error ? error.message : String(error)}`,
 		};
 	}
 }

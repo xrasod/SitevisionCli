@@ -21,7 +21,14 @@ import {
 	setLastSeenVersion,
 } from './utils/config.js';
 import {WelcomeScreen} from './components/WelcomeScreen.js';
-import {printBranding} from './utils/branding.js';
+import {AnimatedLogo} from './components/AnimatedLogo.js';
+import {
+	printBranding,
+	BIG_LOGO,
+	BIG_LOGO_WIDTH,
+	SMALL_LOGO,
+	SMALL_LOGO_WIDTH,
+} from './utils/branding.js';
 
 const pkg = JSON.parse(
 	readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
@@ -132,14 +139,42 @@ function fail(message: string, hint: string): never {
 	process.exit(1);
 }
 
+// Pick the widest wordmark that fits the terminal, or undefined if even the
+// compact one would wrap.
+function pickIntroArt(columns: number): string[] | undefined {
+	if (columns >= BIG_LOGO_WIDTH) return BIG_LOGO;
+	if (columns >= SMALL_LOGO_WIDTH) return SMALL_LOGO;
+	return undefined;
+}
+
+// Play the one-shot animated wordmark and resolve once it finishes.
+async function playIntro(art: string[]): Promise<void> {
+	await new Promise<void>(resolve => {
+		const app = render(<AnimatedLogo art={art} onDone={() => app.unmount()} />);
+		app.waitUntilExit().then(
+			() => resolve(),
+			() => resolve(),
+		);
+	});
+}
+
 // Run the full-screen shell on the alternate screen buffer so the scrollback
-// is untouched, and restore it on exit.
+// is untouched, and restore it on exit. The animated wordmark plays first,
+// inside the same buffer, when the terminal is wide enough for it.
 async function runShell(apps: ProjectInfo[], workspaceRoot?: string) {
 	process.stdout.write('\x1b[?1049h\x1b[H');
-	const app = render(
-		<Shell apps={apps} workspaceRoot={workspaceRoot} version={pkg.version} />,
-	);
 	try {
+		const art = process.stdin.isTTY
+			? pickIntroArt(process.stdout.columns ?? 0)
+			: undefined;
+		if (art) {
+			await playIntro(art);
+			process.stdout.write('\x1b[2J\x1b[H');
+		}
+
+		const app = render(
+			<Shell apps={apps} workspaceRoot={workspaceRoot} version={pkg.version} />,
+		);
 		await app.waitUntilExit();
 	} finally {
 		process.stdout.write('\x1b[?1049l');
