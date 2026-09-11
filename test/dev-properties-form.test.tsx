@@ -70,6 +70,53 @@ test('pressing Enter on the final step writes the file with useHTTP=false', asyn
 	t.is(written['username'], 'user@example.com');
 });
 
+test('authOnly mode switches the method and keeps the rest of the config', async t => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-devprops-'));
+	let completed = false;
+
+	const {stdin} = render(
+		<DevPropertiesForm
+			projectRoot={root}
+			authOnly
+			initialProperties={{
+				domain: 'dev.example.com',
+				siteName: 'MySite',
+				addonName: 'MyAddon',
+				username: 'user@example.com',
+				authMethod: 'basic',
+			}}
+			packageJson={{}}
+			onComplete={() => {
+				completed = true;
+			}}
+			onCancel={() => {}}
+		/>,
+	);
+
+	// Auth-method select starts on basic; arrow down twice to cookie, then Enter.
+	stdin.write('\u001B[B');
+	await delay(15);
+	stdin.write('\u001B[B');
+	await delay(15);
+	stdin.write('\r');
+	await delay(15);
+	// Cookie's only step is the login URL — accept the default.
+	stdin.write('\r');
+	await delay(50);
+
+	const written = JSON.parse(
+		fs.readFileSync(path.join(root, '.dev_properties.json'), 'utf8'),
+	) as Record<string, unknown>;
+
+	t.true(completed);
+	t.is(written['authMethod'], 'cookie');
+	// The non-auth config is preserved, not blanked.
+	t.is(written['domain'], 'dev.example.com');
+	t.is(written['siteName'], 'MySite');
+	t.is(written['addonName'], 'MyAddon');
+	t.is(written['username'], 'user@example.com');
+});
+
 test('answering the final step explicitly writes the file', async t => {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-devprops-'));
 

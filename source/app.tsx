@@ -3,6 +3,7 @@ import {type ProjectInfo, detectProject} from './utils/project-detection.js';
 import {MainMenu} from './components/MainMenu.js';
 import {InfoScreen} from './components/InfoScreen.js';
 import {SetupFlow} from './components/SetupFlow.js';
+import {DevPropertiesForm} from './components/DevPropertiesForm.js';
 import {PasswordInput} from './components/PasswordInput.js';
 import {KeychainPasswordChoice} from './components/KeychainPasswordChoice.js';
 import {decideSigningStep} from './utils/signing-step.js';
@@ -36,7 +37,8 @@ type AppState =
 	| 'build'
 	| 'deploy'
 	| 'sign'
-	| 'setup-signing';
+	| 'setup-signing'
+	| 'change-auth-method';
 
 export default function App({project: initialProject}: Props) {
 	// The project is loaded once at startup, but setup flows write new values to
@@ -172,6 +174,16 @@ export default function App({project: initialProject}: Props) {
 			case 'setup-signing':
 				setState('setup-signing');
 				break;
+			case 'change-auth':
+				if (!project.hasDevProperties || !project.devProperties) {
+					console.log(
+						'\x1b[31mDevelopment properties not configured. Create a .dev_properties.json file first.\x1b[0m',
+					);
+					return;
+				}
+
+				setState('change-auth-method');
+				break;
 			case 'dev':
 				if (!project.hasDevProperties || !project.devProperties) {
 					console.log(
@@ -271,6 +283,22 @@ export default function App({project: initialProject}: Props) {
 				break;
 		}
 	};
+
+	if (state === 'change-auth-method') {
+		return (
+			<DevPropertiesForm
+				projectRoot={project.root}
+				initialProperties={project.devProperties}
+				packageJson={project.packageJson}
+				authOnly
+				onComplete={() => {
+					reloadProject();
+					setState('menu');
+				}}
+				onCancel={() => setState('menu')}
+			/>
+		);
+	}
 
 	if (state === 'setup') {
 		return (
@@ -440,6 +468,7 @@ export default function App({project: initialProject}: Props) {
 					if (project.devProperties) project.devProperties.password = undefined;
 					setState('dev-password-input');
 				}}
+				onChangeAuthMethod={() => setState('change-auth-method')}
 			/>
 		);
 	}

@@ -10,7 +10,11 @@ import {
 } from '../utils/project-detection.js';
 import {zipExists} from '../utils/zip.js';
 import {promptPassword, promptYesNo} from '../utils/password-prompt.js';
-import {setDeployPassword, deleteSessionCookie} from '../utils/keychain.js';
+import {
+	setDeployPassword,
+	deleteSessionCookie,
+	deleteOAuth2RefreshToken,
+} from '../utils/keychain.js';
 import {resolveOAuth2AccessToken} from '../utils/oauth2-auth.js';
 import {AuthLoginScreen} from '../components/AuthLoginScreen.js';
 import type {
@@ -30,6 +34,7 @@ interface DeployScreenProps {
 	activate: boolean;
 	onBack?: () => void;
 	onRetryCredentials?: () => void;
+	onChangeAuthMethod?: () => void;
 }
 
 type DeployStatus = 'deploying' | 'success' | 'error';
@@ -50,6 +55,7 @@ export function DeployScreen({
 	activate,
 	onBack,
 	onRetryCredentials,
+	onChangeAuthMethod,
 }: DeployScreenProps) {
 	const [state, setState] = React.useState<DeployState>({
 		status: 'deploying',
@@ -68,20 +74,61 @@ export function DeployScreen({
 	});
 	const deployStartedRef = React.useRef(false);
 
+	const authMethod = devProperties.authMethod ?? 'basic';
+	// OAuth2 and cookie can re-authenticate in-place; basic re-prompts via the
+	// parent (TUI password entry).
+	const canRelogin = authMethod === 'oauth2' || authMethod === 'cookie';
+
+	// Discard the stored credential and force a fresh login. This is the
+	// "retry with new credentials" action for token/cookie auth — the usual fix
+	// when a session/token has expired (Sitevision reports that as a 400, not a
+	// 401, so it isn't auto-cleared).
+	const retryWithFreshLogin = () => {
+		const {domain, username} = devProperties;
+		if (authMethod === 'cookie' && domain && username) {
+			deleteSessionCookie(domain, username);
+			devProperties.sessionCookie = undefined;
+		} else if (
+			authMethod === 'oauth2' &&
+			domain &&
+			devProperties.oauth2?.clientId
+		) {
+			deleteOAuth2RefreshToken(domain, devProperties.oauth2.clientId);
+			devProperties.accessToken = undefined;
+		}
+
+		setCredential({});
+		deployStartedRef.current = false;
+		setState({
+			status: 'deploying',
+			message: production
+				? 'Deploying to production...'
+				: 'Deploying to dev...',
+		});
+		setPhase('login');
+	};
+
 	useInput((input, key) => {
 		if (state.status !== 'deploying') {
 			if (onBack && (key.escape || input === 'q')) {
 				onBack();
 			}
-			if (onRetryCredentials && state.status === 'error' && input === 'r') {
-				onRetryCredentials();
+			if (state.status === 'error' && input === 'r') {
+				if (canRelogin) {
+					retryWithFreshLogin();
+				} else if (onRetryCredentials) {
+					onRetryCredentials();
+				}
+			}
+
+			if (state.status === 'error' && input === 'm' && onChangeAuthMethod) {
+				onChangeAuthMethod();
 			}
 		}
 	});
 
 	// Decide once whether we can deploy straight away or must log in first.
 	React.useEffect(() => {
-		const authMethod = devProperties.authMethod ?? 'basic';
 		if (authMethod === 'basic' || devProperties.sessionCookie) {
 			setPhase('deploy');
 			return;
@@ -122,7 +169,6 @@ export function DeployScreen({
 		async function runDeploy() {
 			try {
 				const appType = getAppType(manifest);
-				const authMethod = devProperties.authMethod ?? 'basic';
 				// Credential resolved in the init effect / login screen.
 				const {accessToken, sessionCookie} = credential;
 
@@ -295,13 +341,25 @@ export function DeployScreen({
 			{state.status === 'error' && state.error && (
 				<Box flexDirection="column" marginTop={1}>
 					<Text color="red">{state.error}</Text>
+					{canRelogin && (
+						<Text color="yellow">
+							This can happen when your session or token has expired — log in
+							again to get fresh credentials.
+						</Text>
+					)}
 				</Box>
 			)}
 
 			{state.status !== 'deploying' && (
 				<Box marginTop={1} flexDirection="column">
-					{state.status === 'error' && onRetryCredentials && (
+					{state.status === 'error' && canRelogin && (
+						<Text dimColor>Press r to log in again with fresh credentials</Text>
+					)}
+					{state.status === 'error' && !canRelogin && onRetryCredentials && (
 						<Text dimColor>Press r to retry with new credentials</Text>
+					)}
+					{state.status === 'error' && onChangeAuthMethod && (
+						<Text dimColor>Press m to change auth method</Text>
 					)}
 					{onBack && <Text dimColor>Press q or Esc to return to menu</Text>}
 				</Box>

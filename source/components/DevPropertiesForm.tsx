@@ -14,6 +14,9 @@ interface Props {
 	projectRoot: string;
 	initialProperties?: DevProperties;
 	packageJson: PackageJson;
+	// When true, only walk the auth-method steps and keep the rest of the config
+	// (domain, site, addon, username, useHTTP) from initialProperties.
+	authOnly?: boolean;
 	onComplete: () => void;
 	onCancel: () => void;
 }
@@ -77,6 +80,7 @@ export function DevPropertiesForm({
 	projectRoot,
 	initialProperties,
 	packageJson,
+	authOnly,
 	onComplete,
 	onCancel,
 }: Props) {
@@ -113,15 +117,17 @@ export function DevPropertiesForm({
 			: method === 'cookie'
 				? ['sessionLoginUrl']
 				: ['password'];
-	const steps: Step[] = [
-		'domain',
-		'siteName',
-		'addonName',
-		'username',
-		'authMethod',
-		...methodSteps,
-		'useHTTP',
-	];
+	const steps: Step[] = authOnly
+		? ['authMethod', ...methodSteps]
+		: [
+				'domain',
+				'siteName',
+				'addonName',
+				'username',
+				'authMethod',
+				...methodSteps,
+				'useHTTP',
+			];
 
 	const currentStep = steps[stepIndex];
 	const redirectPort =

@@ -65,6 +65,11 @@ export function MainMenu({project, onSelect}: Props) {
 			description: 'Deploy to production server',
 		},
 		{
+			label: '🔑 Auth Method',
+			value: 'change-auth',
+			description: 'Change the deploy authentication method',
+		},
+		{
 			label: 'ℹ️  Info',
 			value: 'info',
 			description: 'Show project information',
