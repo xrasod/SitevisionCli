@@ -141,6 +141,8 @@ export interface ProjectInfo {
 	hasSigningProperties: boolean;
 	hasLegacyPassword: boolean;
 	devProperties?: DevProperties;
+	// Keys of devProperties that come from an ancestor .dev_properties.json.
+	inheritedKeys: string[];
 	packageJson: PackageJson;
 	hasSitevisionScripts: boolean;
 	hasNodeModules: boolean;

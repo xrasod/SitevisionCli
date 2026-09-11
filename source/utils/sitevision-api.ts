@@ -737,6 +737,65 @@ export async function activateApp(
 	}
 }
 
+/**
+ * A version uploaded to a custom module, as reported by the
+ * ActivateCustomModuleExecutable GET endpoint.
+ */
+export interface Executable {
+	id: string;
+	name: string;
+	appIdentifier: string;
+	appVersion: string;
+	active: boolean;
+}
+
+export interface ListExecutablesResponse {
+	success: boolean;
+	executables?: Executable[];
+	error?: string;
+	authExpired?: boolean;
+}
+
+/**
+ * List the executables (uploaded versions) of the configured addon.
+ */
+export async function listExecutables(
+	config: DeployConfig,
+): Promise<ListExecutablesResponse> {
+	const protocol = config.useHTTP ? 'http' : 'https';
+	const url = `${protocol}://${config.domain}/rest-api/1/0/${encodeURIComponent(config.siteName)}/Addon%20Repository/${encodeURIComponent(config.addonName)}/activateCustomModuleExecutable`;
+	const {auth, kind} = configAuth(config);
+
+	try {
+		const response = await makeRequest(url, {method: 'GET', auth});
+
+		if (response.statusCode === 401) {
+			return {
+				success: false,
+				error: unauthorizedMessage(kind),
+				authExpired: true,
+			};
+		}
+
+		if (response.statusCode !== 200) {
+			return {
+				success: false,
+				error: `Listing versions failed with status ${response.statusCode}: ${summarizeErrorBody(response.body, response.headers)}`,
+			};
+		}
+
+		const data = JSON.parse(response.body.toString()) as {
+			executables?: Executable[];
+		};
+		return {success: true, executables: data.executables ?? []};
+	} catch (error) {
+		return {
+			success: false,
+			error: `Listing versions failed: ${error instanceof Error ? error.message : String(error)}`,
+		};
+	}
+}
+
 // =============================================================================
 // HELPER EXPORTS
 // =============================================================================

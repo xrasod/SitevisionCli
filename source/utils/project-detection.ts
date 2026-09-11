@@ -96,6 +96,47 @@ export function getDefaultDevPropertiesPath(root: string): string {
 	return path.join(root, '.dev_properties.json');
 }
 
+/**
+ * Ancestor directories of `root` (outermost first) up to and including the
+ * nearest one containing `.git`, or the filesystem root. Each may carry a
+ * `.dev_properties.json` whose values the app inherits (nearest wins).
+ */
+function ancestorDirs(root: string): string[] {
+	const dirs: string[] = [];
+	let dir = path.dirname(root);
+	while (true) {
+		dirs.unshift(dir);
+		if (fs.existsSync(path.join(dir, '.git'))) break;
+		const parent = path.dirname(dir);
+		if (parent === dir) break;
+		dir = parent;
+	}
+
+	return dirs;
+}
+
+function readDevPropertiesFile(dir: string): Partial<DevProperties> | null {
+	const file = findDevPropertiesPath(dir);
+	if (!file) return null;
+	try {
+		return JSON.parse(fs.readFileSync(file, 'utf-8')) as Partial<DevProperties>;
+	} catch {
+		return null;
+	}
+}
+
+/** Dev properties inherited from ancestor directories only (no own file). */
+export function readInheritedDevProperties(
+	root: string,
+): Partial<DevProperties> {
+	let merged: Partial<DevProperties> = {};
+	for (const dir of ancestorDirs(root)) {
+		merged = {...merged, ...readDevPropertiesFile(dir)};
+	}
+
+	return merged;
+}
+
 // =============================================================================
 // APP ID UTILITIES
 // =============================================================================
@@ -315,18 +356,23 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
 		const nodeModulesPath = path.join(cwd, 'node_modules');
 		const hasNodeModules = fs.existsSync(nodeModulesPath);
 
-		// Check for dev properties
+		// Dev properties: ancestor files (workspace root) merged under the app's
+		// own file, so shared site/auth config lives once at the repo root.
 		const devPropertiesPath = findDevPropertiesPath(cwd);
+		const inherited = readInheritedDevProperties(cwd);
+		const own = devPropertiesPath ? readDevPropertiesFile(cwd) : null;
+		const inheritedKeys = Object.keys(inherited).filter(
+			key => !own || !Object.hasOwn(own, key),
+		);
 		let devProperties: DevProperties | undefined;
-		let hasDevProperties = false;
+		const hasDevProperties = Boolean(own) || inheritedKeys.length > 0;
 		let hasLegacyPassword = false;
 
-		if (devPropertiesPath) {
-			hasDevProperties = true;
+		if (hasDevProperties) {
 			try {
-				const parsed = JSON.parse(
-					fs.readFileSync(devPropertiesPath, 'utf-8'),
-				) as DevProperties & {password?: string};
+				const parsed = {...inherited, ...own} as DevProperties & {
+					password?: string;
+				};
 				hasLegacyPassword =
 					typeof parsed.password === 'string' && parsed.password.length > 0;
 				devProperties = parsed;
@@ -391,6 +437,7 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
 			hasSigningProperties,
 			hasLegacyPassword,
 			devProperties,
+			inheritedKeys,
 			packageJson,
 			hasSitevisionScripts,
 			hasNodeModules,
@@ -484,7 +531,19 @@ export function writeDevProperties(
 		sessionCookie: _sessionCookie,
 		...persisted
 	} = properties;
-	fs.writeFileSync(devPropertiesPath, JSON.stringify(persisted, null, 2));
+	// Keep the app file minimal: values identical to the inherited ones stay
+	// at the workspace root instead of being copied into every app.
+	const inherited: Record<string, unknown> =
+		readInheritedDevProperties(projectRoot);
+	const own = Object.fromEntries(
+		Object.entries(persisted).filter(
+			([key, value]) =>
+				!Object.hasOwn(inherited, key) ||
+				JSON.stringify(inherited[key]) !== JSON.stringify(value),
+		),
+	);
+
+	fs.writeFileSync(devPropertiesPath, JSON.stringify(own, null, 2));
 }
 
 // =============================================================================

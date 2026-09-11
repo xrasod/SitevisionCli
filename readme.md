@@ -25,33 +25,44 @@ npm install --global sitevision-cli
 
 The CLI must be run inside a Sitevision project directory (containing a `manifest.json`).
 
-### Interactive Mode
+### Interactive shell
 
-Simply run `svc` to launch the interactive menu:
+Run `svc` with no arguments to open the full-screen shell. It works in two
+places:
 
-```bash
-svc
-```
+- **Inside an app** (a directory with `manifest.json`): single-app mode.
+- **At the root of a repo** that contains apps in subfolders such as
+  `webapps/*`, `restapps/*` or `widgets/*`: workspace mode, with every app in
+  the left navigator and per-app status dots (dependencies, config,
+  package.json sync, signing).
 
-On first run (or if setup is incomplete), the CLI will:
+The right pane has four tabs: **Overview**, **Config**, **Versions** (the
+versions uploaded to the site, `a` activates one) and **Log** (streaming build
+and deploy output). Dev and watch keep running in the background while you
+navigate between apps.
 
-1. Check if `node_modules` exists and offer to run `npm install` if missing
-2. Check if dev properties are configured and offer to set them up if missing
-3. Check if you have setup signing credentials and offer to do so if missing
-4. Display project information
-5. Show the main menu
+Single-letter keys drive everything; the bottom bar shows the ones that apply.
+`/` opens the command palette with every action, `Tab` switches between the
+navigator and the content pane, `1`–`4` pick a tab, `q` quits.
 
-Use arrow keys to navigate and Enter to select:
+| Key             | Action                                                            |
+| --------------- | ----------------------------------------------------------------- |
+| `d` / `w`       | Dev (build, sign, deploy on change) / Watch (build and sign only) |
+| `b` / `s`       | Build / Sign                                                      |
+| `p` / `P`       | Deploy to dev / force deploy                                      |
+| `a`             | Versions tab: list and activate remote versions                   |
+| `e` / `y` / `l` | Edit dev properties / apply package.json sync / log in            |
+| `K`             | Stop the running task for the selected app                        |
 
-- **Dev** - Start development server with watch mode
-- **Dev (Signed)** - Development with automatic signing before each deploy
-- **Build** - Build a dist bundle
-- **Sign** - Sign built dist bundle
-- **Deploy** - Deploy to configured development environment
-- **Deploy (Force)** - Force deploy (overwrite existing)
-- **Deploy Production** - Deploy signed app to configured production environment
-- **Info** - Show project info
-- **Exit**
+### Shared configuration in a workspace
+
+`.dev_properties.json` is resolved by merging every ancestor directory's file
+(up to the repo root) under the app's own file, nearest wins. Put the shared
+fields (`domain`, `siteName`, `username`, `authMethod`, `oauth2`,
+`signingUsername`, ...) once at the repo root and keep only `addonName` in each
+app. The Config tab marks inherited values with `↑ root`, and saving an app's
+config never copies inherited values into the app file. Keychain entries are
+keyed by domain and username, so one login covers every app on the site.
 
 ### Direct Commands
 

@@ -3,12 +3,15 @@ import {render} from 'ink';
 import {Text, Box} from 'ink';
 import meow from 'meow';
 import {readFileSync} from 'node:fs';
-import App from './app.js';
+import {Shell} from './shell/Shell.js';
 import {getCommand} from './commands/index.js';
 import {
 	requireProject,
+	detectProject,
 	migrateLegacyPassword,
+	type ProjectInfo,
 } from './utils/project-detection.js';
+import {discoverApps} from './utils/workspace.js';
 import {promptYesNo} from './utils/password-prompt.js';
 import {checkForUpdate} from './utils/version-check.js';
 import {
@@ -18,14 +21,7 @@ import {
 	setLastSeenVersion,
 } from './utils/config.js';
 import {WelcomeScreen} from './components/WelcomeScreen.js';
-import {AnimatedLogo} from './components/AnimatedLogo.js';
-import {
-	printBranding,
-	BIG_LOGO,
-	BIG_LOGO_WIDTH,
-	SMALL_LOGO,
-	SMALL_LOGO_WIDTH,
-} from './utils/branding.js';
+import {printBranding} from './utils/branding.js';
 
 const pkg = JSON.parse(
 	readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
@@ -34,7 +30,7 @@ const pkg = JSON.parse(
 const cli = meow(
 	`
 	Usage
-	  $ svc                    Start interactive menu
+	  $ svc                    Open the interactive shell (app or workspace)
 	  $ svc <command> [options]
 
 	Commands
@@ -50,7 +46,7 @@ const cli = meow(
 	  --version     Show version number
 
 	Examples
-	  $ svc                     # Interactive menu
+	  $ svc                     # Shell: run inside an app, or at the repo root
 	  $ svc dev
 	  $ svc dev --signed
 	  $ svc watch
@@ -126,23 +122,28 @@ function printMasthead(version: string): void {
 	console.log(`${CYAN}╰${border}╯${RESET}`);
 }
 
-// Pick the widest wordmark that fits the terminal, or undefined if even the
-// compact one would wrap (caller then falls back to the static masthead).
-function pickIntroArt(columns: number): string[] | undefined {
-	if (columns >= BIG_LOGO_WIDTH) return BIG_LOGO;
-	if (columns >= SMALL_LOGO_WIDTH) return SMALL_LOGO;
-	return undefined;
+function fail(message: string, hint: string): never {
+	render(
+		<Box flexDirection="column" padding={1}>
+			<Text color="red">Error: {message}</Text>
+			<Text dimColor>{hint}</Text>
+		</Box>,
+	);
+	process.exit(1);
 }
 
-// Play the one-shot animated wordmark and resolve once it finishes.
-async function playIntro(art: string[]): Promise<void> {
-	await new Promise<void>(resolve => {
-		const app = render(<AnimatedLogo art={art} onDone={() => app.unmount()} />);
-		app.waitUntilExit().then(
-			() => resolve(),
-			() => resolve(),
-		);
-	});
+// Run the full-screen shell on the alternate screen buffer so the scrollback
+// is untouched, and restore it on exit.
+async function runShell(apps: ProjectInfo[], workspaceRoot?: string) {
+	process.stdout.write('\x1b[?1049h\x1b[H');
+	const app = render(
+		<Shell apps={apps} workspaceRoot={workspaceRoot} version={pkg.version} />,
+	);
+	try {
+		await app.waitUntilExit();
+	} finally {
+		process.stdout.write('\x1b[?1049l');
+	}
 }
 
 async function main() {
@@ -159,22 +160,13 @@ async function main() {
 	const isUpdate =
 		!firstRun && lastSeen !== undefined && lastSeen !== pkg.version;
 
-	// On the plain interactive `svc` (no command), play the animated wordmark
-	// instead of the static masthead — sized to the terminal. Only on a TTY so it
-	// doesn't run in CI / piped input.
-	const introEligible =
-		!firstRun && !isUpdate && !commandName && Boolean(process.stdin.isTTY);
-	const introArt = introEligible
-		? pickIntroArt(process.stdout.columns ?? 0)
-		: undefined;
-
 	if (!firstRun) {
 		if (isUpdate) {
 			printBranding();
 			console.log(
 				`\x1b[32m\n  ✨ Updated to v${pkg.version}\x1b[0m \x1b[2m(from v${lastSeen})\x1b[0m\n`,
 			);
-		} else if (!introArt) {
+		} else if (commandName) {
 			printMasthead(pkg.version);
 		}
 
@@ -190,20 +182,61 @@ async function main() {
 		}
 	}
 
+	// No command: the shell. Inside an app it is single-app mode; anywhere
+	// above one or more apps it is workspace mode.
+	if (!commandName) {
+		let project: ProjectInfo | null = null;
+		try {
+			project = detectProject();
+		} catch (error) {
+			fail((error as Error).message, 'Fix the manifest and try again');
+		}
+
+		if (!project) {
+			const apps = discoverApps(process.cwd());
+			if (apps.length === 0) {
+				fail(
+					'No Sitevision apps found here.',
+					'Run svc inside an app directory (manifest.json) or at the root of a repo that contains apps.',
+				);
+			}
+
+			await runShell(apps, process.cwd());
+			return;
+		}
+
+		if (firstRun) {
+			await new Promise<void>(resolve => {
+				const app = render(
+					<WelcomeScreen
+						project={project}
+						onComplete={() => {
+							markFirstRunComplete();
+							setLastSeenVersion(pkg.version);
+							app.unmount();
+						}}
+					/>,
+				);
+				app.waitUntilExit().then(
+					() => resolve(),
+					() => resolve(),
+				);
+			});
+		}
+
+		await runShell([project]);
+		return;
+	}
+
 	// Check if we're in a Sitevision project
 	const project = (() => {
 		try {
 			return requireProject();
 		} catch (error) {
-			render(
-				<Box flexDirection="column" padding={1}>
-					<Text color="red">Error: {(error as Error).message}</Text>
-					<Text dimColor>
-						Make sure you're in a Sitevision project directory
-					</Text>
-				</Box>,
+			return fail(
+				(error as Error).message,
+				"Make sure you're in a Sitevision project directory",
 			);
-			process.exit(1);
 		}
 	})();
 
@@ -215,6 +248,7 @@ async function main() {
 			if (cli.flags.token) {
 				project.devProperties.accessToken = cli.flags.token;
 			}
+
 			if (cli.flags.cookie) {
 				project.devProperties.sessionCookie = cli.flags.cookie;
 			}
@@ -223,38 +257,6 @@ async function main() {
 				'\x1b[33m--token/--cookie needs a .dev_properties.json (domain, site, addon) to deploy against.\x1b[0m',
 			);
 		}
-	}
-
-	// First run: show the welcome (branding + optional signing-password save),
-	// then continue to the normal flow once the user dismisses it.
-	if (firstRun) {
-		await new Promise<void>(resolve => {
-			const app = render(
-				<WelcomeScreen
-					project={project}
-					onComplete={() => {
-						markFirstRunComplete();
-						setLastSeenVersion(pkg.version);
-						app.unmount();
-					}}
-				/>,
-			);
-			app.waitUntilExit().then(
-				() => resolve(),
-				() => resolve(),
-			);
-		});
-	}
-
-	// If no command, show interactive menu (with the animated intro first when
-	// the terminal can fit it).
-	if (!commandName) {
-		if (introArt) {
-			await playIntro(introArt);
-		}
-
-		render(<App project={project} />);
-		return;
 	}
 
 	// Get the command
@@ -273,9 +275,8 @@ async function main() {
 	}
 
 	// Offer to migrate a legacy plaintext password into the OS keychain.
-	// Interactive `svc` handles this in SetupFlow; this covers direct commands
-	// (svc deploy/dev/sign/…). Skip on non-TTY stdin (e.g. CI) where prompting
-	// would fail — the plaintext password is still used for this run.
+	// Skip on non-TTY stdin (e.g. CI) where prompting would fail — the
+	// plaintext password is still used for this run.
 	if (project.hasLegacyPassword && process.stdin.isTTY) {
 		console.log(
 			'\n\x1b[33m⚠ Plaintext password found in .dev_properties.json\x1b[0m',

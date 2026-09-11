@@ -125,13 +125,15 @@ export function DevPropertiesForm({
 		).then(discovered => {
 			if (cancelled) return;
 			if (discovered) {
+				// Endpoints only — do NOT pre-fill scopes. `scopes_supported` is the
+				// provider's list, not what this client is granted (and casing may
+				// differ, e.g. advertised `all` vs client `ALL`), so requesting them
+				// causes `invalid_scope`. Empty scopes → the client's default scopes.
 				setOauth(previous => ({
 					...previous,
 					authorizationEndpoint:
 						previous.authorizationEndpoint || discovered.authorizationEndpoint,
 					tokenEndpoint: previous.tokenEndpoint || discovered.tokenEndpoint,
-					scopes:
-						previous.scopes || (discovered.scopesSupported?.join(' ') ?? ''),
 				}));
 				setDiscoveryNote('Endpoints auto-filled from the site OpenID config.');
 			} else {
@@ -341,7 +343,7 @@ export function DevPropertiesForm({
 				return (
 					<TextInput
 						key="oauthScopes"
-						label="Scopes (space-separated, optional)"
+						label="Scopes (space-separated — leave empty to use the client's default scopes; add offline_access, matching your client's casing, for a refresh token)"
 						defaultValue={oauth.scopes}
 						onSubmit={value => submitOAuth('scopes', value)}
 						onCancel={onCancel}
@@ -351,7 +353,7 @@ export function DevPropertiesForm({
 				return (
 					<TextInput
 						key="oauthClientSecret"
-						label="Client Secret (OS keychain — leave empty for a public/PKCE client)"
+						label="Client Secret (OS keychain — required if your Sitevision client has a secret; leave empty only for a public client)"
 						type="password"
 						defaultValue={oauth.clientSecret}
 						onSubmit={value => submitOAuth('clientSecret', value)}

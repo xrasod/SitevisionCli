@@ -1,0 +1,49 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {detectProject, type ProjectInfo} from './project-detection.js';
+
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build']);
+const MAX_DEPTH = 3;
+
+/**
+ * Find every Sitevision app below `root` (e.g. root/webapps/x, root/restapps/y).
+ * Depth-limited walk that skips dependency and output folders.
+ */
+export function discoverApps(root: string): ProjectInfo[] {
+	const found: ProjectInfo[] = [];
+	const walk = (dir: string, depth: number) => {
+		let entries: fs.Dirent[];
+		try {
+			entries = fs.readdirSync(dir, {withFileTypes: true});
+		} catch {
+			return;
+		}
+
+		for (const entry of entries) {
+			if (!entry.isDirectory() || SKIP_DIRS.has(entry.name)) continue;
+			if (entry.name.startsWith('.')) continue;
+			const full = path.join(dir, entry.name);
+			let project: ProjectInfo | null = null;
+			try {
+				project = detectProject(full);
+			} catch {
+				// Unparseable manifest: skip it; the app can still be opened directly.
+			}
+
+			if (project) {
+				found.push(project);
+			} else if (depth < MAX_DEPTH) {
+				walk(full, depth + 1);
+			}
+		}
+	};
+
+	walk(root, 1);
+	return found.toSorted((a, b) => a.root.localeCompare(b.root));
+}
+
+/** Group label for an app: its parent folder relative to the workspace root. */
+export function appGroup(root: string, appRoot: string): string {
+	const relative = path.relative(root, path.dirname(appRoot));
+	return relative === '' ? '.' : relative;
+}
