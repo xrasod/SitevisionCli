@@ -137,3 +137,18 @@ test('username is only required for basic auth', t => {
 	t.false(configIncomplete({...site, authMethod: 'oauth2'}));
 	t.false(configIncomplete({...site, authMethod: 'cookie'}));
 });
+
+test('a nested folder does not split its parent group', t => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-grp-'));
+	fs.mkdirSync(path.join(root, '.git'));
+	app(path.join(root, 'webapps', 'alpha'), 'alpha');
+	app(path.join(root, 'webapps', 'nested', 'deep'), 'deep');
+	app(path.join(root, 'webapps', 'zulu'), 'zulu');
+	// Sorted by path alone, webapps/nested/deep lands between alpha and zulu
+	// and the "webapps" heading renders twice.
+	const groups = discoverApps(root).map(a => appGroup(root, a.root));
+	t.deepEqual(groups, ['webapps', 'webapps', path.join('webapps', 'nested')]);
+	// Every label forms one run, so each heading is rendered once.
+	const headings = groups.filter((g, i) => g !== groups[i - 1]);
+	t.is(headings.length, new Set(headings).size);
+});

@@ -8,6 +8,7 @@ import {
 	localizedText,
 } from '../utils/project-detection.js';
 import {type Task} from '../utils/tasks.js';
+import {fuzzyMatch} from './actions.js';
 import {t} from '../utils/i18n.js';
 
 export const ACCENT = 'cyan';
@@ -106,6 +107,29 @@ function Dots({project}: {project: ProjectInfo}) {
 	);
 }
 
+/** The name shown for an app in the navigator, and what the filter matches. */
+export function appLabel(app: ProjectInfo): string {
+	return localizedText(app.manifest.name) || app.manifest.id;
+}
+
+/** Indices into `apps` whose label fuzzy-matches the filter. */
+export function navMatches(apps: ProjectInfo[], filter: string): number[] {
+	return apps
+		.map((_, index) => index)
+		.filter(index => fuzzyMatch(filter, appLabel(apps[index]!)));
+}
+
+/** Next selectable index when moving by `delta`, wrapping at both ends. */
+export function navMove(
+	ring: number[],
+	selected: number,
+	delta: number,
+): number {
+	if (ring.length === 0) return selected;
+	const at = ring.indexOf(selected);
+	return ring[at === -1 ? 0 : (at + delta + ring.length) % ring.length]!;
+}
+
 export interface NavigatorProps {
 	apps: ProjectInfo[];
 	groupOf: (app: ProjectInfo) => string;
@@ -117,6 +141,8 @@ export interface NavigatorProps {
 	// Workspace mode: `selected === apps.length` highlights the settings row.
 	settingsSelected?: boolean;
 	width: number;
+	// Typed search; when set the header becomes the query line.
+	filter?: string;
 }
 
 export function Navigator({
@@ -129,6 +155,7 @@ export function Navigator({
 	single,
 	settingsSelected = false,
 	width,
+	filter = '',
 }: NavigatorProps) {
 	// Row: marker(1) glyph(3) sp name sp version(6) sp dots(4) inside the padding.
 	const nameWidth = width - 2 - 17;
@@ -141,7 +168,7 @@ export function Navigator({
 		const group = groupOf(app);
 		if (!single && group !== lastGroup) {
 			rows.push(
-				<Box key={`g-${group}`} height={1} flexShrink={0}>
+				<Box key={`g-${index}-${group}`} height={1} flexShrink={0}>
 					<Text dimColor wrap="truncate">
 						{'  '}
 						{group}
@@ -156,7 +183,7 @@ export function Navigator({
 
 		const active = index === selected;
 		const busy = running.some(task => task.appRoot === app.root);
-		const name = localizedText(app.manifest.name) || app.manifest.id;
+		const name = appLabel(app);
 		rows.push(
 			<Box key={app.root} width={width - 2} height={1} flexShrink={0}>
 				<Text
@@ -181,6 +208,15 @@ export function Navigator({
 				)}
 			</Box>,
 		);
+	}
+
+	if (rows.length === 0) {
+		rows.push(
+			<Box key="none" height={1} flexShrink={0}>
+				<Text dimColor>{'  ' + t('no matches')}</Text>
+			</Box>,
+		);
+		rowApp.push(-1);
 	}
 
 	// Window the list so the selected app stays visible; the lines outside
@@ -225,13 +261,27 @@ export function Navigator({
 			paddingX={1}
 			overflow="hidden"
 		>
-			<Text bold dimColor>
-				{single
-					? t('APP')
-					: apps.length === 1
-						? t('WORKSPACE 1 app')
-						: t('WORKSPACE {n} apps', {n: apps.length})}
-			</Text>
+			{filter ? (
+				<Text wrap="truncate">
+					<Text color={ACCENT}>❯ </Text>
+					{filter}
+					<Text inverse> </Text>
+					<Text dimColor>
+						{' '}
+						{apps.length === 1
+							? t('1 match')
+							: t('{n} matches', {n: apps.length})}
+					</Text>
+				</Text>
+			) : (
+				<Text bold dimColor>
+					{single
+						? t('APP')
+						: apps.length === 1
+							? t('WORKSPACE 1 app')
+							: t('WORKSPACE {n} apps', {n: apps.length})}
+				</Text>
+			)}
 			{shown}
 			<Text dimColor>{'  ' + t('deps·config·sync·signing')}</Text>
 			{!single && (
@@ -280,8 +330,7 @@ export function NavigatorStrip({
 						bold={index === selected}
 					>
 						{' '}
-						{typeGlyph(app.manifest)}{' '}
-						{localizedText(app.manifest.name) || app.manifest.id}{' '}
+						{typeGlyph(app.manifest)} {appLabel(app)}{' '}
 					</Text>
 				))}
 			</Text>

@@ -36,6 +36,9 @@ import {
 	Navigator,
 	NavigatorStrip,
 	BottomBar,
+	navMatches,
+	navMove,
+	appLabel,
 	navWidth,
 	NARROW_BELOW,
 	ACCENT,
@@ -129,6 +132,7 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 		workspaceRoot && !onboard ? 'nav' : 'content',
 	);
 	const [overlay, setOverlay] = useState<Overlay | null>(null);
+	const [filter, setFilter] = useState('');
 	const [versions, setVersions] = useState<Record<string, VersionsState>>({});
 	const [versionRow, setVersionRow] = useState(0);
 	const [logScroll, setLogScroll] = useState(0);
@@ -179,6 +183,10 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 	);
 	const narrow = columns < NARROW_BELOW;
 	const sidebar = navWidth(columns);
+	// The navigator shows the fuzzy matches; `selected` stays an index into
+	// `apps` (with `apps.length` meaning the workspace settings row).
+	const matches = useMemo(() => navMatches(apps, filter), [apps, filter]);
+	const ring = single ? matches : [...matches, apps.length];
 	const running = runningTasks();
 
 	// Re-render once a second while something runs so elapsed times move.
@@ -400,6 +408,11 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 					? raw.toUpperCase()
 					: raw;
 			if (key.escape) {
+				if (focus === 'nav' && filter) {
+					setFilter('');
+					return;
+				}
+
 				// Esc backs out of the workspace settings pane, not just its focus.
 				if (settings) setSelected(0);
 				setFocus(single ? 'content' : 'nav');
@@ -412,9 +425,39 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 			}
 
 			if (key.tab) {
+				setFilter('');
 				setFocus(f =>
 					f === 'nav' && !single ? 'content' : single ? 'content' : 'nav',
 				);
+				return;
+			}
+
+			// Navigator: typing searches, so no action key fires until Enter has
+			// moved the focus into the content pane.
+			if (focus === 'nav') {
+				const move = (delta: number) => {
+					setSelected(navMove(ring, selected, delta));
+				};
+
+				const search = (next: string) => {
+					setFilter(next);
+					const found = navMatches(apps, next);
+					if (found.length > 0 && !found.includes(selected))
+						setSelected(found[0]!);
+				};
+
+				if (key.upArrow) move(-1);
+				else if (key.downArrow) move(1);
+				else if (key.return) {
+					if (matches.length > 0 || settings) {
+						setFilter('');
+						setFocus('content');
+					}
+				} else if (key.backspace || key.delete) search(filter.slice(0, -1));
+				else if (input === 'q' && !filter) quit();
+				else if (input?.length === 1 && input >= ' ' && !key.ctrl && !key.meta)
+					search(filter + input);
+
 				return;
 			}
 
@@ -446,12 +489,7 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 				return;
 			}
 
-			if (focus === 'nav') {
-				const last = single ? apps.length - 1 : apps.length;
-				if (key.upArrow) setSelected(s => (s > 0 ? s - 1 : last));
-				if (key.downArrow) setSelected(s => (s < last ? s + 1 : 0));
-				if (key.return) setFocus('content');
-			} else if (tab === 'versions') {
+			if (tab === 'versions') {
 				const count = versions[versionsKey]?.executables?.length ?? 0;
 				if (key.upArrow) setVersionRow(r => Math.max(0, r - 1));
 				if (key.downArrow)
@@ -480,7 +518,7 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 	const contentHeight = mainHeight - 1 - (narrow ? 1 : 0);
 	const groupOf = (app: ProjectInfo) =>
 		workspaceRoot ? appGroup(workspaceRoot, app.root) : '.';
-	const appName = localizedText(project.manifest.name) || project.manifest.id;
+	const appName = appLabel(project);
 	const tabName = t(TABS.find(entry => entry.id === tab)!.label).toLowerCase();
 	const contextLabel = settings
 		? `${t('workspace')} ▸ ${t('settings')}`
@@ -507,61 +545,77 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 					['↑↓', 'apps'],
 					['q', 'quit'],
 				]);
+	const navHints: Hint[] = filter
+		? h([
+				['↑↓', 'move'],
+				['Enter', 'select'],
+				['Esc', 'clear'],
+				['/', 'commands'],
+			])
+		: h([
+				['a–z', 'search'],
+				['↑↓', 'move'],
+				['Enter', 'select'],
+				['/', 'commands'],
+				['q', 'quit'],
+			]);
 	const hints: Hint[] = overlay
 		? h([['Esc', 'cancel']])
-		: settings
-			? settingsHints
-			: tab === 'versions'
-				? h([
-						['a', 'activate'],
-						['R', 'refresh'],
-						['p', 'deploy'],
-						['/', 'commands'],
-						['q', 'quit'],
-					])
-				: tab === 'log'
+		: focus === 'nav' && !settings
+			? navHints
+			: settings
+				? settingsHints
+				: tab === 'versions'
 					? h([
-							['f', 'follow'],
-							['x', 'wrap'],
-							['K', 'stop'],
+							['a', 'activate'],
+							['R', 'refresh'],
 							['p', 'deploy'],
 							['/', 'commands'],
 							['q', 'quit'],
 						])
-					: tab === 'config'
-						? editing
-							? h([
-									['Enter', 'save'],
-									['Esc', 'cancel'],
-								])
-							: formActive
-								? h([
-										['↑↓', 'field'],
-										['Enter', 'edit'],
-										['^O', 'pick addon'],
-										['y', 'sync'],
-										['/', 'commands'],
-										['q', 'quit'],
-									])
-								: h([
-										['Tab', 'edit'],
-										['y', 'sync'],
-										['l', 'login'],
-										['/', 'commands'],
-										['q', 'quit'],
-									])
-						: h([
-								['d', 'dev'],
-								['w', 'watch'],
-								['b', 'build'],
-								['s', 'sign'],
+					: tab === 'log'
+						? h([
+								['f', 'follow'],
+								['x', 'wrap'],
+								['K', 'stop'],
 								['p', 'deploy'],
-								['a', 'activate'],
-								['E', 'env'],
-								['i', 'install'],
 								['/', 'commands'],
 								['q', 'quit'],
-							]);
+							])
+						: tab === 'config'
+							? editing
+								? h([
+										['Enter', 'save'],
+										['Esc', 'cancel'],
+									])
+								: formActive
+									? h([
+											['↑↓', 'field'],
+											['Enter', 'edit'],
+											['^O', 'pick addon'],
+											['y', 'sync'],
+											['/', 'commands'],
+											['q', 'quit'],
+										])
+									: h([
+											['Tab', 'edit'],
+											['y', 'sync'],
+											['l', 'login'],
+											['/', 'commands'],
+											['q', 'quit'],
+										])
+							: h([
+									['d', 'dev'],
+									['w', 'watch'],
+									['b', 'build'],
+									['s', 'sign'],
+									['p', 'deploy'],
+									['a', 'activate'],
+									['E', 'env'],
+									['i', 'install'],
+									['/', 'commands'],
+									['q', 'quit'],
+								]);
 
 	const right =
 		running.length > 0 ? (
@@ -687,15 +741,16 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 			>
 				{!narrow && (
 					<Navigator
-						apps={apps}
+						apps={matches.map(i => apps[i]!)}
 						groupOf={groupOf}
-						selected={selected}
+						selected={matches.indexOf(selected)}
 						focused={focus === 'nav'}
 						tasks={tasks}
 						height={mainHeight - 1}
 						single={single}
 						settingsSelected={settings}
 						width={sidebar}
+						filter={filter}
 					/>
 				)}
 				<Box
@@ -705,8 +760,8 @@ export function Shell({apps: initialApps, workspaceRoot, version}: Props) {
 				>
 					{narrow && !single && (
 						<NavigatorStrip
-							apps={apps}
-							selected={selected}
+							apps={matches.map(i => apps[i]!)}
+							selected={matches.indexOf(selected)}
 							focused={focus === 'nav'}
 						/>
 					)}

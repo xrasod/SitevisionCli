@@ -44,7 +44,13 @@ export function discoverApps(root: string): ProjectInfo[] {
 	};
 
 	walk(root, 1);
-	return found.toSorted((a, b) => a.root.localeCompare(b.root));
+	// Group first, then path: a deeper folder (webapps/nested) must not split
+	// its parent's run of apps, or the same group heading renders twice.
+	return found.toSorted(
+		(a, b) =>
+			path.dirname(a.root).localeCompare(path.dirname(b.root)) ||
+			a.root.localeCompare(b.root),
+	);
 }
 
 /** Group label for an app: its parent folder relative to the workspace root. */
