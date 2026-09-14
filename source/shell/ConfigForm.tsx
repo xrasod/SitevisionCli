@@ -550,7 +550,14 @@ export function ConfigForm({
 					setEditing(false);
 				} else if (key.return) {
 					setEditing(false);
-					if (draft !== values[current.key]) commit(current.key, draft);
+					// A secret row always starts empty, so Enter on an empty one means
+					// "remove the stored secret", not "no change".
+					if (
+						draft !== values[current.key] ||
+						(current.kind === 'secret' && storedSecret(project, current.key))
+					) {
+						commit(current.key, draft);
+					}
 				} else if (choices.length > 0) {
 					const step =
 						key.leftArrow || key.upArrow
