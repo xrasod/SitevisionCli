@@ -697,9 +697,8 @@ export async function activateApp(
 	const protocol = config.useHTTP ? 'http' : 'https';
 	const url = `${protocol}://${config.domain}/rest-api/1/0/${encodeURIComponent(config.siteName)}/Addon%20Repository/${encodeURIComponent(config.addonName)}/activateCustomModuleExecutable`;
 
-	const body = JSON.stringify({
-		executableId,
-	});
+	// Property name per the ActivateCustomModuleExecutable PUT docs.
+	const body = JSON.stringify({customModuleExecutableId: executableId});
 
 	const {auth, kind} = configAuth(config);
 
