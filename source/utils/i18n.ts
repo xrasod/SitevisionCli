@@ -229,6 +229,9 @@ const sv: Record<string, string> = {
 	"Shared by every app below {root}. An app's own value wins.":
 		'Delas av alla appar under {root}. Appens eget värde vinner.',
 	'PACKAGE.JSON SYNC': 'PACKAGE.JSON-SYNK',
+	'no workspace package.json · y to set up':
+		'ingen package.json i arbetsytan · y för att skapa',
+	'Not saved: {error}': 'Inte sparat: {error}',
 	'←→ choose · Enter confirm · Esc cancel':
 		'←→ välj · Enter bekräfta · Esc avbryt',
 	'Enter save · Esc cancel': 'Enter spara · Esc avbryt',

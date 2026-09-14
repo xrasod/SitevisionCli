@@ -11,6 +11,7 @@ import {
 	readSvcConfig,
 	writeSvcConfig,
 	writeDevProperties,
+	syncDevPropertiesToPackageJson,
 } from '../utils/project-detection.js';
 import {
 	appGroup,
@@ -278,10 +279,11 @@ export function Shell({
 						: rawProject.devProperties
 				) as DevProperties | undefined;
 				if (!base) return;
-				writeDevProperties(targetRoot, {
-					...base,
-					environments: {...base.environments, [clean]: {}},
-				});
+				writeDevProperties(
+					targetRoot,
+					{...base, environments: {...base.environments, [clean]: {}}},
+					{complete: !workspaceRoot},
+				);
 				reload();
 				setEnvChoice(clean);
 				writeSvcConfig(configRoot, {environment: clean});
@@ -491,8 +493,22 @@ export function Shell({
 			}
 
 			if (settings && focus === 'content') {
-				// Settings pane: the form owns everything but q and Tab/Esc above.
+				// Settings pane: the form owns everything but q, y and Tab/Esc above.
 				if (input === 'q') quit();
+				else if (input === 'y') {
+					try {
+						if (syncDevPropertiesToPackageJson(workspaceRoot!)) {
+							reload();
+							notify(t('package.json updated'), 'ok');
+						}
+					} catch (error) {
+						notify(
+							error instanceof Error ? error.message : String(error),
+							'error',
+						);
+					}
+				}
+
 				return;
 			}
 
@@ -546,6 +562,7 @@ export function Shell({
 			? h([
 					['↑↓', 'field'],
 					['Enter', 'edit'],
+					['y', 'sync'],
 					['Esc', 'back'],
 					['q', 'quit'],
 				])
@@ -697,6 +714,7 @@ export function Shell({
 						devProperties: project.devProperties,
 						base: rawProject.devProperties,
 						environment: env,
+						workspaceRoot,
 					}}
 					active={formActive}
 					width={narrow ? columns : columns - sidebar}

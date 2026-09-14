@@ -21,14 +21,15 @@ hur autentiseringen fungerar.
 
 ## 1. Begrepp
 
-| Begrepp                    | Betydelse                                                                                                                                                             |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **App**                    | En katalog med `manifest.json` (i roten, `static/` eller `src/`) och `package.json`. WebApp, Widget, RESTApp och MCPServer stöds.                                     |
-| **Arbetsyta**              | Ett repo som innehåller flera appar i undermappar, t.ex. `webapps/*`, `restapps/*`, `widgets/*`.                                                                      |
-| **`.dev_properties.json`** | Konfigurationen per webbplats: domän, webbplats, tillägg, användarnamn, auth-metod, signeringsanvändare, miljöer. Innehåller **inga hemligheter** och kan checkas in. |
-| **Nyckelringen**           | Operativsystemets lagring för hemligheter (macOS-nyckelringen, Autentiseringshanteraren i Windows, libsecret på Linux). Alla lösenord, tokens och cookies sparas där. |
-| **Miljö**                  | En namngiven målwebbplats, t.ex. `dev`, `test`, `prod`. Konfigurationen på toppnivå är en miljö; övriga skriver bara över det som skiljer.                            |
-| **Tillägg**                | Den anpassade modulen (addon) i webbplatsens tilläggsarkiv (Addon Repository) som appen laddas upp till.                                                              |
+| Begrepp                             | Betydelse                                                                                                                                                             |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **App**                             | En katalog med `manifest.json` (i roten, `static/` eller `src/`) och `package.json`. WebApp, Widget, RESTApp och MCPServer stöds.                                     |
+| **Arbetsyta**                       | Ett repo som innehåller flera appar i undermappar, t.ex. `webapps/*`, `restapps/*`, `widgets/*`.                                                                      |
+| **`.dev_properties.json`**          | Din lokala konfiguration och huvudkällan: domän, webbplats, tillägg, användarnamn, auth-metod, signeringsanvändare, miljöer. Checka inte in den.                      |
+| **Standardvärden i `package.json`** | Gemensamma, incheckade värden som ligger under `.dev_properties.json`: allt utom användarspecifika fält.                                                              |
+| **Nyckelringen**                    | Operativsystemets lagring för hemligheter (macOS-nyckelringen, Autentiseringshanteraren i Windows, libsecret på Linux). Alla lösenord, tokens och cookies sparas där. |
+| **Miljö**                           | En namngiven målwebbplats, t.ex. `dev`, `test`, `prod`. Konfigurationen på toppnivå är en miljö; övriga skriver bara över det som skiljer.                            |
+| **Tillägg**                         | Den anpassade modulen (addon) i webbplatsens tilläggsarkiv (Addon Repository) som appen laddas upp till.                                                              |
 
 ## 2. Installera och starta
 
@@ -82,8 +83,9 @@ I arbetsyteläge finns två paneler. `Tab` växlar mellan dem.
   innehållspanelen**, `Esc` rensar filtret.
 - Åtgärdstangenter som `d` eller `p` fungerar bara i **innehållspanelen**. Skriver
   du `d` i navigatorn söker du efter "d".
-- Sista raden i navigatorn är **Arbetsyteinställningar**: den gemensamma
-  konfigurationen i repots rot.
+- Sista raden i navigatorn är **Arbetsyteinställningar**: rotens
+  `.dev_properties.json`, med standardvärdena i rotens `package.json` under. Se
+  [4](#gemensam-konfiguration-i-en-arbetsyta).
 
 ### Flikar
 
@@ -100,25 +102,25 @@ I arbetsyteläge finns två paneler. `Tab` växlar mellan dem.
 
 Globala (innehållspanelen):
 
-| Tangent   | Åtgärd                                                                               |
-| --------- | ------------------------------------------------------------------------------------ |
-| `d`       | Dev: bygg vid varje ändring, signera om det är konfigurerat, driftsätt               |
-| `w`       | Watch: bygg vid varje ändring, signera om det är konfigurerat, driftsätt aldrig      |
-| `b`       | Bygg en gång                                                                         |
-| `s`       | Signera den byggda zip-filen                                                         |
-| `p` / `P` | Driftsätt / driftsätt med tvång till aktiv miljö                                     |
-| `a`       | Öppna Versioner (och aktivera, när du redan är där)                                  |
-| `E`       | Växla aktiv miljö                                                                    |
-| `K`       | Stoppa pågående uppgifter för vald app                                               |
-| `e`       | Öppna fliken Konfig                                                                  |
-| `y`       | Kopiera domän, webbplats och tillägg från `.dev_properties.json` till `package.json` |
-| `i`       | `npm install`                                                                        |
-| `l`       | Logga in igen (glömmer inloggningen som hålls för sessionen)                         |
-| `,`       | Inställningar: språk (engelska/svenska) och introanimation                           |
-| `/`       | Kommandopalett: alla åtgärder, sökbara                                               |
-| `Tab`     | Växla mellan navigator och innehåll                                                  |
-| `Esc`     | Tillbaka / avbryt                                                                    |
-| `q`       | Avsluta (stoppar pågående uppgifter)                                                 |
+| Tangent   | Åtgärd                                                                          |
+| --------- | ------------------------------------------------------------------------------- |
+| `d`       | Dev: bygg vid varje ändring, signera om det är konfigurerat, driftsätt          |
+| `w`       | Watch: bygg vid varje ändring, signera om det är konfigurerat, driftsätt aldrig |
+| `b`       | Bygg en gång                                                                    |
+| `s`       | Signera den byggda zip-filen                                                    |
+| `p` / `P` | Driftsätt / driftsätt med tvång till aktiv miljö                                |
+| `a`       | Öppna Versioner (och aktivera, när du redan är där)                             |
+| `E`       | Växla aktiv miljö                                                               |
+| `K`       | Stoppa pågående uppgifter för vald app                                          |
+| `e`       | Öppna fliken Konfig                                                             |
+| `y`       | Kopiera gemensamma värden från `.dev_properties.json` till `package.json`       |
+| `i`       | `npm install`                                                                   |
+| `l`       | Logga in igen (glömmer inloggningen som hålls för sessionen)                    |
+| `,`       | Inställningar: språk (engelska/svenska) och introanimation                      |
+| `/`       | Kommandopalett: alla åtgärder, sökbara                                          |
+| `Tab`     | Växla mellan navigator och innehåll                                             |
+| `Esc`     | Tillbaka / avbryt                                                               |
+| `q`       | Avsluta (stoppar pågående uppgifter)                                            |
 
 Per flik:
 
@@ -142,6 +144,18 @@ layout: ingen sidopanel (applistan blir en rad) och korta fliknamn. Praktiskt i
 en delad terminalpanel.
 
 ## 4. Konfiguration
+
+Konfigurationen ligger i två filer:
+
+| Fil                    | Innehåller                                                                                   | Checka in? |
+| ---------------------- | -------------------------------------------------------------------------------------------- | ---------- |
+| `.dev_properties.json` | Din konfiguration. Huvudkällan; vanliga sitevision-scripts läser den också.                  | Nej        |
+| `package.json`         | Gemensamma standardvärden för alla som jobbar med appen: allt utom användarspecifika värden. | Ja         |
+
+`username`, `signingUsername` och `certificateName` är **användarspecifika**.
+De finns bara i `.dev_properties.json`. Lägg `.dev_properties.json` i
+`.gitignore`: `svc` skriver aldrig hemligheter dit, men vanliga
+sitevision-scripts sparar driftsättningslösenordet där.
 
 ### `.dev_properties.json`
 
@@ -176,6 +190,37 @@ en delad terminalpanel.
 
 Filen får också heta `.dev-properties.json`.
 
+### Standardvärden i `package.json`
+
+Gemensamma värden checkas in i `package.json`. `svc` läser dem under
+`.dev_properties.json`, så ett värde i `.dev_properties.json` vinner alltid.
+
+```json
+{
+	"developmentDomain": "acme-use.sitevision-cloud.se",
+	"siteName": "Intranet",
+	"addonName": "my-addon",
+	"svc": {
+		"authMethod": "oauth2",
+		"oauth2": {
+			"clientId": "svc-cli",
+			"authorizationEndpoint": "https://acme-use.sitevision-cloud.se/oauth2-provider/authorize",
+			"tokenEndpoint": "https://acme-use.sitevision-cloud.se/oauth2-provider/token"
+		},
+		"environments": {"prod": {"domain": "acme.sitevision-cloud.se"}}
+	}
+}
+```
+
+`developmentDomain` (domänen), `siteName` och `addonName` ligger på toppnivå.
+Övriga gemensamma fält (`authMethod`, `oauth2`, `sessionLoginUrl`,
+`useHTTPForDevDeploy`, `baseEnvironment`, `production`, `environments`) ligger
+under `"svc"`. Användarspecifika fält ignoreras där.
+
+En ny utvecklare öppnar appen med `svc` och anger sitt användarnamn. I
+enappsläge skriver första sparningen en komplett `.dev_properties.json` med
+standardvärdena ifyllda, så att vanliga sitevision-scripts också fungerar.
+
 ### Redigera i fliken Konfig
 
 Varje fält sparas direkt när du trycker `Enter` på det; det finns inget separat
@@ -187,35 +232,52 @@ Kolumnen **KÄLLA** visar var varje värde kommer ifrån:
 
 - `lokal` – satt i appens egen fil
 - `↑ rot` – ärvt från en `.dev_properties.json` längre upp
+- `package.json` – ett standardvärde från `package.json`
 - `↑ dev` / `<miljö>` – i en annan miljö än basmiljön: ärvt från basen, eller
   överskrivet här
 - `nyckelring` – en hemlighet är sparad
 - `✗ krävs` – saknas
 
-Under formuläret visar **PACKAGE.JSON-SYNK** skillnader mellan
-`.dev_properties.json` och fälten `developmentDomain`, `siteName` och `addonName`
-som sitevision-scripts läser från `package.json`. `y` kopierar över värdena.
-`.dev_properties.json` är alltid källan.
+Under formuläret listar **PACKAGE.JSON-SYNK** de gemensamma värden i katalogens
+`.dev_properties.json` som `package.json` ännu inte har, varken här eller i en
+`package.json` längre upp. `y` kopierar in dem i `package.json` så att de kan
+checkas in. Användarspecifika fält kopieras aldrig, inte heller inifrån
+`environments`. Samma sektion och `y` fungerar i **Arbetsyteinställningar**, mot
+rotens `package.json`. Saknar arbetsytans rot en `package.json` säger sektionen
+det, och `y` skapar en. Kan `package.json` inte läsas eller skrivas visar `svc`
+en varning i stället för att spara.
 
 ### Gemensam konfiguration i en arbetsyta
 
-En apps konfiguration är dess egen `.dev_properties.json` sammanslagen ovanpå
-varje `.dev_properties.json` i överliggande kataloger, upp till repots rot
-(katalogen som innehåller `.git`). Närmaste fil vinner, nyckel för nyckel.
+Arv mellan kataloger är en funktion i `svc`. För en app slås varje värde upp i
+den här ordningen, och första träffen vinner:
+
+1. Appens egen `.dev_properties.json`, om den har en
+2. `.dev_properties.json` i överliggande kataloger, upp till repots rot
+   (katalogen som innehåller `.git`)
+3. Appens `package.json`
+4. `package.json` i överliggande kataloger, upp till repots rot
 
 Rekommenderad struktur:
 
 ```
 repo/
-  .dev_properties.json        ← domain, siteName, username, authMethod, oauth2, signingUsername
+  package.json              ← gemensamt: developmentDomain, siteName, "svc": {authMethod, oauth2, environments}   incheckad
+  .dev_properties.json      ← ditt: username, signingUsername                                                  ignorerad
   webapps/
-    news/.dev_properties.json   ← {"addonName": "news"}
-    search/.dev_properties.json ← {"addonName": "search"}
+    news/package.json       ← "addonName": "news"                                                              incheckad
+    search/package.json     ← "addonName": "search"                                                            incheckad
 ```
 
-När en apps konfiguration sparas kopieras aldrig ärvda värden in i appens fil.
-Redigera den gemensamma filen via **Arbetsyteinställningar** (sista raden i
-navigatorn, eller paletten).
+I arbetsyteläge skapar `svc` aldrig en `.dev_properties.json` i en app. Sparar
+du i en apps flik Konfig skrivs det till rotens `.dev_properties.json`, utom
+tilläggsnamnet som hamnar i appens `package.json`. En app som redan har en egen
+`.dev_properties.json` fortsätter använda den. Gemensamma värden som ändrats på
+det sättet kopieras sedan till rotens `package.json` med `y` i
+**Arbetsyteinställningar** (sista raden i navigatorn, eller paletten).
+
+Vanliga sitevision-scripts läser bara appens egen `.dev_properties.json`, så i
+en arbetsyta ser de inte ärvda värden.
 
 Eftersom nyckelringsposterna nycklas på domän och användarnamn räcker en
 inloggning för alla appar på samma webbplats.
@@ -227,14 +289,11 @@ hemligheter.
 
 ```json
 {
-	"environment": "test",
-	"syncPackageJson": true
+	"environment": "test"
 }
 ```
 
 - `environment` – senast valda miljö med `E`
-- `syncPackageJson` – `true` uppdaterar `package.json` utan att fråga, `false`
-  hoppar över kontrollen
 
 ### Globala inställningar
 
@@ -620,10 +679,11 @@ gränssnittet är på svenska.
 
 **Filer**
 
-| Fil                                     | Innehåller                             | Checka in? |
-| --------------------------------------- | -------------------------------------- | ---------- |
-| `.dev_properties.json`                  | Webbplats, tillägg, auth och signering | Ja         |
-| `.svcconfig`                            | Aktiv miljö, package.json-synk         | Valfritt   |
-| `~/.config/sitevision-cli/config.json`  | Språk, introanimation                  | –          |
-| `dist/<id>.zip`, `dist/<id>-signed.zip` | Byggresultat                           | Nej        |
-| Nyckelringen, tjänst `sitevision-cli`   | Alla hemligheter                       | –          |
+| Fil                                     | Innehåller                                           | Checka in? |
+| --------------------------------------- | ---------------------------------------------------- | ---------- |
+| `.dev_properties.json`                  | Din konfiguration, med användarspecifika värden      | Nej        |
+| `package.json`                          | Gemensamma standardvärden (toppnivåfält och `"svc"`) | Ja         |
+| `.svcconfig`                            | Aktiv miljö                                          | Nej        |
+| `~/.config/sitevision-cli/config.json`  | Språk, introanimation                                | –          |
+| `dist/<id>.zip`, `dist/<id>-signed.zip` | Byggresultat                                         | Nej        |
+| Nyckelringen, tjänst `sitevision-cli`   | Alla hemligheter                                     | –          |

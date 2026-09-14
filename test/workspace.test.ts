@@ -7,6 +7,8 @@ import {
 	writeDevProperties,
 	appTypeOf,
 	getApiEndpoints,
+	getPackageJsonSyncChanges,
+	readPackageDefaults,
 } from '../source/utils/project-detection.js';
 import {
 	discoverApps,
@@ -77,6 +79,36 @@ test('writing dev properties keeps only values that differ from the root', t => 
 		fs.readFileSync(path.join(oneRoot, '.dev_properties.json'), 'utf8'),
 	);
 	t.deepEqual(file, {addonName: 'Renamed'});
+});
+
+test('package.json defaults sit under .dev_properties.json, the root first', t => {
+	const root = workspace();
+	fs.writeFileSync(
+		path.join(root, 'package.json'),
+		JSON.stringify({
+			developmentDomain: 'pkg.example',
+			svc: {authMethod: 'oauth2', useHTTPForDevDeploy: true},
+		}),
+	);
+	const twoRoot = path.join(root, 'restapps', 'two');
+	fs.writeFileSync(
+		path.join(twoRoot, 'package.json'),
+		JSON.stringify({addonName: 'Two', svc: {username: 'not@shared.se'}}),
+	);
+
+	const two = detectProject(twoRoot)!;
+	t.is(two.devProperties?.addonName, 'Two');
+	t.true(two.devProperties?.useHTTPForDevDeploy);
+	t.is(two.devProperties?.domain, 'site.example');
+	t.is(two.devProperties?.authMethod, 'basic');
+	t.is(two.devProperties?.username, 'me@example.com');
+	t.is(readPackageDefaults(twoRoot).username, undefined);
+
+	t.deepEqual(
+		getPackageJsonSyncChanges(root).map(change => change.key),
+		['developmentDomain', 'siteName', 'svc.authMethod'],
+	);
+	t.deepEqual(getPackageJsonSyncChanges(twoRoot), []);
 });
 
 test('discoverApps finds apps below the root and skips node_modules', t => {

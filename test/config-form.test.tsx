@@ -6,6 +6,7 @@ import path from 'node:path';
 import {render} from 'ink-testing-library';
 import {
 	detectProject,
+	getPackageJsonSyncChanges,
 	normalizeDomain,
 	writeDevProperties,
 } from '../source/utils/project-detection.js';
@@ -38,45 +39,89 @@ function workspaceApp() {
 	return app;
 }
 
-test('saveConfig writes only local values and leaves untouched secrets alone', t => {
+const formValues = (overrides: Record<string, string> = {}) => ({
+	domain: 'site.example',
+	siteName: 'Site',
+	addonName: '',
+	username: 'me@example.com',
+	authMethod: 'basic',
+	password: '',
+	clientId: '',
+	authorizationEndpoint: '',
+	tokenEndpoint: '',
+	scopes: '',
+	clientSecret: '',
+	sessionLoginUrl: '',
+	useHTTPForDevDeploy: 'no',
+	signingUsername: '',
+	certificateName: '',
+	signingPassword: '',
+	...overrides,
+});
+
+const readJson = (file: string) =>
+	JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+
+test('in workspace mode saveConfig never creates an app file', t => {
 	const app = workspaceApp();
-	const project = detectProject(app)!;
+	const root = path.resolve(app, '..', '..');
 	saveConfig(
-		project,
-		{
-			domain: 'site.example',
-			siteName: 'Site',
+		{...detectProject(app)!, workspaceRoot: root},
+		formValues({
 			addonName: 'One Addon',
-			username: 'me@example.com',
 			authMethod: 'cookie',
-			password: '',
-			clientId: '',
-			authorizationEndpoint: '',
-			tokenEndpoint: '',
-			scopes: '',
-			clientSecret: '',
-			sessionLoginUrl: '',
-			useHTTPForDevDeploy: 'no',
 			signingUsername: 'signer@example.com',
-			certificateName: '',
-			signingPassword: '',
-		},
+		}),
 		new Set(['addonName', 'authMethod', 'signingUsername']),
 	);
-	const file = JSON.parse(
-		fs.readFileSync(path.join(app, '.dev_properties.json'), 'utf8'),
-	);
-	t.deepEqual(file, {
-		addonName: 'One Addon',
+	t.false(fs.existsSync(path.join(app, '.dev_properties.json')));
+	t.is(readJson(path.join(app, 'package.json'))['addonName'], 'One Addon');
+	t.deepEqual(readJson(path.join(root, '.dev_properties.json')), {
+		domain: 'site.example',
+		siteName: 'Site',
+		username: 'me@example.com',
 		authMethod: 'cookie',
-		useHTTPForDevDeploy: false,
 		signingUsername: 'signer@example.com',
 	});
 });
 
+test('in app mode saveConfig writes the complete file from package.json defaults', t => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-appmode-'));
+	fs.writeFileSync(
+		path.join(dir, 'manifest.json'),
+		JSON.stringify({id: 'x', name: 'X', version: '1.0.0', type: 'WebApp'}),
+	);
+	fs.writeFileSync(
+		path.join(dir, 'package.json'),
+		JSON.stringify({
+			developmentDomain: 'pkg.example',
+			siteName: 'Site',
+			addonName: 'Addon',
+		}),
+	);
+	const project = detectProject(dir)!;
+	t.is(project.devProperties?.domain, 'pkg.example');
+	saveConfig(
+		project,
+		formValues({domain: 'pkg.example', addonName: 'Addon'}),
+		new Set(['username']),
+	);
+	t.deepEqual(readJson(path.join(dir, '.dev_properties.json')), {
+		domain: 'pkg.example',
+		siteName: 'Site',
+		addonName: 'Addon',
+		username: 'me@example.com',
+		authMethod: 'basic',
+		useHTTPForDevDeploy: false,
+	});
+	// Spelled-out defaults and user values are nothing to sync.
+	t.deepEqual(getPackageJsonSyncChanges(dir), []);
+});
+
 test('the form marks inherited fields, edits the focused field and saves on Enter', async t => {
 	const app = workspaceApp();
-	const project = detectProject(app)!;
+	const root = path.resolve(app, '..', '..');
+	const project = {...detectProject(app)!, workspaceRoot: root};
 	let saved = 0;
 	const {stdin, lastFrame} = render(
 		<ConfigForm
@@ -108,11 +153,8 @@ test('the form marks inherited fields, edits the focused field and saves on Ente
 	stdin.write('\r');
 	await delay(20);
 	t.is(saved, 1);
-	const file = JSON.parse(
-		fs.readFileSync(path.join(app, '.dev_properties.json'), 'utf8'),
-	);
-	t.is(file.addonName, 'Booking');
-	t.is(file.domain, undefined);
+	t.is(readJson(path.join(app, 'package.json'))['addonName'], 'Booking');
+	t.false(fs.existsSync(path.join(app, '.dev_properties.json')));
 });
 
 test('arrow keys move the caret so edits land mid-string', async t => {

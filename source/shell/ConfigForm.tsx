@@ -2,9 +2,15 @@ import {useEffect, useState} from 'react';
 import {Box, Text, useInput} from 'ink';
 import type {DevProperties} from '../types/index.js';
 import {
+	findDevPropertiesPath,
 	getPackageJsonSyncChanges,
+	hasPackageJson,
+	IMPLICIT_VALUES,
 	normalizeDomain,
+	readAncestorDevProperties,
 	readInheritedDevProperties,
+	readWorkspaceDevProperties,
+	updatePackageJson,
 	writeDevProperties,
 } from '../utils/project-detection.js';
 import {
@@ -179,6 +185,8 @@ export interface ConfigTarget {
 	base?: Partial<DevProperties>;
 	environment?: string;
 	workspace?: boolean;
+	// Set for an app shown in workspace mode.
+	workspaceRoot?: string;
 }
 
 const ENV_KEYS = new Set([
@@ -241,6 +249,54 @@ function storedSecret(project: ConfigTarget, key: string): boolean {
 	);
 }
 
+const errorText = (error: unknown) =>
+	error instanceof Error ? error.message : String(error);
+
+const sameValue = (key: string, a: unknown, b: unknown) =>
+	JSON.stringify(a === '' || a === undefined ? IMPLICIT_VALUES[key] : a) ===
+	JSON.stringify(b === '' || b === undefined ? IMPLICIT_VALUES[key] : b);
+
+/**
+ * App mode writes the app's complete file. Workspace mode never creates an
+ * app's .dev_properties.json: changes go to the root file, and the addon name
+ * to the app's package.json. An app that already has its own file keeps it.
+ */
+function writeConfigFile(project: ConfigTarget, file: DevProperties): void {
+	const {workspaceRoot} = project;
+	if (
+		!workspaceRoot ||
+		project.workspace ||
+		findDevPropertiesPath(project.root)
+	) {
+		writeDevProperties(project.root, file, {
+			complete: !workspaceRoot && !project.workspace,
+		});
+		return;
+	}
+
+	const before = (project.base ?? project.devProperties ?? {}) as Record<
+		string,
+		unknown
+	>;
+	const after = file as unknown as Record<string, unknown>;
+	const root = readWorkspaceDevProperties(workspaceRoot) as Record<
+		string,
+		unknown
+	>;
+	for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+		if (sameValue(key, after[key], before[key])) continue;
+		if (key === 'addonName') {
+			updatePackageJson(project.root, packageJson => {
+				packageJson['addonName'] = after[key] || undefined;
+			});
+		} else {
+			root[key] = after[key];
+		}
+	}
+
+	writeDevProperties(workspaceRoot, root as unknown as DevProperties);
+}
+
 /** Apply the form to disk and the keychain. Exported for the test. */
 export function saveConfig(
 	project: ConfigTarget,
@@ -287,8 +343,8 @@ export function saveConfig(
 		base.certificateName = next.certificateName;
 		base.baseEnvironment = next.baseEnvironment;
 		base.production = next.production;
-		writeDevProperties(
-			project.root,
+		writeConfigFile(
+			project,
 			withEnvironmentOverride(base, env, {
 				domain: next.domain,
 				siteName: next.siteName,
@@ -301,7 +357,7 @@ export function saveConfig(
 			}),
 		);
 	} else {
-		writeDevProperties(project.root, {
+		writeConfigFile(project, {
 			...next,
 			environments:
 				project.base?.environments ?? project.devProperties?.environments,
@@ -408,20 +464,22 @@ export function ConfigForm({
 		string,
 		unknown
 	>;
-	const changes =
-		project.devProperties && !project.workspace
-			? getPackageJsonSyncChanges(
-					project.root,
-					project.devProperties as DevProperties,
-				)
-			: [];
+	const ancestors = readAncestorDevProperties(project.root);
+	const changes = getPackageJsonSyncChanges(project.root);
+	const packageJsonExists = hasPackageJson(project.root);
 
 	// Write one field to disk (and the keychain for secrets) right away.
 	const commit = (key: string, value: string, label = current.label) => {
 		const clean = key === 'domain' ? normalizeDomain(value) : value;
 		const next = {...values, [key]: clean};
 		setValues(next);
-		saveConfig(project, next, new Set([key]));
+		try {
+			saveConfig(project, next, new Set([key]));
+		} catch (error) {
+			setNote(t('Not saved: {error}', {error: errorText(error)}));
+			return;
+		}
+
 		setNote(
 			clean === value
 				? t('Saved {label}.', {label: t(label)})
@@ -452,7 +510,13 @@ export function ConfigForm({
 					tokenEndpoint: values['tokenEndpoint'] || found.tokenEndpoint,
 				};
 				setValues(next);
-				saveConfig(project, next, new Set());
+				try {
+					saveConfig(project, next, new Set());
+				} catch (error) {
+					setNote(t('Not saved: {error}', {error: errorText(error)}));
+					return;
+				}
+
 				onSaved();
 				setNote(t('Endpoints filled from the site OpenID config.'));
 			} else {
@@ -561,18 +625,24 @@ export function ConfigForm({
 			};
 		}
 
-		const inheritedValue = [
+		const inOAuth2 = [
 			'clientId',
 			'authorizationEndpoint',
 			'tokenEndpoint',
-		].includes(f.key)
+		].includes(f.key);
+		const inheritedValue = inOAuth2
 			? (inherited['oauth2'] as Record<string, unknown> | undefined)?.[f.key]
 			: inherited[f.key];
 		if (
 			inheritedValue !== undefined &&
 			JSON.stringify(inheritedValue) === JSON.stringify(value)
 		) {
-			return {text: t('↑ root')};
+			// A parent .dev_properties.json outranks package.json when it has the key.
+			return {
+				text: Object.hasOwn(ancestors, inOAuth2 ? 'oauth2' : f.key)
+					? t('↑ root')
+					: 'package.json',
+			};
 		}
 
 		return {text: (values[f.key] ?? '') ? t('local') : ''};
@@ -695,30 +765,33 @@ export function ConfigForm({
 					</Text>
 				</Box>
 			)}
-			{!project.workspace && (
-				<Box marginTop={1} flexDirection="column" flexShrink={0}>
-					<Text bold dimColor>
-						{t('PACKAGE.JSON SYNC')}{' '}
-						<Text color={changes.length > 0 ? 'yellow' : 'green'}>
-							{changes.length === 0
+			<Box marginTop={1} flexDirection="column" flexShrink={0}>
+				<Text bold dimColor>
+					{t('PACKAGE.JSON SYNC')}{' '}
+					<Text
+						color={
+							changes.length > 0 || !packageJsonExists ? 'yellow' : 'green'
+						}
+					>
+						{!packageJsonExists
+							? t('no workspace package.json · y to set up')
+							: changes.length === 0
 								? t('in sync')
 								: changes.length === 1
 									? t('1 diff · y to apply')
 									: t('{n} diffs · y to apply', {n: changes.length})}
-						</Text>
 					</Text>
-					{changes.map(c => (
-						<Text key={c.key} wrap="truncate">
-							<Text color={c.from === undefined ? 'green' : 'yellow'}>
-								{c.from === undefined ? '+ ' : '~ '}
-							</Text>
-							{c.key}:{' '}
-							{c.from !== undefined && <Text dimColor>{c.from} → </Text>}
-							{c.to}
+				</Text>
+				{changes.map(c => (
+					<Text key={c.key} wrap="truncate">
+						<Text color={c.from === undefined ? 'green' : 'yellow'}>
+							{c.from === undefined ? '+ ' : '~ '}
 						</Text>
-					))}
-				</Box>
-			)}
+						{c.key}: {c.from !== undefined && <Text dimColor>{c.from} → </Text>}
+						{c.to}
+					</Text>
+				))}
+			</Box>
 			<Box flexGrow={1} />
 			<Box
 				flexDirection="column"

@@ -164,8 +164,8 @@ export function readWorkspaceDevProperties(
 	return merged;
 }
 
-/** Dev properties inherited from ancestor directories only (no own file). */
-export function readInheritedDevProperties(
+/** Ancestor directories' .dev_properties.json merged, nearest wins (no own file). */
+export function readAncestorDevProperties(
 	root: string,
 ): Partial<DevProperties> {
 	let merged: Partial<DevProperties> = {};
@@ -174,6 +174,29 @@ export function readInheritedDevProperties(
 	}
 
 	return merged;
+}
+
+/** Shared defaults from package.json: the workspace root's first, the app's on top. */
+export function readPackageDefaultsChain(root: string): Partial<DevProperties> {
+	let merged: Partial<DevProperties> = {};
+	for (const dir of [...ancestorDirs(root), root]) {
+		merged = {...merged, ...readPackageDefaults(dir)};
+	}
+
+	return merged;
+}
+
+/**
+ * Everything an app's own .dev_properties.json sits on top of: package.json
+ * defaults (root, then app), then ancestor .dev_properties.json files.
+ */
+export function readInheritedDevProperties(
+	root: string,
+): Partial<DevProperties> {
+	return {
+		...readPackageDefaultsChain(root),
+		...readAncestorDevProperties(root),
+	};
 }
 
 // =============================================================================
@@ -557,6 +580,8 @@ export function readDevProperties(projectRoot: string): DevProperties | null {
 export function writeDevProperties(
 	projectRoot: string,
 	properties: DevProperties,
+	// App mode: write every value, so plain sitevision-scripts finds them all.
+	{complete = false}: {complete?: boolean} = {},
 ): void {
 	const devPropertiesPath =
 		findDevPropertiesPath(projectRoot) ||
@@ -573,8 +598,9 @@ export function writeDevProperties(
 	// at the workspace root instead of being copied into every app. An empty
 	// string means "unset", so it is dropped rather than written as an override
 	// that would shadow the inherited value.
-	const inherited: Record<string, unknown> =
-		readInheritedDevProperties(projectRoot);
+	const inherited: Record<string, unknown> = complete
+		? {}
+		: readInheritedDevProperties(projectRoot);
 	const own = Object.fromEntries(
 		Object.entries(persisted).filter(
 			([key, value]) =>
@@ -625,16 +651,25 @@ export function writeSvcConfig(projectRoot: string, updates: SvcConfig): void {
 // =============================================================================
 
 /**
- * Fields duplicated between .dev_properties.json and package.json, where
- * sitevision-scripts reads them under different names.
+ * Values tied to the person running svc. They stay in .dev_properties.json and
+ * never go into package.json.
  */
-const PACKAGE_JSON_SYNC_KEYS: {
-	packageKey: 'developmentDomain' | 'siteName' | 'addonName';
-	devKey: keyof DevProperties;
-}[] = [
-	{packageKey: 'developmentDomain', devKey: 'domain'},
-	{packageKey: 'siteName', devKey: 'siteName'},
-	{packageKey: 'addonName', devKey: 'addonName'},
+export const USER_KEYS = ['username', 'signingUsername', 'certificateName'];
+
+// Shared values package.json can hold: three top-level fields, the rest under "svc".
+const PACKAGE_TOP_KEYS: Record<string, string> = {
+	domain: 'developmentDomain',
+	siteName: 'siteName',
+	addonName: 'addonName',
+};
+const PACKAGE_SVC_KEYS = [
+	'authMethod',
+	'oauth2',
+	'sessionLoginUrl',
+	'useHTTPForDevDeploy',
+	'baseEnvironment',
+	'production',
+	'environments',
 ];
 
 export interface PackageJsonSyncChange {
@@ -653,72 +688,148 @@ function readPackageJson(projectRoot: string): PackageJson | null {
 	}
 }
 
-/**
- * Which of the shared fields package.json is missing or disagrees on, relative
- * to the given dev properties. Reads package.json from disk — an earlier
- * `npm install` in the same session may have rewritten it.
- */
-export function getPackageJsonSyncChanges(
-	projectRoot: string,
-	properties: DevProperties,
-): PackageJsonSyncChange[] {
-	const packageJson = readPackageJson(projectRoot);
-	if (!packageJson) return [];
-
-	const changes: PackageJsonSyncChange[] = [];
-	for (const {packageKey, devKey} of PACKAGE_JSON_SYNC_KEYS) {
-		const to = properties[devKey];
-		if (typeof to !== 'string' || to === '') continue;
-		const from = packageJson[packageKey];
-		if (from !== to) {
-			changes.push(
-				from === undefined
-					? {key: packageKey, to}
-					: {key: packageKey, from, to},
-			);
-		}
+/** The shared defaults one directory's package.json provides. */
+export function readPackageDefaults(dir: string): Partial<DevProperties> {
+	const packageJson = readPackageJson(dir) as Record<string, unknown> | null;
+	if (!packageJson) return {};
+	const defaults: Record<string, unknown> = {};
+	for (const [devKey, packageKey] of Object.entries(PACKAGE_TOP_KEYS)) {
+		const value = packageJson[packageKey];
+		if (typeof value === 'string' && value !== '') defaults[devKey] = value;
 	}
 
-	return changes;
+	const svc = packageJson['svc'] as Record<string, unknown> | undefined;
+	for (const key of PACKAGE_SVC_KEYS) {
+		if (svc?.[key] !== undefined) defaults[key] = svc[key];
+	}
+
+	if (typeof defaults['domain'] === 'string') {
+		defaults['domain'] = normalizeDomain(defaults['domain']);
+	}
+
+	return defaults as Partial<DevProperties>;
 }
 
 /**
- * Copy the shared fields from dev properties into package.json, preserving the
- * file's existing indentation and trailing newline.
+ * Shared values in this directory's own .dev_properties.json that package.json
+ * does not already provide, here or further up. User values never qualify.
  */
-export function syncDevPropertiesToPackageJson(
-	projectRoot: string,
-	properties: DevProperties,
-): boolean {
-	const packageJsonPath = path.join(projectRoot, 'package.json');
-	let raw: string;
-	try {
-		raw = fs.readFileSync(packageJsonPath, 'utf-8');
-	} catch {
-		return false;
-	}
-
-	let packageJson: PackageJson;
-	try {
-		packageJson = JSON.parse(raw) as PackageJson;
-	} catch {
-		return false;
-	}
-
-	for (const {packageKey, devKey} of PACKAGE_JSON_SYNC_KEYS) {
-		const value = properties[devKey];
-		if (typeof value === 'string' && value !== '') {
-			packageJson[packageKey] = value;
+function pendingSync(dir: string): Array<{key: string; value: unknown}> {
+	const own = readDevPropertiesFile(dir) as Record<string, unknown> | null;
+	if (!own) return [];
+	const defaults = readPackageDefaultsChain(dir) as Record<string, unknown>;
+	const pending: Array<{key: string; value: unknown}> = [];
+	for (const key of [...Object.keys(PACKAGE_TOP_KEYS), ...PACKAGE_SVC_KEYS]) {
+		let value = own[key];
+		if (key === 'environments' && value) {
+			value = Object.fromEntries(
+				Object.entries(value as Record<string, Record<string, unknown>>).map(
+					([name, override]) => [
+						name,
+						Object.fromEntries(
+							Object.entries(override).filter(
+								([field]) => !USER_KEYS.includes(field),
+							),
+						),
+					],
+				),
+			);
 		}
+
+		if (value === undefined || value === '') continue;
+		if (
+			JSON.stringify(value) ===
+			JSON.stringify(defaults[key] ?? IMPLICIT_VALUES[key])
+		)
+			continue;
+		pending.push({key, value});
 	}
 
-	const indent = /^(?<indent>[\t ]+)/m.exec(raw)?.groups?.['indent'] ?? '\t';
-	const newline = raw.endsWith('\n') ? '\n' : '';
-	fs.writeFileSync(
-		packageJsonPath,
-		JSON.stringify(packageJson, null, indent) + newline,
+	return pending;
+}
+
+/** What an unset field means, so spelling out the default is not a change. */
+export const IMPLICIT_VALUES: Record<string, unknown> = {
+	authMethod: 'basic',
+	useHTTPForDevDeploy: false,
+	production: false,
+};
+
+const packageLabel = (key: string) => PACKAGE_TOP_KEYS[key] ?? `svc.${key}`;
+const display = (value: unknown) =>
+	typeof value === 'string' ? value : JSON.stringify(value);
+
+/** What syncing this directory would change in its package.json. */
+export function getPackageJsonSyncChanges(
+	dir: string,
+): PackageJsonSyncChange[] {
+	const current = readPackageDefaults(dir) as Record<string, unknown>;
+	return pendingSync(dir).map(({key, value}) =>
+		current[key] === undefined
+			? {key: packageLabel(key), to: display(value)}
+			: {
+					key: packageLabel(key),
+					from: display(current[key]),
+					to: display(value),
+				},
 	);
+}
+
+export function hasPackageJson(dir: string): boolean {
+	return fs.existsSync(path.join(dir, 'package.json'));
+}
+
+/**
+ * Copy the pending shared values from .dev_properties.json into package.json,
+ * creating package.json when the directory has none. Throws if it cannot be
+ * read or written.
+ */
+export function syncDevPropertiesToPackageJson(dir: string): boolean {
+	const pending = pendingSync(dir);
+	if (pending.length === 0 && hasPackageJson(dir)) return false;
+	updatePackageJson(dir, packageJson => {
+		for (const {key, value} of pending) {
+			const topKey = PACKAGE_TOP_KEYS[key];
+			if (topKey) {
+				packageJson[topKey] = value;
+			} else {
+				packageJson['svc'] = {
+					...(packageJson['svc'] as Record<string, unknown>),
+					[key]: value,
+				};
+			}
+		}
+	});
 	return true;
+}
+
+/**
+ * Edit package.json in place, keeping its indentation and trailing newline. A
+ * missing file is created; an unreadable or invalid one throws, so the caller
+ * can warn instead of dropping the change silently.
+ */
+export function updatePackageJson(
+	dir: string,
+	mutate: (packageJson: Record<string, unknown>) => void,
+): void {
+	const packageJsonPath = path.join(dir, 'package.json');
+	// A new file is private, so a workspace root is never published by accident.
+	let raw = '{\n\t"private": true\n}\n';
+	try {
+		if (hasPackageJson(dir)) raw = fs.readFileSync(packageJsonPath, 'utf-8');
+		const packageJson = JSON.parse(raw) as Record<string, unknown>;
+		mutate(packageJson);
+		const indent = /^(?<indent>[\t ]+)/m.exec(raw)?.groups?.['indent'] ?? '\t';
+		const newline = raw.endsWith('\n') ? '\n' : '';
+		fs.writeFileSync(
+			packageJsonPath,
+			JSON.stringify(packageJson, null, indent) + newline,
+		);
+	} catch (error) {
+		throw new Error(
+			`Could not update ${packageJsonPath}: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
 }
 
 /**
@@ -735,8 +846,22 @@ export function migrateLegacyPassword(project: ProjectInfo): boolean {
 
 	if (!setDeployPassword(domain, username, password)) return false;
 
-	// writeDevProperties strips `password` defensively; keep the in-memory value.
-	writeDevProperties(project.root, project.devProperties);
+	// Remove only the password, from whichever file holds it; every other value
+	// stays as written.
+	for (const dir of [project.root, ...ancestorDirs(project.root)]) {
+		const file = findDevPropertiesPath(dir);
+		if (!file) continue;
+		try {
+			const {password: stored, ...rest} = JSON.parse(
+				fs.readFileSync(file, 'utf8'),
+			) as Record<string, unknown>;
+			if (stored !== undefined) {
+				fs.writeFileSync(file, JSON.stringify(rest, null, 2));
+			}
+		} catch {
+			// Unreadable file: nothing to migrate there.
+		}
+	}
 	project.hasLegacyPassword = false;
 	return true;
 }

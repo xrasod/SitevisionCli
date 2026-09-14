@@ -9,11 +9,11 @@ MCPServer) from a full-screen terminal shell or as plain commands.
 - **Three ways to authenticate deploys:** username and password, OAuth2 (PKCE,
   works with SSO), or a captured browser session for SAML-only sites.
 - **No secrets on disk.** Passwords, tokens and cookies live in the OS keychain.
-  `.dev_properties.json` is safe to commit.
 - **Environments.** dev, test and prod in one config; production deploys use
   the signed zip, confirm and activate.
-- **Shared config.** Put site and auth settings once at the repo root; each app
-  only needs its addon name.
+- **Shared config in git.** Site and auth settings for the whole team live in
+  `package.json`, once at the repo root; your username stays in a local
+  `.dev_properties.json`. Compatible with plain sitevision-scripts.
 - **Builds the way Sitevision does.** Bundled apps without their own webpack
   config are built by `@sitevision/sitevision-scripts`.
 - English and Swedish UI.
@@ -85,21 +85,26 @@ OAuth2 token or session cookie for one run.
 
 ## Configuration
 
-`.dev_properties.json` in the app, or at the repo root to share it:
+`.dev_properties.json` is your local config and the main source; keep it out of
+git. Shared values are committed in `package.json` and act as defaults
+underneath it:
 
 ```json
 {
-	"domain": "acme-use.sitevision-cloud.se",
+	"developmentDomain": "acme-use.sitevision-cloud.se",
 	"siteName": "Intranet",
 	"addonName": "my-addon",
-	"username": "me@acme.se",
-	"authMethod": "basic",
-	"signingUsername": "me@acme.se",
-	"environments": {
-		"prod": {"domain": "acme.sitevision-cloud.se"}
+	"svc": {
+		"authMethod": "oauth2",
+		"environments": {"prod": {"domain": "acme.sitevision-cloud.se"}}
 	}
 }
 ```
+
+`username`, `signingUsername` and `certificateName` are user-specific and only
+live in `.dev_properties.json`. `y` copies shared values from
+`.dev_properties.json` into `package.json`. In a workspace, shared values go in
+the root `package.json` and each app's `package.json` only needs `addonName`.
 
 ## Authentication in short
 

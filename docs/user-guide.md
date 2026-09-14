@@ -21,14 +21,15 @@ authentication works.
 
 ## 1. Concepts
 
-| Term                       | Meaning                                                                                                                                                |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **App**                    | A directory with a `manifest.json` (in the root, `static/` or `src/`) and a `package.json`. WebApp, Widget, RESTApp and MCPServer are supported.       |
-| **Workspace**              | A repository that contains several apps in subfolders, e.g. `webapps/*`, `restapps/*`, `widgets/*`.                                                    |
-| **`.dev_properties.json`** | The per-site configuration: domain, site, addon, username, auth method, signing user, environments. Contains **no secrets** and is safe to commit.     |
-| **Keychain**               | The operating system's secret store (macOS Keychain, Windows Credential Manager, libsecret on Linux). All passwords, tokens and cookies are kept here. |
-| **Environment**            | A named target site, e.g. `dev`, `test`, `prod`. The top-level config is one environment; others override only what differs.                           |
-| **Addon**                  | The custom module in the site's Addon Repository that the app is uploaded into.                                                                        |
+| Term                        | Meaning                                                                                                                                                |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **App**                     | A directory with a `manifest.json` (in the root, `static/` or `src/`) and a `package.json`. WebApp, Widget, RESTApp and MCPServer are supported.       |
+| **Workspace**               | A repository that contains several apps in subfolders, e.g. `webapps/*`, `restapps/*`, `widgets/*`.                                                    |
+| **`.dev_properties.json`**  | Your local configuration and the main source: domain, site, addon, username, auth method, signing user, environments. Keep it out of version control.  |
+| **`package.json` defaults** | Shared, committed values that sit underneath `.dev_properties.json`: everything except user-specific fields.                                           |
+| **Keychain**                | The operating system's secret store (macOS Keychain, Windows Credential Manager, libsecret on Linux). All passwords, tokens and cookies are kept here. |
+| **Environment**             | A named target site, e.g. `dev`, `test`, `prod`. The top-level config is one environment; others override only what differs.                           |
+| **Addon**                   | The custom module in the site's Addon Repository that the app is uploaded into.                                                                        |
 
 ## 2. Installing and starting
 
@@ -81,8 +82,9 @@ In workspace mode there are two panes. `Tab` switches between them.
   `Esc` clears the filter.
 - Action keys such as `d` or `p` only work in the **content pane**. Typing `d`
   in the navigator searches for "d" instead.
-- The last row in the navigator is **Workspace settings**: the shared config at
-  the repo root.
+- The last row in the navigator is **Workspace settings**: the root
+  `.dev_properties.json`, with the root `package.json` defaults underneath. See
+  [4](#shared-config-in-a-workspace).
 
 ### Tabs
 
@@ -99,25 +101,25 @@ In workspace mode there are two panes. `Tab` switches between them.
 
 Global (content pane):
 
-| Key       | Action                                                                      |
-| --------- | --------------------------------------------------------------------------- |
-| `d`       | Dev: build on every change, sign if configured, deploy                      |
-| `w`       | Watch: build on every change, sign if configured, never deploy              |
-| `b`       | Build once                                                                  |
-| `s`       | Sign the built zip                                                          |
-| `p` / `P` | Deploy / force deploy to the active environment                             |
-| `a`       | Open Versions (and activate, when already there)                            |
-| `E`       | Cycle the active environment                                                |
-| `K`       | Stop running tasks for the selected app                                     |
-| `e`       | Open the Config tab                                                         |
-| `y`       | Copy domain, site and addon from `.dev_properties.json` into `package.json` |
-| `i`       | `npm install`                                                               |
-| `l`       | Log in again (discards the credential held for this session)                |
-| `,`       | Settings: language (English/Swedish) and intro animation                    |
-| `/`       | Command palette: every action, searchable                                   |
-| `Tab`     | Switch between navigator and content                                        |
-| `Esc`     | Back / cancel                                                               |
-| `q`       | Quit (stops running tasks)                                                  |
+| Key       | Action                                                             |
+| --------- | ------------------------------------------------------------------ |
+| `d`       | Dev: build on every change, sign if configured, deploy             |
+| `w`       | Watch: build on every change, sign if configured, never deploy     |
+| `b`       | Build once                                                         |
+| `s`       | Sign the built zip                                                 |
+| `p` / `P` | Deploy / force deploy to the active environment                    |
+| `a`       | Open Versions (and activate, when already there)                   |
+| `E`       | Cycle the active environment                                       |
+| `K`       | Stop running tasks for the selected app                            |
+| `e`       | Open the Config tab                                                |
+| `y`       | Copy shared values from `.dev_properties.json` into `package.json` |
+| `i`       | `npm install`                                                      |
+| `l`       | Log in again (discards the credential held for this session)       |
+| `,`       | Settings: language (English/Swedish) and intro animation           |
+| `/`       | Command palette: every action, searchable                          |
+| `Tab`     | Switch between navigator and content                               |
+| `Esc`     | Back / cancel                                                      |
+| `q`       | Quit (stops running tasks)                                         |
 
 Per tab:
 
@@ -141,6 +143,18 @@ layout: no sidebar (the app list becomes a one-line strip) and short tab
 names. Useful in a split pane.
 
 ## 4. Configuration
+
+Configuration lives in two files:
+
+| File                   | Holds                                                                                   | Commit? |
+| ---------------------- | --------------------------------------------------------------------------------------- | ------- |
+| `.dev_properties.json` | Your config. The main source; plain sitevision-scripts reads it too.                    | No      |
+| `package.json`         | Shared defaults for everyone working on the app: every value except user-specific ones. | Yes     |
+
+`username`, `signingUsername` and `certificateName` are **user-specific**. They
+only ever live in `.dev_properties.json`. Add `.dev_properties.json` to
+`.gitignore`: `svc` never writes secrets into it, but plain sitevision-scripts
+stores the deploy password there.
 
 ### `.dev_properties.json`
 
@@ -175,6 +189,37 @@ names. Useful in a split pane.
 
 The file may also be named `.dev-properties.json`.
 
+### Defaults in `package.json`
+
+Shared values are committed in `package.json`. `svc` reads them underneath
+`.dev_properties.json`, so a value in `.dev_properties.json` always wins.
+
+```json
+{
+	"developmentDomain": "acme-use.sitevision-cloud.se",
+	"siteName": "Intranet",
+	"addonName": "my-addon",
+	"svc": {
+		"authMethod": "oauth2",
+		"oauth2": {
+			"clientId": "svc-cli",
+			"authorizationEndpoint": "https://acme-use.sitevision-cloud.se/oauth2-provider/authorize",
+			"tokenEndpoint": "https://acme-use.sitevision-cloud.se/oauth2-provider/token"
+		},
+		"environments": {"prod": {"domain": "acme.sitevision-cloud.se"}}
+	}
+}
+```
+
+`developmentDomain` (the domain), `siteName` and `addonName` sit at the top
+level. The other shared fields (`authMethod`, `oauth2`, `sessionLoginUrl`,
+`useHTTPForDevDeploy`, `baseEnvironment`, `production`, `environments`) go under
+`"svc"`. User-specific fields are ignored there.
+
+A new developer opens the app with `svc` and enters their username. In
+single-app mode the first save writes a complete `.dev_properties.json` with
+the defaults filled in, so plain sitevision-scripts works as well.
+
 ### Editing in the Config tab
 
 Every field is saved as soon as you press `Enter` on it; there is no separate
@@ -186,35 +231,52 @@ The **SOURCE** column shows where each value comes from:
 
 - `local` – set in this app's own file
 - `↑ root` – inherited from a `.dev_properties.json` further up
+- `package.json` – a default from `package.json`
 - `↑ dev` / `<env>` – on a non-base environment: inherited from the base, or
   overridden here
 - `keychain` – a secret is stored
 - `✗ required` – missing
 
-Below the form, **PACKAGE.JSON SYNC** shows any differences between
-`.dev_properties.json` and the `developmentDomain`, `siteName` and `addonName`
-fields that sitevision-scripts reads from `package.json`. `y` copies the values
-over. `.dev_properties.json` is always the source.
+Below the form, **PACKAGE.JSON SYNC** lists the shared values in this
+directory's `.dev_properties.json` that `package.json` does not provide yet,
+either here or in a `package.json` further up. `y` copies them into
+`package.json` so they can be committed. User-specific fields are never copied,
+not even from inside `environments`. The same section and `y` work in
+**Workspace settings**, against the root `package.json`. When the workspace root has no `package.json`
+yet, the section says so and `y` creates one. If `package.json` cannot be read
+or written, `svc` shows a warning instead of saving.
 
 ### Shared config in a workspace
 
-An app's config is its own `.dev_properties.json` merged over every
-`.dev_properties.json` in parent directories up to the repository root (the
-directory containing `.git`). The nearest file wins, key by key.
+Inheritance between directories is a `svc` feature. For an app, each value is
+looked up in this order, and the first match wins:
+
+1. The app's own `.dev_properties.json`, if it has one
+2. `.dev_properties.json` in parent directories, up to the repository root (the
+   directory containing `.git`)
+3. The app's `package.json`
+4. `package.json` in parent directories, up to the repository root
 
 Recommended layout:
 
 ```
 repo/
-  .dev_properties.json        ← domain, siteName, username, authMethod, oauth2, signingUsername
+  package.json              ← shared: developmentDomain, siteName, "svc": {authMethod, oauth2, environments}   committed
+  .dev_properties.json      ← yours: username, signingUsername                                              ignored
   webapps/
-    news/.dev_properties.json   ← {"addonName": "news"}
-    search/.dev_properties.json ← {"addonName": "search"}
+    news/package.json       ← "addonName": "news"                                                          committed
+    search/package.json     ← "addonName": "search"                                                        committed
 ```
 
-Saving an app's config never copies inherited values into the app's file. Edit
-the shared file from **Workspace settings** (last row in the navigator, or the
-palette).
+In workspace mode `svc` never creates a `.dev_properties.json` inside an app.
+Saving in an app's Config tab writes to the root `.dev_properties.json`, except
+the addon name, which goes to the app's `package.json`. An app that already has
+its own `.dev_properties.json` keeps using it. Shared values changed this way
+can then be copied to the root `package.json` with `y` in **Workspace
+settings** (last row in the navigator, or the palette).
+
+Plain sitevision-scripts only reads the app's own `.dev_properties.json`, so
+inside a workspace it does not see inherited values.
 
 Because keychain entries are keyed by domain and username, one login covers
 every app on the same site.
@@ -225,14 +287,11 @@ A small file of CLI preferences, in the app root or workspace root. No secrets.
 
 ```json
 {
-	"environment": "test",
-	"syncPackageJson": true
+	"environment": "test"
 }
 ```
 
 - `environment` – the last environment picked with `E`
-- `syncPackageJson` – `true` updates `package.json` without asking, `false`
-  skips the check
 
 ### Global settings
 
@@ -615,10 +674,11 @@ with `basic` is usually the simplest choice for CI.
 
 **Files**
 
-| File                                    | Contains                              | Commit?  |
-| --------------------------------------- | ------------------------------------- | -------- |
-| `.dev_properties.json`                  | Site, addon, auth and signing config  | Yes      |
-| `.svcconfig`                            | Active environment, package.json sync | Optional |
-| `~/.config/sitevision-cli/config.json`  | Language, intro animation             | –        |
-| `dist/<id>.zip`, `dist/<id>-signed.zip` | Build output                          | No       |
-| OS keychain, service `sitevision-cli`   | All secrets                           | –        |
+| File                                    | Contains                                       | Commit? |
+| --------------------------------------- | ---------------------------------------------- | ------- |
+| `.dev_properties.json`                  | Your config, including user-specific values    | No      |
+| `package.json`                          | Shared defaults (top-level fields and `"svc"`) | Yes     |
+| `.svcconfig`                            | Active environment                             | No      |
+| `~/.config/sitevision-cli/config.json`  | Language, intro animation                      | –       |
+| `dist/<id>.zip`, `dist/<id>-signed.zip` | Build output                                   | No      |
+| OS keychain, service `sitevision-cli`   | All secrets                                    | –       |

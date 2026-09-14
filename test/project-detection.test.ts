@@ -54,26 +54,36 @@ test('a directory without a manifest is simply not a project (null)', t => {
 	t.is(detectProject(dir), null);
 });
 
-test('package.json sync reports missing and differing fields, and preserves formatting', t => {
+test('package.json sync copies shared values only, and preserves formatting', t => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-sync-'));
 	const original =
 		'{\n\t"name": "my-app",\n\t"siteName": "OldSite",\n\t"scripts": {\n\t\t"build": "x"\n\t}\n}\n';
 	fs.writeFileSync(path.join(dir, 'package.json'), original);
+	fs.writeFileSync(
+		path.join(dir, '.dev_properties.json'),
+		JSON.stringify({
+			domain: 'test.sitevision.se',
+			siteName: 'MySite',
+			addonName: 'MyAddon',
+			username: 'user@example.com',
+			signingUsername: 'signer@example.com',
+			certificateName: 'Mine',
+			authMethod: 'oauth2',
+			environments: {
+				prod: {domain: 'live.example', username: 'other@example.com'},
+			},
+		}),
+	);
 
-	const properties = {
-		domain: 'test.sitevision.se',
-		siteName: 'MySite',
-		addonName: 'MyAddon',
-		username: 'user@example.com',
-	};
-
-	t.deepEqual(getPackageJsonSyncChanges(dir, properties), [
+	t.deepEqual(getPackageJsonSyncChanges(dir), [
 		{key: 'developmentDomain', to: 'test.sitevision.se'},
 		{key: 'siteName', from: 'OldSite', to: 'MySite'},
 		{key: 'addonName', to: 'MyAddon'},
+		{key: 'svc.authMethod', to: 'oauth2'},
+		{key: 'svc.environments', to: '{"prod":{"domain":"live.example"}}'},
 	]);
 
-	t.true(syncDevPropertiesToPackageJson(dir, properties));
+	t.true(syncDevPropertiesToPackageJson(dir));
 
 	const written = fs.readFileSync(path.join(dir, 'package.json'), 'utf8');
 	t.true(written.includes('\n\t"name": "my-app"'), 'tab indent preserved');
@@ -85,8 +95,33 @@ test('package.json sync reports missing and differing fields, and preserves form
 	t.is(parsed['addonName'], 'MyAddon');
 	t.is(parsed['name'], 'my-app');
 	t.deepEqual(parsed['scripts'], {build: 'x'});
+	t.deepEqual(parsed['svc'], {
+		authMethod: 'oauth2',
+		environments: {prod: {domain: 'live.example'}},
+	});
+	t.false(written.includes('example.com'), 'user values stay out');
+	t.false(written.includes('Mine'), 'user values stay out');
 
-	t.deepEqual(getPackageJsonSyncChanges(dir, properties), []);
+	t.deepEqual(getPackageJsonSyncChanges(dir), []);
+	t.false(syncDevPropertiesToPackageJson(dir));
+});
+
+test('sync creates a missing package.json and throws on a broken one', t => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-nopkg-'));
+	fs.mkdirSync(path.join(dir, '.git'));
+	fs.writeFileSync(
+		path.join(dir, '.dev_properties.json'),
+		JSON.stringify({siteName: 'Site', username: 'me@example.com'}),
+	);
+	t.deepEqual(getPackageJsonSyncChanges(dir), [{key: 'siteName', to: 'Site'}]);
+	t.true(syncDevPropertiesToPackageJson(dir));
+	const created = fs.readFileSync(path.join(dir, 'package.json'), 'utf8');
+	t.deepEqual(JSON.parse(created), {private: true, siteName: 'Site'});
+
+	fs.writeFileSync(path.join(dir, 'package.json'), '{ broken');
+	t.throws(() => syncDevPropertiesToPackageJson(dir), {
+		message: /Could not update/,
+	});
 });
 
 test('.svcconfig round-trips and preserves unknown keys', t => {

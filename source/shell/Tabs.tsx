@@ -4,6 +4,7 @@ import type {ProjectInfo} from '../types/index.js';
 import {
 	appTypeOf,
 	getPackageJsonSyncChanges,
+	readAncestorDevProperties,
 	localizedText,
 } from '../utils/project-detection.js';
 import {checkSitevisionScriptsCompatibility} from '../utils/sitevision-scripts-runner.js';
@@ -103,9 +104,15 @@ export function Overview({
 }) {
 	const dev = project.devProperties;
 	const inherited = new Set(project.inheritedKeys);
-	const src = (key: string) => (inherited.has(key) ? t('↑ root') : undefined);
+	const ancestors = readAncestorDevProperties(project.root);
+	const src = (key: string) =>
+		inherited.has(key)
+			? Object.hasOwn(ancestors, key)
+				? t('↑ root')
+				: 'package.json'
+			: undefined;
 	const notSet = t('not set');
-	const sync = dev ? getPackageJsonSyncChanges(project.root, dev).length : 0;
+	const sync = getPackageJsonSyncChanges(project.root).length;
 	const scripts = checkSitevisionScriptsCompatibility(project.root);
 	const recent = tasks
 		.filter(task => task.appRoot === project.root && task.status !== 'running')

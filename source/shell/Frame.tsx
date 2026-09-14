@@ -80,9 +80,7 @@ export function typeGlyph(manifest: ProjectInfo['manifest']): string {
 }
 
 export function appStatus(project: ProjectInfo) {
-	const sync = project.devProperties
-		? getPackageJsonSyncChanges(project.root, project.devProperties).length
-		: 0;
+	const sync = getPackageJsonSyncChanges(project.root).length;
 	return {
 		deps: project.hasNodeModules,
 		config: Boolean(project.devProperties),
