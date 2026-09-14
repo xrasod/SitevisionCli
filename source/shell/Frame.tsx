@@ -157,8 +157,9 @@ export function Navigator({
 	width,
 	filter = '',
 }: NavigatorProps) {
-	// Row: marker(1) glyph(3) sp name sp version(6) sp dots(4) inside the padding.
-	const nameWidth = width - 2 - 17;
+	// Row: marker(1) glyph(3) sp name sp version(6) sp dots(4) inside padding + border.
+	const rowWidth = width - 3;
+	const nameWidth = rowWidth - 17;
 	const running = tasks.filter(task => task.status === 'running');
 	// Every row is exactly one line; nothing may shrink or the rows overlap.
 	const rows: ReactNode[] = [];
@@ -185,7 +186,7 @@ export function Navigator({
 		const busy = running.some(task => task.appRoot === app.root);
 		const name = appLabel(app);
 		rows.push(
-			<Box key={app.root} width={width - 2} height={1} flexShrink={0}>
+			<Box key={app.root} width={rowWidth} height={1} flexShrink={0}>
 				<Text
 					backgroundColor={active && focused ? ACCENT : undefined}
 					color={active && focused ? 'black' : undefined}
