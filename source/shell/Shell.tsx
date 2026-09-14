@@ -757,15 +757,8 @@ export function Shell({
 				}}
 				version={version}
 			/>
-			<Box
-				flexGrow={1}
-				height={mainHeight}
-				borderStyle="single"
-				borderDimColor
-				borderLeft={false}
-				borderRight={false}
-				borderBottom={false}
-			>
+			{/* Each pane draws its own top border so the focused one can light up. */}
+			<Box flexGrow={1} height={mainHeight}>
 				{!narrow && (
 					<Navigator
 						apps={matches.map(i => apps[i]!)}
@@ -773,7 +766,7 @@ export function Shell({
 						selected={matches.indexOf(selected)}
 						focused={focus === 'nav'}
 						tasks={tasks}
-						height={mainHeight - 1}
+						height={mainHeight}
 						single={single}
 						settingsSelected={settings}
 						width={sidebar}
@@ -784,6 +777,12 @@ export function Shell({
 					flexDirection="column"
 					width={narrow ? columns : columns - sidebar}
 					overflow="hidden"
+					borderStyle="single"
+					borderLeft={false}
+					borderRight={false}
+					borderBottom={false}
+					borderColor={focus === 'content' ? ACCENT : undefined}
+					borderDimColor={focus !== 'content'}
 				>
 					{narrow && !single && (
 						<NavigatorStrip

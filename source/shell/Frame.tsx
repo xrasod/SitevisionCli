@@ -220,8 +220,9 @@ export function Navigator({
 
 	// Window the list so the selected app stays visible; the lines outside
 	// are summarised as "… n more".
+	// Top border, header and legend, then the settings row and running tasks.
 	const fixed =
-		1 + 1 + (single ? 0 : 2) + (running.length > 0 ? running.length + 2 : 0);
+		3 + (single ? 0 : 2) + (running.length > 0 ? running.length + 2 : 0);
 	const avail = Math.max(3, height - fixed);
 	let shown = rows;
 	if (rows.length > avail) {
@@ -253,8 +254,8 @@ export function Navigator({
 			width={width}
 			height={height}
 			borderStyle="single"
-			borderDimColor
-			borderTop={false}
+			borderColor={focused ? ACCENT : undefined}
+			borderDimColor={!focused}
 			borderBottom={false}
 			borderLeft={false}
 			paddingX={1}
@@ -273,7 +274,7 @@ export function Navigator({
 					</Text>
 				</Text>
 			) : (
-				<Text bold dimColor>
+				<Text bold color={focused ? ACCENT : undefined} dimColor={!focused}>
 					{single
 						? t('APP')
 						: apps.length === 1

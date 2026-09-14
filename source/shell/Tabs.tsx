@@ -40,7 +40,9 @@ export function TabBar({
 						dimColor={entry.id !== tab}
 						underline={entry.id === tab && focused}
 					>
-						{i + 1} {t(narrow ? entry.short : entry.label)}
+						{/* The digits only switch tabs from the content pane. */}
+						{focused && `${i + 1} `}
+						{t(narrow ? entry.short : entry.label)}
 					</Text>
 					{' '.repeat(3)}
 				</Text>
