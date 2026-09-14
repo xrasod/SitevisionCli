@@ -1,233 +1,134 @@
 # Sitevision CLI
 
-This CLI was largely built on the back of the [sitevision-scripts](https://github.com/sitevision/sitevision-scripts) project.
-However, these scripts have some limitations:
+`svc` builds, signs and deploys Sitevision apps (WebApp, Widget, RESTApp,
+MCPServer) from a full-screen terminal shell or as plain commands.
 
-- Clunky for use with environments requiring signed packages
-- Clunkly management of credentials and unsecure handling of credentials
-- No type safety
+- **One shell for one app or a whole repo.** Run it inside an app, or at the
+  root of a repo with many apps and switch between them. Dev and watch keep
+  running in the background.
+- **Three ways to authenticate deploys:** username and password, OAuth2 (PKCE,
+  works with SSO), or a captured browser session for SAML-only sites.
+- **No secrets on disk.** Passwords, tokens and cookies live in the OS keychain.
+  `.dev_properties.json` is safe to commit.
+- **Environments.** dev, test and prod in one config; production deploys use
+  the signed zip, confirm and activate.
+- **Shared config.** Put site and auth settings once at the repo root; each app
+  only needs its addon name.
+- **Builds the way Sitevision does.** Bundled apps without their own webpack
+  config are built by `@sitevision/sitevision-scripts`.
+- English and Swedish UI.
 
-## Features
-
-- **Interactive Menu** - Full-screen TUI with arrow key navigation
-- **Project Detection** - Automatically detects Sitevision projects
-- **Two Modes** - Interactive menu OR direct command execution
-- **Automatic Setup** - Guided setup for dev properties and signing credentials
-- **Secure Credentials** - Passwords live in the OS keychain (macOS Keychain / Windows Credential Manager / Linux libsecret), never on disk
+📖 **[User guide](docs/user-guide.md)** · **[Användarguide (svenska)](docs/anvandarguide.md)**
 
 ## Install
+
+Requires Node.js 22+.
 
 ```bash
 npm install --global sitevision-cli
 ```
 
-## Usage
+## Quick start
 
-The CLI must be run inside a Sitevision project directory (containing a `manifest.json`).
+```bash
+cd my-repo          # or cd into a single app
+svc
+```
 
-### Interactive shell
+1. Pick an app in the navigator and press `Enter`. (In a new repo the shell
+   opens on **Workspace settings** first.)
+2. Press `2` for the **Config** tab and fill in domain, site name, addon name,
+   username and auth method. Each field saves on `Enter`.
+3. Press `i` to install dependencies if needed, then `d` to start dev: build on
+   every change and deploy. Output is in the **Log** tab (`4`).
 
-Run `svc` with no arguments to open the full-screen shell. It works in two
-places:
+For production: switch environment with `E`, press `b` to build, `s` to sign
+and `p` to deploy and activate.
 
-- **Inside an app** (a directory with `manifest.json`): single-app mode.
-- **At the root of a repo** that contains apps in subfolders such as
-  `webapps/*`, `restapps/*` or `widgets/*`: workspace mode, with every app in
-  the left navigator and per-app status dots (dependencies, config,
-  package.json sync, signing).
+## The shell
 
-The right pane has four tabs: **Overview**, **Config** (the whole
-`.dev_properties.json` as one form, plus signing and keychain secrets; `Tab`
-moves between fields, `Enter` saves, `Ctrl+O` on the addon field picks an
-addon from the site's Addon Repository), **Versions** (the versions uploaded
-to the site, `a` activates one) and **Log** (streaming build and deploy
-output). Dev and watch keep running in the background while you navigate
-between apps.
+| Key             | Action                                              |
+| --------------- | --------------------------------------------------- |
+| `d` / `w`       | Dev (build + deploy on change) / Watch (build only) |
+| `b` / `s`       | Build / Sign                                        |
+| `p` / `P`       | Deploy / force deploy to the active environment     |
+| `a`             | Versions: list and activate uploaded versions       |
+| `E`             | Switch environment                                  |
+| `e` / `y` / `i` | Config tab / sync `package.json` / `npm install`    |
+| `l`             | Log in again                                        |
+| `K`             | Stop running tasks                                  |
+| `1`–`4`         | Overview · Config · Versions · Log                  |
+| `/`             | Command palette                                     |
+| `,`             | Settings (language, intro animation)                |
+| `Tab` / `Esc`   | Switch pane / back                                  |
+| `q`             | Quit                                                |
 
-Single-letter keys drive everything; the bottom bar shows the ones that apply.
-`/` opens the command palette with every action, `Tab` switches between the
-navigator and the content pane, `1`–`4` pick a tab, `q` quits.
+In the navigator, typing filters the app list; action keys work once `Enter` or
+`Tab` has moved focus to the content pane. The bottom bar always shows the keys
+that apply. `svc --minimal` gives a compact layout for small panes.
 
-| Key             | Action                                                            |
-| --------------- | ----------------------------------------------------------------- |
-| `d` / `w`       | Dev (build, sign, deploy on change) / Watch (build and sign only) |
-| `b` / `s`       | Build / Sign                                                      |
-| `p` / `P`       | Deploy to dev / force deploy                                      |
-| `a`             | Versions tab: list and activate remote versions                   |
-| `e` / `y` / `l` | Edit dev properties / apply package.json sync / log in            |
-| `K`             | Stop the running task for the selected app                        |
+## Commands
 
-### Settings
+```bash
+svc                                   # interactive shell
+svc build                             # build to dist/<id>.zip
+svc sign                              # sign to dist/<id>-signed.zip
+svc deploy [--force]                  # deploy the zip
+svc deploy --production [--activate]  # deploy the signed zip
+svc dev [--signed]                    # build + deploy on change
+svc watch [--signed]                  # build on change, no deploy
+svc info                              # project information
+```
 
-`,` (or "Settings" in the palette) opens the global preferences, stored in
-`~/.config/sitevision-cli/config.json`: the UI language (English or Swedish,
-which also picks the manifest name language) and whether the intro animation
-plays. In workspace mode the same screen has a row that jumps to the shared
-workspace config.
+Direct commands use the base environment. `--token` and `--cookie` pass an
+OAuth2 token or session cookie for one run.
 
-### Environments
+## Configuration
 
-The top-level fields of `.dev_properties.json` are one environment, called
-**dev** unless `baseEnvironment` says otherwise (a repo that only has a
-production site can set `"baseEnvironment": "prod"`). Add more under
-`environments`, overriding only what differs:
+`.dev_properties.json` in the app, or at the repo root to share it:
 
 ```json
 {
 	"domain": "acme-use.sitevision-cloud.se",
 	"siteName": "Intranet",
+	"addonName": "my-addon",
 	"username": "me@acme.se",
+	"authMethod": "basic",
+	"signingUsername": "me@acme.se",
 	"environments": {
-		"test": {"domain": "acme-tse.sitevision-cloud.se"},
-		"prod": {"domain": "acme.sitevision-cloud.se", "authMethod": "oauth2"}
+		"prod": {"domain": "acme.sitevision-cloud.se"}
 	}
 }
 ```
 
-`E` cycles the active environment (also "Switch environment" and "Add
-environment" in the palette); the choice is remembered in `.svcconfig`. The
-top bar shows a badge, green for dev, yellow for others, red for production.
-Versions, deploy, login state and the Config tab all follow the active
-environment; on a non-dev environment the Config tab edits that environment's
-overrides. Override names containing `prod`, or any environment with `"production":
-true`, are production: deploy needs the signed zip, confirms, and activates,
-and dev or watch refuse to run against them. The base environment is never
-production by name, only by the flag, so a prod-only repo keeps its dev loop.
-Both settings have rows in the Config tab under ENVIRONMENT.
+## Authentication in short
 
-### Shared configuration in a workspace
+There are two separate credentials:
 
-`.dev_properties.json` is resolved by merging every ancestor directory's file
-(up to the repo root) under the app's own file, nearest wins. Put the shared
-fields (`domain`, `siteName`, `username`, `authMethod`, `oauth2`,
-`signingUsername`, ...) once at the repo root and keep only `addonName` in each
-app. The Config tab marks inherited values with `↑ root`, and saving an app's
-config never copies inherited values into the app file. Keychain entries are
-keyed by domain and username, so one login covers every app on the site.
+- **Deploy**: your account on the site. `authMethod` is `basic` (password),
+  `oauth2` (browser login against the site's OAuth2 provider, refreshed
+  silently afterwards) or `cookie` (log in with SSO in a Chrome window, the
+  session is captured).
+- **Signing**: your developer.sitevision.se account, always username and
+  password.
 
-### Direct Commands
+Everything secret goes in the OS keychain under `sitevision-cli`. For CI, set
+`SITEVISION_DEPLOY_PASSWORD`, `SITEVISION_SIGNING_PASSWORD`,
+`SITEVISION_ACCESS_TOKEN` or `SITEVISION_SESSION_COOKIE`.
 
-You can also run commands directly:
+OAuth2 needs a client registered on the site with the redirect URI
+`http://127.0.0.1:8137/callback`. The [user guide](docs/user-guide.md#5-authentication)
+covers the setup, the pitfalls, and which method works with which command.
 
-#### Development
+## Development
 
 ```bash
-# Start development server with watch mode
-svc dev
-
-# Start development server with automatic signing
-svc dev --signed
+npm install
+npm run build   # tsc → dist/
+npm test        # prettier, xo, ava
 ```
 
-#### Building
-
-```bash
-# Build the application for production
-svc build
-```
-
-#### Signing
-
-```bash
-# Sign the app for production deployment
-svc sign
-```
-
-#### Deployment
-
-```bash
-# Deploy to development server
-svc deploy
-
-# Force deploy (overwrite existing)
-svc deploy --force
-
-# Deploy to production (requires signed app)
-svc deploy --production
-```
-
-#### Setup
-
-```bash
-# Configure signing credentials
-svc setup-signing
-```
-
-#### Project Info
-
-```bash
-# Show project information and configuration
-svc info
-```
-
-## Configuration
-
-### Development Properties (`.dev_properties.json`)
-
-Create this file in your project root for deployment configuration:
-
-```json
-{
-	"domain": "your-site.sitevision.se",
-	"siteName": "YourSite",
-	"addonName": "your-addon",
-	"username": "your-email@example.com",
-	"useHTTPForDevDeploy": false,
-	"signingUsername": "your-developer-account@example.com",
-	"certificateName": "optional-certificate-name"
-}
-```
-
-### Keeping `package.json` in sync
-
-`sitevision-scripts` reads `developmentDomain`, `siteName` and `addonName`
-from `package.json`, which duplicates three fields of
-`.dev_properties.json`. When they disagree — or when a fresh setup has just
-written `.dev_properties.json` — `svc` shows the differences and offers to
-update `package.json` from `.dev_properties.json`. Nothing is written without
-confirmation, and `.dev_properties.json` is always the source of truth for
-the copy. Existing indentation and unrelated fields are left alone.
-
-After answering, `svc` offers to remember the choice in a `.svcconfig` file
-in the project root:
-
-```json
-{
-	"syncPackageJson": true
-}
-```
-
-With `true`, `svc` updates `package.json` automatically without asking; with
-`false`, the check is skipped entirely. Delete the key (or the file) to be
-asked again. The file contains no secrets, so it is safe to commit.
-
-### Password storage
-
-Passwords are stored in the OS-native secret store (macOS Keychain, Windows
-Credential Manager, Linux libsecret) under the `sitevision-cli` service —
-never in `.dev_properties.json`. Run `svc` and complete the setup form (or
-enter the password when prompted at deploy/sign time and toggle "save to
-keychain") to populate it.
-
-If an existing `.dev_properties.json` contains a plaintext `password` field,
-the CLI offers to migrate it to the keychain on next launch and strip the
-field from the file. The migration prompt only appears in interactive mode
-(plain `svc`) — if you only ever invoke commands directly (`svc deploy`,
-`svc dev`), run `svc` once to migrate.
-
-For CI / headless use, set `SITEVISION_DEPLOY_PASSWORD` and/or
-`SITEVISION_SIGNING_PASSWORD` — these take precedence over the keychain and
-are never written anywhere.
-
-### Signing Credentials
-
-Signing credentials are used to sign apps via developer.sitevision.se:
-
-- `signingUsername` - Your developer.sitevision.se account
-- `certificateName` - Optional, if you have multiple certificates
-
-The signing password is prompted on first use, with an option to save it to
-the OS keychain for future runs.
+Releasing: see [RELEASING.md](RELEASING.md).
 
 ## License
 
