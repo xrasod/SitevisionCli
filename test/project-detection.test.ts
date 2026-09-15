@@ -10,6 +10,9 @@ import {
 	syncDevPropertiesToPackageJson,
 	readSvcConfig,
 	writeSvcConfig,
+	getDeployZipPath,
+	getZipPath,
+	getSignedZipPath,
 } from '../source/utils/project-detection.js';
 
 function projectDir(manifest: string): string {
@@ -18,6 +21,25 @@ function projectDir(manifest: string): string {
 	fs.writeFileSync(path.join(dir, 'package.json'), '{}');
 	return dir;
 }
+
+test('deploy uses the signed zip unless the build is newer', t => {
+	const dir = projectDir('{"id": "x", "version": "1.0.0", "type": "RESTApp"}');
+	const {manifest} = detectProject(dir)!;
+	const zip = getZipPath(dir, manifest);
+	const signed = getSignedZipPath(dir, manifest);
+	fs.mkdirSync(path.dirname(zip));
+	const touch = (file: string, seconds: number) => {
+		fs.writeFileSync(file, '');
+		fs.utimesSync(file, seconds, seconds);
+	};
+
+	touch(zip, 1000);
+	t.is(getDeployZipPath(dir, manifest), zip);
+	touch(signed, 2000);
+	t.is(getDeployZipPath(dir, manifest), signed);
+	touch(zip, 3000);
+	t.is(getDeployZipPath(dir, manifest), zip);
+});
 
 test('a manifest with // comments (as the Sitevision docs show) is accepted', t => {
 	const dir = projectDir(

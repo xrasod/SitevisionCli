@@ -87,10 +87,10 @@ const sv: Record<string, string> = {
 	VERSION: 'VERSION',
 	ACTIVE: 'AKTIV',
 	'No versions uploaded to {addon}.': 'Inga versioner uppladdade till {addon}.',
-	'{n} versions · a activate selected · R refresh':
-		'{n} versioner · a aktivera vald · R uppdatera',
-	'1 version · a activate selected · R refresh':
-		'1 version · a aktivera vald · R uppdatera',
+	'{n} versions · a activate selected · r refresh':
+		'{n} versioner · a aktivera vald · r uppdatera',
+	'1 version · a activate selected · r refresh':
+		'1 version · a aktivera vald · r uppdatera',
 	' · fetched {time}': ' · hämtad {time}',
 	'No task yet. d dev · w watch · b build · s sign · p deploy':
 		'Ingen uppgift ännu. d dev · w watch · b build · s sign · p deploy',
@@ -122,8 +122,8 @@ const sv: Record<string, string> = {
 	'Environment name (e.g. test, prod)': 'Miljönamn (t.ex. test, prod)',
 	'Deploy the signed {id} to {env} and activate it?':
 		'Driftsätt signerade {id} till {env} och aktivera?',
-	'Dev never deploys to a production environment ({env}). Switch with E.':
-		'Dev driftsätter aldrig till en produktionsmiljö ({env}). Byt med E.',
+	'Dev never deploys to a production environment ({env}). Switch with v.':
+		'Dev driftsätter aldrig till en produktionsmiljö ({env}). Byt med v.',
 	'switched to {env}': 'bytte till {env}',
 	'environment {env} added': 'miljön {env} tillagd',
 	environment: 'miljö',
@@ -262,6 +262,8 @@ const sv: Record<string, string> = {
 	activate: 'aktivera',
 	refresh: 'uppdatera',
 	deploy: 'driftsätt',
+	force: 'tvinga',
+	versions: 'versioner',
 	commands: 'kommandon',
 	follow: 'följ',
 	wrap: 'radbryt',

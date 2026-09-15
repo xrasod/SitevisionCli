@@ -266,6 +266,24 @@ export function getSignedZipPath(
 	return path.join(projectRoot, 'dist', getSignedZipFilename(manifest));
 }
 
+/**
+ * The zip a non-production deploy uploads: the signed one when it is at least
+ * as new as the build, since some sites reject unsigned apps even on dev.
+ */
+export function getDeployZipPath(
+	projectRoot: string,
+	manifest: SitevisionManifest,
+): string {
+	const zip = getZipPath(projectRoot, manifest);
+	const signed = getSignedZipPath(projectRoot, manifest);
+	const mtime = (file: string) =>
+		fs.statSync(file, {throwIfNoEntry: false})?.mtimeMs;
+	const signedAt = mtime(signed);
+	if (signedAt === undefined) return zip;
+	const builtAt = mtime(zip);
+	return builtAt === undefined || signedAt >= builtAt ? signed : zip;
+}
+
 // =============================================================================
 // API ENDPOINT UTILITIES
 // =============================================================================

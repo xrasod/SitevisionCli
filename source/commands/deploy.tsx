@@ -4,7 +4,7 @@ import {type Command} from './types.js';
 import {StatusIndicator} from '../components/StatusIndicator.js';
 import {deployApp, deployProduction} from '../utils/sitevision-api.js';
 import {
-	getZipPath,
+	getDeployZipPath,
 	getSignedZipPath,
 	getAppType,
 } from '../utils/project-detection.js';
@@ -229,8 +229,7 @@ export function DeployScreen({
 						executableId: result.executableId,
 					});
 				} else {
-					// Dev deployment can use unsigned zip
-					const zipPath = getZipPath(projectRoot, manifest);
+					const zipPath = getDeployZipPath(projectRoot, manifest);
 
 					if (!zipExists(zipPath)) {
 						setState({

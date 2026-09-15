@@ -42,7 +42,7 @@ svc
 3. Press `i` to install dependencies if needed, then `d` to start dev: build on
    every change and deploy. Output is in the **Log** tab (`4`).
 
-For production: switch environment with `E`, press `b` to build, `s` to sign
+For production: switch environment with `v`, press `b` to build, `s` to sign
 and `p` to deploy and activate.
 
 ## The shell
@@ -53,7 +53,7 @@ and `p` to deploy and activate.
 | `b` / `s`       | Build / Sign                                        |
 | `p` / `P`       | Deploy / force deploy to the active environment     |
 | `a`             | Versions: list and activate uploaded versions       |
-| `E`             | Switch environment                                  |
+| `v`             | Switch environment                                  |
 | `e` / `y` / `i` | Config tab / sync `package.json` / `npm install`    |
 | `l`             | Log in again                                        |
 | `K`             | Stop running tasks                                  |

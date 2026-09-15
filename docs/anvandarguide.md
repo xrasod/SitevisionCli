@@ -93,7 +93,7 @@ I arbetsyteläge finns två paneler. `Tab` växlar mellan dem.
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | **Översikt**  | Appinfo och status: beroenden installerade, konfiguration komplett, `package.json` i synk, signering konfigurerad, senaste uppgifter. |
 | **Konfig**    | Hela `.dev_properties.json` som ett formulär, plus hemligheterna i nyckelringen. Se [4](#4-konfiguration).                            |
-| **Versioner** | Versionerna som laddats upp till tillägget på aktiv miljös webbplats. `a` aktiverar vald version, `R` uppdaterar.                     |
+| **Versioner** | Versionerna som laddats upp till tillägget på aktiv miljös webbplats. `a` aktiverar vald version, `r` uppdaterar.                     |
 | **Logg**      | Löpande utdata från bygge, signering, driftsättning, dev och watch för vald app.                                                      |
 
 `1`–`4` eller `←`/`→` byter flik.
@@ -110,7 +110,7 @@ Globala (innehållspanelen):
 | `s`       | Signera den byggda zip-filen                                                    |
 | `p` / `P` | Driftsätt / driftsätt med tvång till aktiv miljö                                |
 | `a`       | Öppna Versioner (och aktivera, när du redan är där)                             |
-| `E`       | Växla aktiv miljö                                                               |
+| `v`       | Växla aktiv miljö                                                               |
 | `K`       | Stoppa pågående uppgifter för vald app                                          |
 | `e`       | Öppna fliken Konfig                                                             |
 | `y`       | Kopiera gemensamma värden från `.dev_properties.json` till `package.json`       |
@@ -127,7 +127,7 @@ Per flik:
 | Flik      | Tangenter                                                                                                                 |
 | --------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Konfig    | `↑`/`↓` eller `Tab` fält · `Enter` redigera / spara · `Esc` avbryt · `←`/`→`/mellanslag byter val · `Ctrl+O` välj tillägg |
-| Versioner | `↑`/`↓` välj · `a` aktivera · `R` uppdatera                                                                               |
+| Versioner | `↑`/`↓` välj · `a` aktivera · `r` uppdatera                                                                               |
 | Logg      | `↑`/`↓` scrolla · `PgUp`/`PgDn` sida · `f` hoppa till slutet · `x` radbrytning av/på                                      |
 
 Bara via kommandopaletten (`/`): **Lägg till miljö**, **Arbetsyteinställningar**,
@@ -293,7 +293,7 @@ hemligheter.
 }
 ```
 
-- `environment` – senast valda miljö med `E`
+- `environment` – senast valda miljö med `v`
 
 ### Globala inställningar
 
@@ -551,7 +551,7 @@ En miljö kan skriva över `domain`, `siteName`, `addonName`, `username`,
 
 I skalet:
 
-- `E` växlar miljö; **Lägg till miljö** i paletten skapar en ny. Valet sparas i
+- `v` växlar miljö; **Lägg till miljö** i paletten skapar en ny. Valet sparas i
   `.svcconfig`.
 - Driftsättning, Versioner, inloggningsstatus och fliken Konfig följer alla aktiv
   miljö. I en annan miljö än basmiljön redigerar fliken Konfig den miljöns
@@ -667,7 +667,7 @@ med `basic` är oftast det enklaste för CI.
 | "Unauthorized. The session cookie was rejected or has expired" | Tryck `l`; en ny inloggning i webbläsaren startar.                                                       |
 | "Zip not found … Run build first."                             | `b` först. För produktion: `b` och sedan `s`.                                                            |
 | "Conflict. Addon already exists."                              | Driftsätt med tvång (`P` / `--force`).                                                                   |
-| "Dev driftsätter aldrig till en produktionsmiljö"              | Byt miljö med `E`, eller använd `w` (watch).                                                             |
+| "Dev driftsätter aldrig till en produktionsmiljö"              | Byt miljö med `v`, eller använd `w` (watch).                                                             |
 | Tangenterna gör ingenting                                      | Fokus är i navigatorn, där det du skriver filtrerar. Tryck `Enter` eller `Tab`.                          |
 | Lösenordsfråga varje gång                                      | Kryssa i **Spara i nyckelringen** vid frågan, eller ange lösenordet i fliken Konfig.                     |
 | "No token/cookie available" från `svc dev`                     | Kör dev från skalet i stället, eller skicka `--token` / `--cookie`. Se tabellen i [5](#5-autentisering). |

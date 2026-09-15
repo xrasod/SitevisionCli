@@ -92,7 +92,7 @@ In workspace mode there are two panes. `Tab` switches between them.
 | ------------ | --------------------------------------------------------------------------------------------------------------------------- |
 | **Overview** | App info and status: dependencies installed, config complete, `package.json` in sync, signing configured, and recent tasks. |
 | **Config**   | All of `.dev_properties.json` as one form, plus the secrets in the keychain. See [4](#4-configuration).                     |
-| **Versions** | The versions uploaded to the addon on the active environment's site. `a` activates the selected version, `R` refreshes.     |
+| **Versions** | The versions uploaded to the addon on the active environment's site. `a` activates the selected version, `r` refreshes.     |
 | **Log**      | Streaming output from build, sign, deploy, dev and watch for the selected app.                                              |
 
 `1`–`4` or `←`/`→` switch tabs.
@@ -109,7 +109,7 @@ Global (content pane):
 | `s`       | Sign the built zip                                                 |
 | `p` / `P` | Deploy / force deploy to the active environment                    |
 | `a`       | Open Versions (and activate, when already there)                   |
-| `E`       | Cycle the active environment                                       |
+| `v`       | Cycle the active environment                                       |
 | `K`       | Stop running tasks for the selected app                            |
 | `e`       | Open the Config tab                                                |
 | `y`       | Copy shared values from `.dev_properties.json` into `package.json` |
@@ -126,7 +126,7 @@ Per tab:
 | Tab      | Keys                                                                                                             |
 | -------- | ---------------------------------------------------------------------------------------------------------------- |
 | Config   | `↑`/`↓` or `Tab` field · `Enter` edit / save · `Esc` cancel · `←`/`→`/space cycles choices · `Ctrl+O` pick addon |
-| Versions | `↑`/`↓` select · `a` activate · `R` refresh                                                                      |
+| Versions | `↑`/`↓` select · `a` activate · `r` refresh                                                                      |
 | Log      | `↑`/`↓` scroll · `PgUp`/`PgDn` page · `f` jump to the end · `x` toggle line wrap                                 |
 
 Only available from the command palette (`/`): **Add environment**,
@@ -291,7 +291,7 @@ A small file of CLI preferences, in the app root or workspace root. No secrets.
 }
 ```
 
-- `environment` – the last environment picked with `E`
+- `environment` – the last environment picked with `v`
 
 ### Global settings
 
@@ -549,7 +549,7 @@ An environment may override `domain`, `siteName`, `addonName`, `username`,
 
 In the shell:
 
-- `E` cycles environments; **Add environment** in the palette creates one.
+- `v` cycles environments; **Add environment** in the palette creates one.
   The choice is remembered in `.svcconfig`.
 - Deploy, Versions, the auth state and the Config tab all follow the active
   environment. On a non-base environment the Config tab edits that
@@ -665,7 +665,7 @@ with `basic` is usually the simplest choice for CI.
 | "Unauthorized. The session cookie was rejected or has expired" | Press `l`; a new browser login runs.                                                                     |
 | "Zip not found … Run build first."                             | `b` first. For production: `b` then `s`.                                                                 |
 | "Conflict. Addon already exists."                              | Use force deploy (`P` / `--force`).                                                                      |
-| "Dev never deploys to a production environment"                | Switch environment with `E`, or use `w` (watch).                                                         |
+| "Dev never deploys to a production environment"                | Switch environment with `v`, or use `w` (watch).                                                         |
 | Keys do nothing                                                | Focus is in the navigator, where typing filters. Press `Enter` or `Tab`.                                 |
 | Password prompt every time                                     | Tick **Save to OS keychain** at the prompt, or enter the password in the Config tab.                     |
 | "No token/cookie available" from `svc dev`                     | Run dev from the shell instead, or pass `--token` / `--cookie`. See the table in [5](#5-authentication). |

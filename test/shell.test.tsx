@@ -8,7 +8,8 @@ import {Box} from 'ink';
 import {detectProject} from '../source/utils/project-detection.js';
 import {Shell} from '../source/shell/Shell.js';
 import {CommandPalette} from '../source/shell/CommandPalette.js';
-import {Overview} from '../source/shell/Tabs.js';
+import {Log, Overview} from '../source/shell/Tabs.js';
+import type {Task} from '../source/utils/tasks.js';
 import {fuzzyMatch, type Action} from '../source/shell/actions.js';
 import {navMatches, navMove, NavigatorStrip} from '../source/shell/Frame.js';
 
@@ -132,6 +133,69 @@ test('typing in the navigator filters instead of firing shortcuts', async t => {
 	stdin.write('\r');
 	await delay(20);
 	t.true(lastFrame()?.includes('Alpha'));
+});
+
+test('Tab moves between config fields without leaving the content pane', async t => {
+	const {root, apps} = workspace(['Alpha', 'Beta']);
+	const {stdin, lastFrame} = render(
+		<Shell apps={apps} workspaceRoot={root} version="9.9.9" />,
+	);
+	await delay(20);
+	stdin.write('\r');
+	await delay(20);
+	stdin.write('2');
+	await delay(20);
+	t.true(lastFrame()?.includes('pick addon'));
+
+	stdin.write('\t');
+	await delay(20);
+	const frame = lastFrame() ?? '';
+	t.true(frame.includes('pick addon'));
+	t.false(frame.includes('a–z'));
+});
+
+test('wrapped log lines fit the pane and keep the newest line visible', t => {
+	const long = `${'x'.repeat(30)} ${'y'.repeat(30)} ${'z'.repeat(30)}`;
+	const line = (text: string) => ({
+		time: Date.now(),
+		tag: 'out',
+		level: 'info',
+		text,
+	});
+	const task = {
+		id: '1',
+		status: 'running',
+		label: 'Build',
+		appName: 'Demo',
+		phase: 'building',
+		startedAt: Date.now(),
+		lines: [...Array.from({length: 6}, () => line(long)), line('LAST LINE')],
+	} as unknown as Task;
+	const pane = (wrap: boolean, shown = task) => (
+		<Box
+			width={40}
+			height={8}
+			flexDirection="column"
+			overflow="hidden"
+			alignItems="flex-start"
+		>
+			<Log wrap={wrap} task={shown} height={8} scroll={0} />
+		</Box>
+	);
+	const short = render(
+		pane(true, {...task, lines: [line('ONLY LINE')]} as unknown as Task),
+	);
+	t.true((short.lastFrame() ?? '').split('\n')[1]?.includes('ONLY LINE'));
+	short.unmount();
+
+	// Toggle like pressing x: wrapping must apply without a terminal resize.
+	const {lastFrame, rerender, unmount} = render(pane(false));
+	rerender(pane(true));
+	const rows = (lastFrame() ?? '').split('\n');
+	unmount();
+	t.true(rows.some(row => row.includes('zzzz')));
+	t.true(rows.some(row => row.trimEnd().endsWith('out LAST LINE')));
+	t.true(rows.every(row => row.length <= 40));
 });
 
 test('the narrow strip scrolls to keep the selected app visible', t => {

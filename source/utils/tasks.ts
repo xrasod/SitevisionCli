@@ -28,6 +28,7 @@ import {
 	getFullAppId,
 	getZipPath,
 	getSignedZipPath,
+	getDeployZipPath,
 	localizedText,
 } from './project-detection.js';
 import {
@@ -287,7 +288,7 @@ async function deployOnce(
 	const appType = getAppType(project.manifest);
 	log(
 		'dep',
-		`POST multipart → ${options.production ? 'production' : 'dev'} import · ${config.addonName}`,
+		`POST multipart → ${options.production ? 'production' : 'dev'} import · ${config.addonName} · ${path.basename(zipPath)}`,
 	);
 	const result = options.production
 		? await deployProduction(
@@ -368,7 +369,7 @@ export function startDeploy(
 		try {
 			const zipPath = options.production
 				? getSignedZipPath(project.root, project.manifest)
-				: getZipPath(project.root, project.manifest);
+				: getDeployZipPath(project.root, project.manifest);
 			if (!zipExists(zipPath)) {
 				throw new Error(
 					`${options.production ? 'Signed zip' : 'Zip'} not found: ${zipPath}. Run ${options.production ? 'sign' : 'build'} first.`,

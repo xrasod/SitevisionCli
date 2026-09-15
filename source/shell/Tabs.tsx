@@ -324,8 +324,8 @@ export function Versions({
 			<Box marginTop={1}>
 				<Text dimColor>
 					{list.length === 1
-						? t('1 version · a activate selected · R refresh')
-						: t('{n} versions · a activate selected · R refresh', {
+						? t('1 version · a activate selected · r refresh')
+						: t('{n} versions · a activate selected · r refresh', {
 								n: list.length,
 							})}
 					{state.fetchedAt
@@ -362,7 +362,7 @@ export function Log({
 	const end = Math.max(0, task.lines.length - scroll);
 	const lines: LogLine[] = task.lines.slice(Math.max(0, end - visible), end);
 	return (
-		<Box flexDirection="column" paddingX={1} overflow="hidden">
+		<Box width="100%" flexDirection="column" paddingX={1} overflow="hidden">
 			<Text>
 				{STATUS_GLYPH[task.status]} {task.label} {task.appName}{' '}
 				<Text dimColor>
@@ -370,18 +370,29 @@ export function Log({
 					{scroll > 0 ? ` · ↑${scroll}` : t(' · following')}
 				</Text>
 			</Text>
-			{lines.map((line, i) => (
-				<Text
-					key={i}
-					wrap={wrap ? 'wrap' : 'truncate'}
-					color={LEVEL_COLOR[line.level]}
-				>
-					<Text dimColor>
-						{time(line.time, true)} {line.tag.padEnd(3)}
-					</Text>{' '}
-					{line.text}
-				</Text>
-			))}
+			{/* Wrapped lines take extra rows; clip the oldest, not the newest.
+			    Keyed on wrap: Ink doesn't re-measure text when only its style changes. */}
+			<Box
+				key={wrap ? 'wrap' : 'truncate'}
+				flexDirection="column"
+				maxHeight={visible}
+				justifyContent="flex-end"
+				overflow="hidden"
+			>
+				{lines.map((line, i) => (
+					<Box key={i} flexShrink={0}>
+						<Text
+							wrap={wrap ? 'wrap' : 'truncate'}
+							color={LEVEL_COLOR[line.level]}
+						>
+							<Text dimColor>
+								{time(line.time, true)} {line.tag.padEnd(3)}
+							</Text>{' '}
+							{line.text}
+						</Text>
+					</Box>
+				))}
+			</Box>
 		</Box>
 	);
 }

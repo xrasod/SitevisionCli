@@ -411,7 +411,7 @@ export function Shell({
 		(raw, key) => {
 			// Terminals speaking the kitty keyboard protocol report shift+s as
 			// "s" plus a shift flag; fold that back into the uppercase letter so
-			// P, K, R behave the same everywhere.
+			// P and K behave the same everywhere.
 			const input =
 				key.shift && raw.length === 1 && /[a-z]/.test(raw)
 					? raw.toUpperCase()
@@ -433,7 +433,8 @@ export function Shell({
 				return;
 			}
 
-			if (key.tab) {
+			// The config form uses Tab/Shift+Tab to move between fields.
+			if (key.tab && !formActive) {
 				setFilter('');
 				setFocus(f =>
 					f === 'nav' && !single ? 'content' : single ? 'content' : 'nav',
@@ -517,7 +518,7 @@ export function Shell({
 				if (key.upArrow) setVersionRow(r => Math.max(0, r - 1));
 				if (key.downArrow)
 					setVersionRow(r => Math.min(Math.max(0, count - 1), r + 1));
-				if (input === 'R') void fetchVersions(false);
+				if (input === 'r') void fetchVersions(false);
 				else if (input === 'a' && count > 0) void activateSelected();
 			} else if (tab === 'log') {
 				const max = Math.max(0, (logTask?.lines.length ?? 0) - 1);
@@ -594,8 +595,9 @@ export function Shell({
 				: tab === 'versions'
 					? h([
 							['a', 'activate'],
-							['R', 'refresh'],
+							['r', 'refresh'],
 							['p', 'deploy'],
+							['P', 'force'],
 							['/', 'commands'],
 							['q', 'quit'],
 						])
@@ -605,6 +607,7 @@ export function Shell({
 								['x', 'wrap'],
 								['K', 'stop'],
 								['p', 'deploy'],
+								['P', 'force'],
 								['/', 'commands'],
 								['q', 'quit'],
 							])
@@ -636,9 +639,14 @@ export function Shell({
 									['b', 'build'],
 									['s', 'sign'],
 									['p', 'deploy'],
-									['a', 'activate'],
-									['E', 'env'],
+									['P', 'force'],
+									['v', 'env'],
+									['K', 'stop'],
+									['a', 'versions'],
+									['e', 'config'],
 									['i', 'install'],
+									['l', 'login'],
+									[',', 'settings'],
 									['/', 'commands'],
 									['q', 'quit'],
 								]);
