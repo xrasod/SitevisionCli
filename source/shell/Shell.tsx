@@ -97,7 +97,7 @@ type Overlay =
 	| {kind: 'picker'; resolve: (v: string | null) => void}
 	| {kind: 'settings'}
 	| {kind: 'help'}
-	| {kind: 'changelog'}
+	| {kind: 'changelog'; since?: string}
 	| {kind: 'prompt'; label: string; resolve: (v: string | null) => void};
 
 interface Props {
@@ -106,6 +106,8 @@ interface Props {
 	version: string;
 	// `--minimal`: use the compact layout however wide the terminal is.
 	minimal?: boolean;
+	// Set on the first run after an upgrade: opens the changelog since then.
+	updatedFrom?: string;
 }
 
 function useSize() {
@@ -128,6 +130,7 @@ export function Shell({
 	workspaceRoot,
 	version,
 	minimal = false,
+	updatedFrom,
 }: Props) {
 	const {exit} = useApp();
 	const {columns, rows} = useSize();
@@ -144,7 +147,9 @@ export function Shell({
 	const [focus, setFocus] = useState<'nav' | 'content'>(
 		workspaceRoot && !onboard ? 'nav' : 'content',
 	);
-	const [overlay, setOverlay] = useState<Overlay | null>(null);
+	const [overlay, setOverlay] = useState<Overlay | null>(
+		updatedFrom ? {kind: 'changelog', since: updatedFrom} : null,
+	);
 	const [filter, setFilter] = useState('');
 	const [versions, setVersions] = useState<Record<string, VersionsState>>({});
 	const [versionRow, setVersionRow] = useState(0);
@@ -971,7 +976,13 @@ function renderOverlay(
 		case 'help':
 			return <HelpPanel here={here} height={height} onClose={closeOverlay} />;
 		case 'changelog':
-			return <ChangelogPanel height={height} onClose={closeOverlay} />;
+			return (
+				<ChangelogPanel
+					since={overlay.since}
+					height={height}
+					onClose={closeOverlay}
+				/>
+			);
 		case 'settings':
 			return (
 				<SettingsScreen

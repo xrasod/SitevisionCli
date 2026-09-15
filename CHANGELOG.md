@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.0-beta.29
+
+- After an update, the shell opens What's new with the changes since the
+  version you last ran.
+
 ## 1.0.0-beta.28
 
 ## 1.0.0-beta.27

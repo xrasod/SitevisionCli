@@ -129,6 +129,7 @@ const sv: Record<string, string> = {
 	"What's new": 'Nyheter',
 	'changelog for every release': 'ändringslogg för varje version',
 	Changelog: 'Ändringslogg',
+	"What's new since {version}": 'Nyheter sedan {version}',
 	'↑↓ scroll · Esc close': '↑↓ scrolla · Esc stäng',
 	'No changelog found.': 'Ingen ändringslogg hittades.',
 	'Create addon': 'Skapa tillägg',

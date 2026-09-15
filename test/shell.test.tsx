@@ -236,6 +236,33 @@ test('the changelog panel starts at the newest release', async t => {
 	t.false(frame.includes('# Changelog'));
 });
 
+test('after an upgrade the shell opens the changelog since the old version', async t => {
+	const headings = fs
+		.readFileSync('CHANGELOG.md', 'utf8')
+		.split('\n')
+		.filter(line => line.startsWith('## '))
+		.map(line => line.slice(3));
+	t.true(headings.length >= 3);
+	const [newest, since, older] = headings as [string, string, string];
+
+	const panel = render(
+		<ChangelogPanel since={since} height={60} onClose={() => {}} />,
+	);
+	await delay(20);
+	const frame = panel.lastFrame() ?? '';
+	panel.unmount();
+	t.true(frame.includes(newest));
+	t.false(frame.includes(older));
+
+	const shell = render(
+		<Shell apps={[project()]} version="9.9.9" updatedFrom={since} />,
+	);
+	await delay(20);
+	const opened = shell.lastFrame() ?? '';
+	shell.unmount();
+	t.true(opened.includes(`What's new since ${since}`));
+});
+
 test('the narrow strip scrolls to keep the selected app visible', t => {
 	const apps = Array.from({length: 20}, (_, i) =>
 		project(`App ${String(i).padStart(2, '0')}`),

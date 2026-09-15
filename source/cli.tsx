@@ -187,7 +187,11 @@ async function playIntro(art: string[]): Promise<void> {
 // Run the full-screen shell on the alternate screen buffer so the scrollback
 // is untouched, and restore it on exit. The animated wordmark plays first,
 // inside the same buffer, when the terminal is wide enough for it.
-async function runShell(apps: ProjectInfo[], workspaceRoot?: string) {
+async function runShell(
+	apps: ProjectInfo[],
+	workspaceRoot?: string,
+	updatedFrom?: string,
+) {
 	process.stdout.write('\x1b[?1049h\x1b[H');
 	// Also leave the alternate screen when a signal exits past the finally.
 	process.once('exit', () => process.stdout.write('\x1b[?1049l'));
@@ -207,6 +211,7 @@ async function runShell(apps: ProjectInfo[], workspaceRoot?: string) {
 				workspaceRoot={workspaceRoot}
 				version={pkg.version}
 				minimal={cli.flags.minimal}
+				updatedFrom={updatedFrom}
 			/>,
 		);
 		await app.waitUntilExit();
@@ -236,7 +241,8 @@ async function main() {
 		!firstRun && lastSeen !== undefined && lastSeen !== pkg.version;
 
 	if (!firstRun) {
-		if (isUpdate) {
+		// The shell shows the changelog itself; only direct commands get a banner.
+		if (isUpdate && commandName) {
 			printBranding();
 			console.log(
 				`\x1b[32m\n  ✨ Updated to v${pkg.version}\x1b[0m \x1b[2m(from v${lastSeen})\x1b[0m\n`,
@@ -276,7 +282,7 @@ async function main() {
 				);
 			}
 
-			await runShell(apps, process.cwd());
+			await runShell(apps, process.cwd(), isUpdate ? lastSeen : undefined);
 			shutdown();
 			return;
 		}
@@ -300,7 +306,7 @@ async function main() {
 			});
 		}
 
-		await runShell([project]);
+		await runShell([project], undefined, isUpdate ? lastSeen : undefined);
 		shutdown();
 		return;
 	}
