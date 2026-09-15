@@ -3,6 +3,9 @@ import {render} from 'ink';
 import {Text, Box} from 'ink';
 import meow from 'meow';
 import {readFileSync} from 'node:fs';
+import os from 'node:os';
+import {runningTasks} from './utils/tasks.js';
+import {killAllChildren} from './utils/process-runner.js';
 import {Shell} from './shell/Shell.js';
 import {getCommand} from './commands/index.js';
 import {
@@ -139,6 +142,19 @@ function printMasthead(version: string): void {
 	console.log(`${CYAN}╰${border}╯${RESET}`);
 }
 
+/**
+ * Stop every running task and kill leftover child processes. In raw mode Ink
+ * reads Ctrl+C as a keypress, so no SIGINT reaches anything else. Exits when
+ * there was work to stop (or on a signal); otherwise the process ends on its
+ * own, so a command's last output is never cut off.
+ */
+function shutdown(code?: number): void {
+	const busy = runningTasks();
+	for (const task of busy) task.stop();
+	const killed = killAllChildren();
+	if (busy.length > 0 || killed > 0 || code !== undefined) process.exit(code);
+}
+
 function fail(message: string, hint: string): never {
 	render(
 		<Box flexDirection="column" padding={1}>
@@ -173,6 +189,8 @@ async function playIntro(art: string[]): Promise<void> {
 // inside the same buffer, when the terminal is wide enough for it.
 async function runShell(apps: ProjectInfo[], workspaceRoot?: string) {
 	process.stdout.write('\x1b[?1049h\x1b[H');
+	// Also leave the alternate screen when a signal exits past the finally.
+	process.once('exit', () => process.stdout.write('\x1b[?1049l'));
 	try {
 		const art =
 			process.stdin.isTTY && settings.introAnimation && !cli.flags.minimal
@@ -198,6 +216,12 @@ async function runShell(apps: ProjectInfo[], workspaceRoot?: string) {
 }
 
 async function main() {
+	for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+		process.on(signal, () => {
+			shutdown(128 + os.constants.signals[signal]);
+		});
+	}
+
 	// On the very first run we show a dedicated welcome screen instead of the
 	// masthead, so the branding is the moment. Only when stdin is a TTY — the
 	// welcome is interactive and would hang in CI / piped input.
@@ -253,6 +277,7 @@ async function main() {
 			}
 
 			await runShell(apps, process.cwd());
+			shutdown();
 			return;
 		}
 
@@ -276,6 +301,7 @@ async function main() {
 		}
 
 		await runShell([project]);
+		shutdown();
 		return;
 	}
 
@@ -352,6 +378,7 @@ async function main() {
 		flags: cli.flags,
 		args,
 	});
+	shutdown();
 }
 
 main().catch(error => {

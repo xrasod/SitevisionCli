@@ -18,7 +18,7 @@
 
 import path from 'path';
 import fs from 'fs';
-import {spawn} from 'child_process';
+import {killChild, spawnChild} from './process-runner.js';
 
 /**
  * Resolve the path to the sitevision-scripts CLI entry inside a project.
@@ -214,10 +214,12 @@ const MAX_OUTPUT_CHARS = 50_000;
  *
  * @param projectRoot - Project root directory (used as cwd)
  * @param onOutput - Optional callback for streaming output chunks
+ * @param signal - Aborting kills the build and everything it started
  */
 export async function runSitevisionScriptsBuild(
 	projectRoot: string,
 	onOutput?: (chunk: string) => void,
+	signal?: AbortSignal,
 ): Promise<SitevisionBuildResult> {
 	const bin = getSitevisionScriptsBin(projectRoot);
 
@@ -233,10 +235,16 @@ export async function runSitevisionScriptsBuild(
 	return new Promise(resolve => {
 		let output = '';
 
-		const child = spawn(process.execPath, [bin, 'build'], {
+		const child = spawnChild(process.execPath, [bin, 'build'], {
 			cwd: projectRoot,
 			stdio: ['ignore', 'pipe', 'pipe'],
 		});
+		const abort = () => {
+			killChild(child);
+		};
+
+		signal?.addEventListener('abort', abort, {once: true});
+		if (signal?.aborted) abort();
 
 		const handleData = (data: Buffer) => {
 			const text = data.toString();
@@ -256,11 +264,14 @@ export async function runSitevisionScriptsBuild(
 		});
 
 		child.on('close', code => {
+			signal?.removeEventListener('abort', abort);
+			const stopped = signal?.aborted ?? false;
 			resolve({
-				success: code === 0,
+				success: code === 0 && !stopped,
 				output,
-				error:
-					code === 0
+				error: stopped
+					? 'Build stopped.'
+					: code === 0
 						? undefined
 						: `sitevision-scripts build exited with code ${code}`,
 			});

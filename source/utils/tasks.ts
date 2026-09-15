@@ -176,6 +176,7 @@ async function buildOnce(
 	task: Task,
 	log: Log,
 	mode: 'development' | 'production',
+	signal?: AbortSignal,
 ): Promise<string> {
 	const {root, manifest} = project;
 	cleanBuild(root);
@@ -191,8 +192,10 @@ async function buildOnce(
 		if (warning) log('bld', warning, 'warn');
 		setPhase(task, 'building');
 		log('bld', 'building via sitevision-scripts');
-		const result = await runSitevisionScriptsBuild(root, chunk =>
-			log('bld', chunk),
+		const result = await runSitevisionScriptsBuild(
+			root,
+			chunk => log('bld', chunk),
+			signal,
 		);
 		if (!result.success) throw new Error(result.error ?? 'Build failed');
 		const zipPath = getDelegatedZipPath(root, manifest.id);
@@ -307,10 +310,20 @@ async function deployOnce(
 // ---------------------------------------------------------------------------
 
 export function startBuild(project: ProjectInfo): Task {
-	const {task, log, finish} = createTask('build', project, 'build');
+	const controller = new AbortController();
+	const {task, log, finish} = createTask('build', project, 'build', () => {
+		controller.abort();
+		finish('stopped');
+	});
 	void (async () => {
 		try {
-			const zip = await buildOnce(project, task, log, 'production');
+			const zip = await buildOnce(
+				project,
+				task,
+				log,
+				'production',
+				controller.signal,
+			);
 			log('bld', `created ${zip}`, 'ok');
 			finish('success');
 		} catch (error) {
@@ -407,7 +420,10 @@ export function startInstall(project: ProjectInfo): Task {
 		'install',
 		project,
 		'npm install',
-		() => runner.kill(),
+		() => {
+			runner.kill();
+			finish('stopped');
+		},
 	);
 	setPhase(task, 'installing');
 	runner.on('output', (output: {type: string; data: string}) =>
@@ -455,7 +471,10 @@ export function startDev(project: ProjectInfo, options: DevOptions): Task {
 	let building = false;
 	let pending = false;
 
+	const controller = new AbortController();
+
 	const stop = () => {
+		controller.abort();
 		clearTimeout(debounce);
 		for (const watcher of watchers) watcher.close();
 		void webpack?.close().catch(() => {});
@@ -470,6 +489,8 @@ export function startDev(project: ProjectInfo, options: DevOptions): Task {
 	);
 
 	const afterBuild = async (zipPath: string) => {
+		// Stopped mid-build: never sign or deploy what is left.
+		if (controller.signal.aborted) return;
 		let deployZip = zipPath;
 		if (options.signingCredentials) {
 			deployZip = await signOnce(
@@ -492,6 +513,7 @@ export function startDev(project: ProjectInfo, options: DevOptions): Task {
 	};
 
 	const fail = (error: unknown) => {
+		if (controller.signal.aborted) return;
 		log('svc', errorText(error), 'error');
 		setPhase(task, 'error');
 	};
@@ -508,11 +530,19 @@ export function startDev(project: ProjectInfo, options: DevOptions): Task {
 				pending = false;
 				try {
 					// eslint-disable-next-line no-await-in-loop
-					await afterBuild(await buildOnce(project, task, log, 'development'));
+					const zip = await buildOnce(
+						project,
+						task,
+						log,
+						'development',
+						controller.signal,
+					);
+					// eslint-disable-next-line no-await-in-loop
+					await afterBuild(zip);
 				} catch (error) {
 					fail(error);
 				}
-			} while (pending);
+			} while (pending && !controller.signal.aborted);
 		} finally {
 			building = false;
 		}

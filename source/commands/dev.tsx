@@ -30,20 +30,6 @@ export function DevScreen({project, options}: DevScreenProps) {
 		}
 	});
 
-	React.useEffect(() => {
-		const stop = () => {
-			live.stop();
-			exit();
-		};
-
-		process.on('SIGINT', stop);
-		process.on('SIGTERM', stop);
-		return () => {
-			process.off('SIGINT', stop);
-			process.off('SIGTERM', stop);
-		};
-	}, [live, exit]);
-
 	const status =
 		live.status === 'running'
 			? live.phase === 'error'

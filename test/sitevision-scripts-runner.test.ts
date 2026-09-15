@@ -164,6 +164,48 @@ test('runSitevisionScriptsBuild reports success and streams output', async t => 
 	t.regex(result.output, /Compilation successful/);
 });
 
+const alive = (pid: number) => {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch {
+		return false;
+	}
+};
+
+async function waitFor(check: () => boolean, ms = 5000) {
+	const end = Date.now() + ms;
+	while (!check() && Date.now() < end) {
+		// eslint-disable-next-line no-await-in-loop
+		await new Promise(resolve => {
+			setTimeout(resolve, 20);
+		});
+	}
+}
+
+test('aborting runSitevisionScriptsBuild kills the build and what it started', async t => {
+	// Fake bin: starts a long-running child of its own, then waits forever.
+	const dir = makeProject(
+		'const {spawn} = require("child_process");\n' +
+			'const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {stdio: "ignore"});\n' +
+			'require("fs").writeFileSync("grandchild.pid", String(child.pid));\n' +
+			'setInterval(() => {}, 1000);\n',
+	);
+	const pidFile = path.join(dir, 'grandchild.pid');
+	const controller = new AbortController();
+	const running = runSitevisionScriptsBuild(dir, undefined, controller.signal);
+	await waitFor(() => fs.existsSync(pidFile));
+	const pid = Number(fs.readFileSync(pidFile, 'utf8'));
+	t.true(alive(pid));
+
+	controller.abort();
+	const result = await running;
+	t.false(result.success);
+	t.regex(result.error ?? '', /stopped/);
+	await waitFor(() => !alive(pid));
+	t.false(alive(pid), 'the child the build started is gone too');
+});
+
 test('runSitevisionScriptsBuild reports failure on a non-zero exit', async t => {
 	const dir = makeProject(
 		'process.stderr.write("boom\\n");\nprocess.exit(2);\n',
