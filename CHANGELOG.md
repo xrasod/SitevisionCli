@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.0-beta.28
+
+## 1.0.0-beta.27
+
+- Popups float over the screen instead of replacing the content pane: the
+  command palette, settings, addon picker, confirmations and prompts.
+- `?` opens a help panel with every key, plus the keys for the current tab.
+- What's new in the command palette shows this changelog.
+
+## 1.0.0-beta.26
+
+- No functional changes.
+
 ## 1.0.0-beta.25
 
 - Deploying to an addon that does not exist yet now offers to create it and
