@@ -243,6 +243,9 @@ export interface DeployResponse {
 	// Set when the failure looks like a stale/rejected session or token, so the
 	// caller can drop the cached credential and re-authenticate.
 	authExpired?: boolean;
+	// "could not resolve context node": the addon is missing, or the session
+	// is too dead to see it. The caller has to find out which.
+	contextNodeMissing?: boolean;
 }
 
 /**

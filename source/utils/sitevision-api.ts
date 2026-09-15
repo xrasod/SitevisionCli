@@ -545,6 +545,17 @@ export async function deployApp(
 			};
 		}
 
+		if (
+			response.statusCode === 400 &&
+			response.body.toString().includes('could not resolve context node')
+		) {
+			return {
+				success: false,
+				error: `Deployment failed with status 400: ${summarizeErrorBody(response.body, response.headers)}`,
+				contextNodeMissing: true,
+			};
+		}
+
 		return {
 			success: false,
 			error: `Deployment failed with status ${response.statusCode}: ${summarizeErrorBody(response.body, response.headers)}`,
@@ -622,10 +633,10 @@ export async function createAddon(
 		config.useHTTP,
 	);
 
-	const body = JSON.stringify({
-		name: config.addonName,
-		category: 'Other',
-	});
+	const payload: Record<string, string> = {name: config.addonName};
+	// Only the custommodule endpoints take (and require) a category.
+	if (appType === 'web' || appType === 'widget') payload['category'] = 'Other';
+	const body = JSON.stringify(payload);
 
 	const {auth, kind} = configAuth(config);
 
@@ -848,6 +859,21 @@ export async function listAddons(
 			error: `Listing addons failed: ${error instanceof Error ? error.message : String(error)}`,
 		};
 	}
+}
+
+/**
+ * Whether an addon exists, judged from a listAddons result. A failed or empty
+ * listing is "unknown": a dead session can look exactly like an empty site.
+ */
+export function classifyAddon(
+	listed: {success: boolean; addons?: AddonNode[]},
+	name: string,
+): 'missing' | 'present' | 'unknown' {
+	if (!listed.success || !listed.addons?.length) return 'unknown';
+	const wanted = name.toLowerCase();
+	return listed.addons.some(addon => addon.name.toLowerCase() === wanted)
+		? 'present'
+		: 'missing';
 }
 
 // =============================================================================

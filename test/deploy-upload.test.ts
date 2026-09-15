@@ -4,7 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import {AddressInfo} from 'net';
 import test from 'ava';
-import {activateApp, deployApp} from '../source/utils/sitevision-api.js';
+import {
+	activateApp,
+	classifyAddon,
+	deployApp,
+} from '../source/utils/sitevision-api.js';
 
 // Regression: the import endpoints read the archive from a multipart part named
 // "data" (confirmed against a live Sitevision server). Sending "file" 400s with
@@ -49,6 +53,56 @@ test('deployApp uploads the archive in a multipart part named "data"', async t =
 	t.true(result.success);
 	t.regex(received, /name="data"/);
 	t.notRegex(received, /name="file"/);
+});
+
+test('deployApp flags "could not resolve context node" so the addon can be checked', async t => {
+	const server = http.createServer((req, res) => {
+		req.resume();
+		req.on('end', () => {
+			res.writeHead(400, {'content-type': 'application/json'});
+			res.end(
+				JSON.stringify({
+					success: false,
+					type: 'invalidParameter',
+					message:
+						'BAD_REQUEST: Unable to process /rest-api/1/0/Site/Addon%20Repository/Missing/webAppImport, could not resolve context node',
+				}),
+			);
+		});
+	});
+	await new Promise<void>(resolve => {
+		server.listen(0, '127.0.0.1', resolve);
+	});
+	const {port} = server.address() as AddressInfo;
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-deploy-'));
+	const zip = path.join(dir, 'app.zip');
+	fs.writeFileSync(zip, 'PK fake zip');
+
+	const result = await deployApp(
+		zip,
+		{
+			domain: `127.0.0.1:${port}`,
+			siteName: 'Site',
+			addonName: 'Missing',
+			username: 'u',
+			password: 'p',
+			useHTTP: true,
+		},
+		'web',
+	);
+	server.close();
+
+	t.false(result.success);
+	t.true(result.contextNodeMissing);
+	t.falsy(result.authExpired);
+});
+
+test('classifyAddon only says missing when the listing is trustworthy', t => {
+	const node = (name: string) => ({id: '1', name, type: 'sv:customModule'});
+	t.is(classifyAddon({success: false}, 'A'), 'unknown');
+	t.is(classifyAddon({success: true, addons: []}, 'A'), 'unknown');
+	t.is(classifyAddon({success: true, addons: [node('Other')]}, 'A'), 'missing');
+	t.is(classifyAddon({success: true, addons: [node('a')]}, 'A'), 'present');
 });
 
 // Regression: the PUT body property is customModuleExecutableId. Sending

@@ -117,6 +117,11 @@ const sv: Record<string, string> = {
 	'to {env}': 'till {env}',
 	'Switch environment': 'Byt miljö',
 	'Add environment': 'Lägg till miljö',
+	'Create addon': 'Skapa tillägg',
+	'Create addon failed': 'Kunde inte skapa tillägget',
+	'addon {addon} created': 'tillägget {addon} skapat',
+	'Addon {addon} does not exist on {domain}. Create it and deploy again?':
+		'Tillägget {addon} finns inte på {domain}. Skapa det och driftsätt igen?',
 	'e.g. test or prod, overriding domain and auth':
 		't.ex. test eller prod, med egen domän och auth',
 	'Environment name (e.g. test, prod)': 'Miljönamn (t.ex. test, prod)',

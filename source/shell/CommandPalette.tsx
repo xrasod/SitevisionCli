@@ -25,7 +25,9 @@ export function CommandPalette({
 	const [query, setQuery] = useState('');
 	const [index, setIndex] = useState(0);
 
-	const matches = actions.filter(a => fuzzyMatch(query, t(a.label)));
+	const matches = actions.filter(
+		a => !a.hidden?.(project) && fuzzyMatch(query, t(a.label)),
+	);
 	const ordered = GROUPS.flatMap(g => matches.filter(a => a.group === g.id));
 
 	useInput((input, key) => {

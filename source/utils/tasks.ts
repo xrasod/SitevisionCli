@@ -36,6 +36,9 @@ import {
 	deployApp,
 	deployProduction,
 	activateApp,
+	createAddon,
+	listAddons,
+	classifyAddon,
 } from './sitevision-api.js';
 import {ProcessRunner} from './process-runner.js';
 
@@ -274,6 +277,8 @@ export interface DeployOptions {
 	force?: boolean;
 	production?: boolean;
 	activate?: boolean;
+	// Asked when the addon is confirmed missing; true creates it and redeploys.
+	onAddonMissing?: (addonName: string) => Promise<boolean>;
 }
 
 async function deployOnce(
@@ -290,13 +295,37 @@ async function deployOnce(
 		'dep',
 		`POST multipart → ${options.production ? 'production' : 'dev'} import · ${config.addonName} · ${path.basename(zipPath)}`,
 	);
-	const result = options.production
-		? await deployProduction(
-				zipPath,
-				{...config, activate: options.activate},
-				appType,
-			)
-		: await deployApp(zipPath, config, appType, options.force);
+	const upload = async () =>
+		options.production
+			? deployProduction(
+					zipPath,
+					{...config, activate: options.activate},
+					appType,
+				)
+			: deployApp(zipPath, config, appType, options.force);
+	let result = await upload();
+	if (!result.success && result.contextNodeMissing) {
+		const addon = classifyAddon(await listAddons(config), config.addonName);
+		if (addon === 'unknown') {
+			throw new Error(
+				`${result.error}\nCould not list the site's addons either, so the session may have expired. Press l to log in again.`,
+			);
+		}
+
+		if (addon === 'missing' && options.onAddonMissing) {
+			log('dep', `addon ${config.addonName} does not exist`, 'warn');
+			if (await options.onAddonMissing(config.addonName)) {
+				const created = await createAddon(config, appType);
+				if (!created.success) {
+					throw new Error(created.error ?? 'Create addon failed');
+				}
+
+				log('dep', `created addon ${config.addonName}`, 'ok');
+				result = await upload();
+			}
+		}
+	}
+
 	if (!result.success) throw new Error(result.error ?? 'Deployment failed');
 	log(
 		'dep',
@@ -449,6 +478,7 @@ export interface DevOptions {
 	deploy: boolean;
 	signingCredentials?: SigningCredentials;
 	deployConfig?: DeployConfig;
+	onAddonMissing?: DeployOptions['onAddonMissing'];
 }
 
 const WATCH_TARGETS = [
@@ -506,6 +536,7 @@ export function startDev(project: ProjectInfo, options: DevOptions): Task {
 		if (options.deploy && options.deployConfig) {
 			await deployOnce(project, task, log, deployZip, options.deployConfig, {
 				force: true,
+				onAddonMissing: options.onAddonMissing,
 			});
 		}
 
