@@ -71,14 +71,7 @@ export function AddonPicker({
 	);
 
 	return (
-		<Box
-			flexDirection="column"
-			borderStyle="round"
-			borderColor={ACCENT}
-			paddingX={1}
-			width={64}
-			height={Math.min(height, matches.length + 6)}
-		>
+		<Box flexDirection="column" paddingX={1}>
 			<Text>
 				<Text bold>{t('Addon Repository')}</Text>
 				<Text dimColor> {domain}</Text>

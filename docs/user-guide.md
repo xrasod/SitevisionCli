@@ -117,6 +117,7 @@ Global (content pane):
 | `l`       | Log in again (discards the credential held for this session)       |
 | `,`       | Settings: language (English/Swedish) and intro animation           |
 | `/`       | Command palette: every action, searchable                          |
+| `?`       | Help: every key, plus the ones that work where you are             |
 | `Tab`     | Switch between navigator and content                               |
 | `Esc`     | Back / cancel                                                      |
 | `q`       | Quit (stops running tasks)                                         |

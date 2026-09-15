@@ -109,13 +109,7 @@ export function SettingsScreen({
 	});
 
 	return (
-		<Box
-			flexDirection="column"
-			borderStyle="round"
-			borderColor={ACCENT}
-			paddingX={1}
-			width={64}
-		>
+		<Box flexDirection="column" paddingX={1}>
 			<Text>
 				<Text bold>{t('Settings')}</Text>
 				<Text dimColor> · {t('stored in {file}', {file: settingsFile()})}</Text>

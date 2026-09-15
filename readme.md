@@ -59,6 +59,7 @@ and `p` to deploy and activate.
 | `K`             | Stop running tasks                                  |
 | `1`–`4`         | Overview · Config · Versions · Log                  |
 | `/`             | Command palette                                     |
+| `?`             | Help: every key in one place                        |
 | `,`             | Settings (language, intro animation)                |
 | `Tab` / `Esc`   | Switch pane / back                                  |
 | `q`             | Quit                                                |

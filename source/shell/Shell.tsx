@@ -57,6 +57,9 @@ import {CommandPalette} from './CommandPalette.js';
 import {ConfigForm, type ConfigTarget} from './ConfigForm.js';
 import {AddonPicker} from './AddonPicker.js';
 import {SettingsScreen} from './Settings.js';
+import {HelpPanel} from './Help.js';
+import {Popover} from './Popover.js';
+import {ChangelogPanel} from './Changelog.js';
 import {
 	baseEnvironment,
 	environmentColor,
@@ -93,6 +96,8 @@ type Overlay =
 	| {kind: 'confirm'; message: string; resolve: (v: boolean) => void}
 	| {kind: 'picker'; resolve: (v: string | null) => void}
 	| {kind: 'settings'}
+	| {kind: 'help'}
+	| {kind: 'changelog'}
 	| {kind: 'prompt'; label: string; resolve: (v: string | null) => void};
 
 interface Props {
@@ -250,6 +255,9 @@ export function Shell({
 			openSettings() {
 				setOverlay({kind: 'settings'});
 			},
+			openChangelog() {
+				setOverlay({kind: 'changelog'});
+			},
 			environment: env,
 			isProduction,
 			cycleEnvironment() {
@@ -312,6 +320,9 @@ export function Shell({
 				new Promise(resolve => {
 					setOverlay({kind: 'confirm', message, resolve});
 				}),
+			openHelp() {
+				setOverlay({kind: 'help'});
+			},
 		}),
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[project, reload, notify, quit, workspaceRoot, apps.length, env, envList],
@@ -389,7 +400,9 @@ export function Shell({
 		await fetchVersions();
 	}, [versions, project, versionRow, context, notify, fetchVersions]);
 
-	const formActive = (tab === 'config' || settings) && focus === 'content';
+	// A popover owns the keyboard; the form stays mounted underneath it.
+	const formActive =
+		(tab === 'config' || settings) && focus === 'content' && !overlay;
 	const [editing, setEditing] = useState(false);
 	const pickAddon = useCallback(
 		async () =>
@@ -430,6 +443,11 @@ export function Shell({
 
 			if (input === '/') {
 				setOverlay({kind: 'palette'});
+				return;
+			}
+
+			if (input === '?') {
+				setOverlay({kind: 'help'});
 				return;
 			}
 
@@ -586,9 +604,8 @@ export function Shell({
 				['/', 'commands'],
 				['q', 'quit'],
 			]);
-	const hints: Hint[] = overlay
-		? h([['Esc', 'cancel']])
-		: focus === 'nav' && !settings
+	const hereHints: Hint[] =
+		focus === 'nav' && !settings
 			? navHints
 			: settings
 				? settingsHints
@@ -650,6 +667,11 @@ export function Shell({
 									['/', 'commands'],
 									['q', 'quit'],
 								]);
+	const hints: Hint[] = overlay
+		? h([['Esc', 'cancel']])
+		: editing
+			? hereHints
+			: [...hereHints, ...h([['?', 'help']])];
 
 	const right =
 		running.length > 0 ? (
@@ -678,14 +700,18 @@ export function Shell({
 		);
 
 	const closeOverlay = () => setOverlay(null);
-	const content = overlay ? (
+	const popoverWidth = Math.min(96, columns - 8);
+	const popoverHeight = Math.min(30, frameRows - 4);
+	const popover =
+		overlay &&
 		renderOverlay(overlay, {
 			project,
+			here: hereHints,
 			closeOverlay,
 			run,
 			notify,
 			loadAddons,
-			height: contentHeight,
+			height: popoverHeight - 2,
 			rerender: tick,
 			openWorkspace: workspaceRoot
 				? () => {
@@ -694,64 +720,65 @@ export function Shell({
 						setFocus('content');
 					}
 				: undefined,
-		})
-	) : settings && workspaceTarget ? (
-		<ConfigForm
-			key="workspace"
-			project={workspaceTarget}
-			active={formActive}
-			width={narrow ? columns : columns - sidebar}
-			height={contentHeight}
-			pickAddon={async () => null}
-			onSaved={() => {
-				reload();
-				notify(t('workspace config saved'), 'ok');
-			}}
-			onEditingChange={setEditing}
-		/>
-	) : (
-		<>
-			{tab === 'overview' && (
-				<Overview project={project} tasks={tasks} height={contentHeight} />
-			)}
-			{tab === 'config' && (
-				<ConfigForm
-					key={`${project.root}|${env}`}
-					project={{
-						root: project.root,
-						devProperties: project.devProperties,
-						base: rawProject.devProperties,
-						environment: env,
-						workspaceRoot,
-					}}
-					active={formActive}
-					width={narrow ? columns : columns - sidebar}
-					height={contentHeight}
-					pickAddon={pickAddon}
-					onSaved={() => {
-						reload();
-						notify(t('config saved'), 'ok');
-					}}
-					onEditingChange={setEditing}
-				/>
-			)}
-			{tab === 'versions' && (
-				<Versions
-					project={project}
-					state={versions[versionsKey]}
-					selected={versionRow}
-				/>
-			)}
-			{tab === 'log' && (
-				<Log
-					task={logTask}
-					height={contentHeight}
-					scroll={logScroll}
-					wrap={logWrap}
-				/>
-			)}
-		</>
-	);
+		});
+	const content =
+		settings && workspaceTarget ? (
+			<ConfigForm
+				key="workspace"
+				project={workspaceTarget}
+				active={formActive}
+				width={narrow ? columns : columns - sidebar}
+				height={contentHeight}
+				pickAddon={async () => null}
+				onSaved={() => {
+					reload();
+					notify(t('workspace config saved'), 'ok');
+				}}
+				onEditingChange={setEditing}
+			/>
+		) : (
+			<>
+				{tab === 'overview' && (
+					<Overview project={project} tasks={tasks} height={contentHeight} />
+				)}
+				{tab === 'config' && (
+					<ConfigForm
+						key={`${project.root}|${env}`}
+						project={{
+							root: project.root,
+							devProperties: project.devProperties,
+							base: rawProject.devProperties,
+							environment: env,
+							workspaceRoot,
+						}}
+						active={formActive}
+						width={narrow ? columns : columns - sidebar}
+						height={contentHeight}
+						pickAddon={pickAddon}
+						onSaved={() => {
+							reload();
+							notify(t('config saved'), 'ok');
+						}}
+						onEditingChange={setEditing}
+					/>
+				)}
+				{tab === 'versions' && (
+					<Versions
+						project={project}
+						state={versions[versionsKey]}
+						selected={versionRow}
+					/>
+				)}
+				{tab === 'log' && (
+					<Log
+						task={logTask}
+						height={contentHeight}
+						scroll={logScroll}
+						wrap={logWrap}
+					/>
+				)}
+			</>
+		);
 
 	return (
 		<Box flexDirection="column" width={columns} height={frameRows}>
@@ -828,6 +855,16 @@ export function Shell({
 				</Box>
 			</Box>
 			<BottomBar hints={hints} right={right} />
+			{popover && (
+				<Popover
+					columns={columns}
+					rows={frameRows}
+					width={popoverWidth}
+					height={popoverHeight}
+				>
+					{popover}
+				</Popover>
+			)}
 		</Box>
 	);
 }
@@ -836,6 +873,7 @@ function renderOverlay(
 	overlay: Overlay,
 	env: {
 		project: ProjectInfo;
+		here: Hint[];
 		closeOverlay: () => void;
 		run: (action: Action) => void;
 		notify: (text: string, level?: 'info' | 'ok' | 'warn' | 'error') => void;
@@ -847,6 +885,7 @@ function renderOverlay(
 ) {
 	const {
 		project,
+		here,
 		closeOverlay,
 		run,
 		notify,
@@ -929,6 +968,10 @@ function renderOverlay(
 					}}
 				/>
 			);
+		case 'help':
+			return <HelpPanel here={here} height={height} onClose={closeOverlay} />;
+		case 'changelog':
+			return <ChangelogPanel height={height} onClose={closeOverlay} />;
 		case 'settings':
 			return (
 				<SettingsScreen
@@ -970,12 +1013,7 @@ function Confirm({
 		else if (input === 'n' || input === 'N') onAnswer(false);
 	});
 	return (
-		<Box
-			flexDirection="column"
-			borderStyle="round"
-			borderColor="yellow"
-			paddingX={1}
-		>
+		<Box flexDirection="column" paddingX={1}>
 			<Text>{message}</Text>
 			<Text dimColor>{t('y confirm · n cancel')}</Text>
 		</Box>
@@ -999,12 +1037,7 @@ function TextPrompt({
 		else if (input && !key.ctrl && !key.meta) setValue(v => v + input);
 	});
 	return (
-		<Box
-			flexDirection="column"
-			borderStyle="round"
-			borderColor={ACCENT}
-			paddingX={1}
-		>
+		<Box flexDirection="column" paddingX={1}>
 			<Text bold>{label}</Text>
 			<Text>
 				<Text color={ACCENT}>❯ </Text>

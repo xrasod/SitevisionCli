@@ -118,6 +118,7 @@ Globala (innehållspanelen):
 | `l`       | Logga in igen (glömmer inloggningen som hålls för sessionen)                    |
 | `,`       | Inställningar: språk (engelska/svenska) och introanimation                      |
 | `/`       | Kommandopalett: alla åtgärder, sökbara                                          |
+| `?`       | Hjälp: alla tangenter, och de som fungerar där du är                            |
 | `Tab`     | Växla mellan navigator och innehåll                                             |
 | `Esc`     | Tillbaka / avbryt                                                               |
 | `q`       | Avsluta (stoppar pågående uppgifter)                                            |

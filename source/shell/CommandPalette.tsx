@@ -5,7 +5,7 @@ import {ACCENT} from './Frame.js';
 import {actions, fuzzyMatch, type Action} from './actions.js';
 import {t} from '../utils/i18n.js';
 
-const GROUPS: {id: Action['group']; label: string}[] = [
+export const GROUPS: {id: Action['group']; label: string}[] = [
 	{id: 'app', label: 'APP'},
 	{id: 'setup', label: 'SETUP'},
 	{id: 'auth', label: 'AUTH'},
@@ -94,14 +94,7 @@ export function CommandPalette({
 	}
 
 	return (
-		<Box
-			flexDirection="column"
-			borderStyle="round"
-			borderColor={ACCENT}
-			paddingX={1}
-			width={64}
-			height={rows.length + 5}
-		>
+		<Box flexDirection="column" paddingX={1}>
 			<Text>
 				<Text bold>{t('Commands')}</Text>
 				<Text dimColor> {project.manifest.id}</Text>

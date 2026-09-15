@@ -12,6 +12,7 @@ import {Log, Overview} from '../source/shell/Tabs.js';
 import type {Task} from '../source/utils/tasks.js';
 import {fuzzyMatch, type Action} from '../source/shell/actions.js';
 import {navMatches, navMove, NavigatorStrip} from '../source/shell/Frame.js';
+import {ChangelogPanel} from '../source/shell/Changelog.js';
 
 const delay = async (ms: number) =>
 	new Promise(resolve => {
@@ -196,6 +197,43 @@ test('wrapped log lines fit the pane and keep the newest line visible', t => {
 	t.true(rows.some(row => row.includes('zzzz')));
 	t.true(rows.some(row => row.trimEnd().endsWith('out LAST LINE')));
 	t.true(rows.every(row => row.length <= 40));
+});
+
+test('? opens the help panel with every action key and Esc closes it', async t => {
+	const {stdin, lastFrame, unmount} = render(
+		<Shell apps={[project()]} version="9.9.9" />,
+	);
+	await delay(20);
+	stdin.write('?');
+	await delay(20);
+	const open = lastFrame() ?? '';
+	stdin.write('\u001B');
+	await delay(40);
+	const closed = lastFrame() ?? '';
+	unmount();
+
+	t.true(open.includes('Keys'));
+	t.true(open.includes('Deploy (force)'));
+	// Floats over the frame instead of replacing the content pane.
+	t.true(open.includes('╭'));
+	t.true(open.includes('v9.9.9'));
+	t.false(closed.includes('Deploy (force)'));
+});
+
+test('the changelog panel starts at the newest release', async t => {
+	const newest = /^## (?<version>.+)$/m.exec(
+		fs.readFileSync('CHANGELOG.md', 'utf8'),
+	)?.groups?.['version'];
+	const {lastFrame, unmount} = render(
+		<ChangelogPanel height={10} onClose={() => {}} />,
+	);
+	await delay(20);
+	const frame = lastFrame() ?? '';
+	unmount();
+
+	t.truthy(newest);
+	t.true(frame.includes(newest!));
+	t.false(frame.includes('# Changelog'));
 });
 
 test('the narrow strip scrolls to keep the selected app visible', t => {
