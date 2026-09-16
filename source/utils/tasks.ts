@@ -580,10 +580,46 @@ export function startDev(project: ProjectInfo, options: DevOptions): Task {
 		}
 	};
 
-	const onChange = (name: string, file: string | null) => {
-		log('fs', `changed ${file ?? name}`);
+	// Size + mtime of every watched file. An event that leaves this unchanged
+	// (editor metadata, xattrs, identical re-save) is noise and must not
+	// rebuild, or a stray event during sign/deploy loops forever.
+	const snapshot = () => {
+		const entries: string[] = [];
+		for (const name of WATCH_TARGETS) {
+			const target = path.join(root, name);
+			const stat = fs.statSync(target, {throwIfNoEntry: false});
+			if (!stat) continue;
+			const files = (
+				stat.isDirectory()
+					? fs
+							.readdirSync(target, {recursive: true, withFileTypes: true})
+							.filter(entry => entry.isFile())
+							.map(entry => path.join(entry.parentPath, entry.name))
+					: [target]
+			).filter(file => !path.basename(file).startsWith('.'));
+			for (const file of files) {
+				const info = fs.statSync(file, {throwIfNoEntry: false});
+				if (info) entries.push(`${file}:${info.size}:${info.mtimeMs}`);
+			}
+		}
+
+		return entries.toSorted().join('\n');
+	};
+
+	let fingerprint = '';
+
+	const onChange = (name: string, event: string, file: string | null) => {
+		const where = file ? path.join(name, file) : name;
 		clearTimeout(debounce);
 		debounce = setTimeout(() => {
+			const next = snapshot();
+			if (next === fingerprint) {
+				log('fs', `${event} ${where} · no file changed, ignored`, 'warn');
+				return;
+			}
+
+			fingerprint = next;
+			log('fs', `${event} ${where}`);
 			void rebuild();
 		}, 300);
 	};
@@ -594,12 +630,13 @@ export function startDev(project: ProjectInfo, options: DevOptions): Task {
 			if (!fs.existsSync(target)) continue;
 			const isDir = fs.statSync(target).isDirectory();
 			watchers.push(
-				fs.watch(target, {recursive: isDir}, (_event, file) => {
-					onChange(name, file);
+				fs.watch(target, {recursive: isDir}, (event, file) => {
+					onChange(name, event, file);
 				}),
 			);
 		}
 
+		fingerprint = snapshot();
 		log('svc', `watching ${WATCH_TARGETS.join(', ')}`);
 	};
 

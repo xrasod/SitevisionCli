@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0-beta.30
+
+- Dev and watch no longer rebuild on file events that change nothing, such as
+  editor metadata, swap files or `.DS_Store`. Ignored events are logged as
+  warnings so a stray trigger can be traced.
+- The log names the event and path of the file that started a rebuild, for
+  example `change src/index.tsx`.
+
 ## 1.0.0-beta.29
 
 - After an update, the shell opens What's new with the changes since the
