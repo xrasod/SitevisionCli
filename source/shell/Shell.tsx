@@ -57,7 +57,7 @@ import {CommandPalette} from './CommandPalette.js';
 import {ConfigForm, type ConfigTarget} from './ConfigForm.js';
 import {AddonPicker} from './AddonPicker.js';
 import {SettingsScreen} from './Settings.js';
-import {HelpPanel} from './Help.js';
+import {HelpPanel, type Where} from './Help.js';
 import {Popover} from './Popover.js';
 import {ChangelogPanel} from './Changelog.js';
 import {
@@ -609,6 +609,8 @@ export function Shell({
 				['/', 'commands'],
 				['q', 'quit'],
 			]);
+	const where: Where =
+		focus === 'nav' && !settings ? 'nav' : settings ? 'workspace' : tab;
 	const hereHints: Hint[] =
 		focus === 'nav' && !settings
 			? navHints
@@ -712,6 +714,7 @@ export function Shell({
 		renderOverlay(overlay, {
 			project,
 			here: hereHints,
+			where,
 			closeOverlay,
 			run,
 			notify,
@@ -879,6 +882,7 @@ function renderOverlay(
 	env: {
 		project: ProjectInfo;
 		here: Hint[];
+		where: Where;
 		closeOverlay: () => void;
 		run: (action: Action) => void;
 		notify: (text: string, level?: 'info' | 'ok' | 'warn' | 'error') => void;
@@ -891,6 +895,7 @@ function renderOverlay(
 	const {
 		project,
 		here,
+		where,
 		closeOverlay,
 		run,
 		notify,
@@ -974,7 +979,14 @@ function renderOverlay(
 				/>
 			);
 		case 'help':
-			return <HelpPanel here={here} height={height} onClose={closeOverlay} />;
+			return (
+				<HelpPanel
+					here={here}
+					where={where}
+					height={height}
+					onClose={closeOverlay}
+				/>
+			);
 		case 'changelog':
 			return (
 				<ChangelogPanel

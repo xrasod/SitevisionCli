@@ -126,6 +126,33 @@ const sv: Record<string, string> = {
 	'switch pane': 'byt panel',
 	tabs: 'flikar',
 	help: 'hjälp',
+	// Help guide
+	'Typing filters the app list. ↑↓ move, Enter selects the app and moves focus to the content pane. Action keys such as d or p only work there; in the navigator they search.':
+		'Skriv för att filtrera applistan. ↑↓ flyttar, Enter väljer appen och flyttar fokus till innehållspanelen. Åtgärdstangenter som d eller p fungerar bara där; i navigatorn söker de.',
+	'The last row is Workspace settings: the shared root config that every app inherits.':
+		'Sista raden är Arbetsytans inställningar: den delade rotkonfigurationen som alla appar ärver.',
+	"The root .dev_properties.json shared by every app, with the root package.json defaults underneath. Fill in site, auth and environments once; an app's own config overrides only what differs.":
+		'Rotens .dev_properties.json som delas av alla appar, med rotens package.json som standardvärden under. Fyll i webbplats, autentisering och miljöer en gång; en apps egen konfig skriver bara över det som skiljer.',
+	'Same keys as the Config tab: Enter edits and saves, Esc cancels, ←→ or space cycles choices.':
+		'Samma tangenter som Konfig-fliken: Enter redigerar och sparar, Esc avbryter, ←→ eller mellanslag bläddrar bland val.',
+	'Each status line names the key that fixes it: i installs dependencies, e opens Config, y syncs package.json, / sets up signing.':
+		'Varje statusrad anger tangenten som åtgärdar den: i installerar beroenden, e öppnar Konfig, y synkar package.json, / sätter upp signering.',
+	'The badge in the top bar is the active environment: green for the base, yellow for others, red for production. v cycles it.':
+		'Märket i toppraden är den aktiva miljön: grönt för basen, gult för övriga, rött för produktion. v växlar.',
+	'Values come in layers and the source is shown next to each: your local .dev_properties.json wins, shared package.json values sit underneath, and in a workspace the root config underneath that. Environments add on top of the base and override only what differs.':
+		'Värden kommer i lager och källan visas bredvid varje: din lokala .dev_properties.json vinner, delade värden i package.json ligger under, och i en arbetsyta rotkonfigurationen under det. Miljöer läggs ovanpå basen och skriver bara över det som skiljer.',
+	'Enter edits and saves a field, Esc cancels, ←→ or space cycles choices, Ctrl+O lists the addons on the site. y copies shared values into package.json for the team.':
+		'Enter redigerar och sparar ett fält, Esc avbryter, ←→ eller mellanslag bläddrar bland val, Ctrl+O listar webbplatsens tillägg. y kopierar delade värden till package.json för teamet.',
+	'Passwords and secrets go to the OS keychain, never to a file. Leave them empty to be asked on each run.':
+		'Lösenord och hemligheter sparas i nyckelringen, aldrig i en fil. Lämna dem tomma för att bli tillfrågad varje gång.',
+	"The versions uploaded to the addon on the active environment's site, the domain in the top bar. v switches environment.":
+		'Versionerna som laddats upp till tillägget på den aktiva miljöns webbplats, domänen i toppraden. v byter miljö.',
+	'↑↓ select, a activates the selected version, r refreshes. Production deploys activate on their own.':
+		'↑↓ väljer, a aktiverar vald version, r uppdaterar. Produktionsdriftsättningar aktiverar själva.',
+	'Output from build, sign, deploy, dev and watch for the selected app. Dev and watch keep running while you switch apps; K stops them.':
+		'Utdata från build, sign, deploy, dev och watch för vald app. Dev och watch fortsätter köra medan du byter app; K stoppar dem.',
+	'↑↓ scroll, PgUp/PgDn page, f jumps to the end, x toggles line wrap.':
+		'↑↓ scrollar, PgUp/PgDn bläddrar sida, f hoppar till slutet, x växlar radbrytning.',
 	"What's new": 'Nyheter',
 	'changelog for every release': 'ändringslogg för varje version',
 	Changelog: 'Ändringslogg',

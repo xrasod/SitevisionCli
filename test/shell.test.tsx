@@ -220,6 +220,28 @@ test('? opens the help panel with every action key and Esc closes it', async t =
 	t.false(closed.includes('Deploy (force)'));
 });
 
+test('the help panel describes the pane you are in', async t => {
+	const {stdin, lastFrame, unmount} = render(
+		<Shell apps={[project()]} version="9.9.9" />,
+	);
+	await delay(20);
+	stdin.write('?');
+	await delay(20);
+	const overview = lastFrame() ?? '';
+	stdin.write('\u001B');
+	await delay(40);
+	stdin.write('2');
+	await delay(20);
+	stdin.write('?');
+	await delay(20);
+	const config = lastFrame() ?? '';
+	unmount();
+
+	t.true(overview.includes('Each status line'));
+	t.true(config.includes('Values come in layers'));
+	t.false(config.includes('Each status line'));
+});
+
 test('the changelog panel starts at the newest release', async t => {
 	const newest = /^## (?<version>.+)$/m.exec(
 		fs.readFileSync('CHANGELOG.md', 'utf8'),
