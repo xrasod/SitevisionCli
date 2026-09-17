@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0-beta.31
+
+- The help panel (`?`) now starts with a short guide to the pane you are in:
+  what it shows, how the values relate, and which keys apply. The Config guide
+  explains how local, shared and workspace settings layer on top of each
+  other. The panel scrolls when it does not fit.
+- Updated dependencies.
+
 ## 1.0.0-beta.30
 
 - Dev and watch no longer rebuild on file events that change nothing, such as
