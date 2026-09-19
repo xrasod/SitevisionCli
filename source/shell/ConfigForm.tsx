@@ -1,6 +1,6 @@
 import {useEffect, useState} from 'react';
 import {Box, Text, useInput} from 'ink';
-import type {DevProperties} from '../types/index.js';
+import type {DevProperties, SitevisionManifest} from '../types/index.js';
 import {
 	findDevPropertiesPath,
 	getPackageJsonSyncChanges,
@@ -12,6 +12,7 @@ import {
 	readWorkspaceDevProperties,
 	updatePackageJson,
 	writeDevProperties,
+	writeManifestField,
 } from '../utils/project-detection.js';
 import {
 	setDeployPassword,
@@ -47,6 +48,9 @@ interface Field {
 	perApp?: boolean;
 	// Guidance shown in the help panel while the row is focused.
 	help: string;
+	// A manifest.json field, and the language of a localized one.
+	manifestKey?: string;
+	lang?: string;
 }
 
 const FIELDS: Field[] = [
@@ -174,6 +178,64 @@ const FIELDS: Field[] = [
 	},
 ];
 
+const MANIFEST_FIELDS: Field[] = [
+	{
+		key: 'id',
+		label: 'App id',
+		required: true,
+		help: 'Identifier of the app in Sitevision; it also names the zip. Changing it makes the next deploy a new app instead of an update.',
+	},
+	{
+		key: 'version',
+		label: 'Version',
+		required: true,
+		help: 'Version of the app. Id and version together identify an upload, so bump it to deploy a new version instead of overwriting the current one.',
+	},
+	{
+		key: 'name',
+		label: 'Name',
+		required: true,
+		help: 'Name shown when importing and administering the app in the Sitevision editor. A multilingual manifest needs at least English.',
+	},
+	{
+		key: 'description',
+		label: 'Description',
+		help: 'Short description shown next to the name in the Sitevision editor.',
+	},
+	{
+		key: 'author',
+		label: 'Author',
+		help: 'Who made the app, shown in the Sitevision editor.',
+	},
+	{
+		key: 'helpUrl',
+		label: 'Help URL',
+		help: "Link to the app's documentation, shown in the Sitevision editor.",
+	},
+];
+
+/** Rows for manifest.json: one per text field, one per language of a localized one. */
+export function manifestFields(manifest?: SitevisionManifest): Field[] {
+	if (!manifest) return [];
+	const raw = manifest as unknown as Record<string, unknown>;
+	return MANIFEST_FIELDS.flatMap(f => {
+		const value = raw[f.key];
+		const base = {...f, section: 'MANIFEST', manifestKey: f.key};
+		if (value && typeof value === 'object') {
+			return Object.keys(value).map(lang => ({
+				...base,
+				key: `manifest.${f.key}.${lang}`,
+				lang,
+				required: f.required && lang === 'en',
+			}));
+		}
+
+		return [{...base, key: `manifest.${f.key}`}];
+	});
+}
+
+const labelOf = (f: Field) => t(f.label) + (f.lang ? ` (${f.lang})` : '');
+
 type Values = Record<string, string>;
 
 /** What the form edits: an app, or the workspace root (no addon, no package.json). */
@@ -187,6 +249,8 @@ export interface ConfigTarget {
 	workspace?: boolean;
 	// Set for an app shown in workspace mode.
 	workspaceRoot?: string;
+	manifest?: SitevisionManifest;
+	manifestPath?: string;
 }
 
 const ENV_KEYS = new Set([
@@ -229,6 +293,17 @@ function fromProject(project: ConfigTarget): Values {
 		signingUsername: dev.signingUsername ?? '',
 		certificateName: dev.certificateName ?? '',
 		signingPassword: '',
+		...Object.fromEntries(
+			manifestFields(project.manifest).map(f => {
+				const value = (project.manifest as unknown as Record<string, unknown>)[
+					f.manifestKey!
+				];
+				const text = f.lang
+					? (value as Record<string, unknown>)[f.lang]
+					: value;
+				return [f.key, typeof text === 'string' ? text : ''];
+			}),
+		),
 	};
 }
 
@@ -458,7 +533,10 @@ export function ConfigForm({
 		project.environment !==
 			baseEnvironment(project.base ?? project.devProperties),
 	);
-	const fields = visibleFields(method, project.workspace, envMode);
+	const fields = [
+		...visibleFields(method, project.workspace, envMode),
+		...manifestFields(project.manifest),
+	];
 	const current = fields[Math.min(cursor, fields.length - 1)]!;
 	const inherited = readInheritedDevProperties(project.root) as Record<
 		string,
@@ -469,12 +547,27 @@ export function ConfigForm({
 	const packageJsonExists = hasPackageJson(project.root);
 
 	// Write one field to disk (and the keychain for secrets) right away.
-	const commit = (key: string, value: string, label = current.label) => {
+	const commit = (key: string, value: string, label = labelOf(current)) => {
 		const clean = key === 'domain' ? normalizeDomain(value) : value;
+		const field = fields.find(f => f.key === key);
+		if (field?.manifestKey && field.required && !clean) {
+			setNote(t('Not saved: {label} is required.', {label}));
+			return;
+		}
+
 		const next = {...values, [key]: clean};
 		setValues(next);
 		try {
-			saveConfig(project, next, new Set([key]));
+			if (field?.manifestKey) {
+				writeManifestField(
+					project.manifestPath!,
+					field.manifestKey,
+					clean,
+					field.lang,
+				);
+			} else {
+				saveConfig(project, next, new Set([key]));
+			}
 		} catch (error) {
 			setNote(t('Not saved: {error}', {error: errorText(error)}));
 			return;
@@ -482,9 +575,9 @@ export function ConfigForm({
 
 		setNote(
 			clean === value
-				? t('Saved {label}.', {label: t(label)})
+				? t('Saved {label}.', {label})
 				: t('Saved {label} as {value} — a domain is a host only.', {
-						label: t(label),
+						label,
 						value: clean,
 					}),
 		);
@@ -537,7 +630,7 @@ export function ConfigForm({
 		void pickAddon().then(name => {
 			if (name) {
 				setEditing(false);
-				commit('addonName', name, 'Addon name');
+				commit('addonName', name, t('Addon name'));
 			}
 		});
 	};
@@ -613,6 +706,9 @@ export function ConfigForm({
 			return {text: storedSecret(project, f.key) ? t('keychain') : '—'};
 		}
 
+		if (f.manifestKey)
+			return {text: (values[f.key] ?? '') ? 'manifest.json' : ''};
+
 		const value = f.kind === 'bool' ? values[f.key] === 'yes' : values[f.key];
 		if (envMode && ENV_KEYS.has(f.key)) {
 			const override = project.base?.environments?.[project.environment!];
@@ -658,11 +754,13 @@ export function ConfigForm({
 	// label column (24) + source column + paddings; never below 20.
 	const valueWidth = Math.max(20, width - 24 - SOURCE_WIDTH - 2);
 	const rows: React.ReactNode[] = [];
+	let focusRow = 0;
 	let lastSection: string | undefined;
 	for (const f of fields) {
 		if (f.section && f.section !== lastSection) {
 			rows.push(
-				<Box key={`s-${f.section}`} marginTop={1} flexShrink={0}>
+				<Box key={`g-${f.section}`} height={1} flexShrink={0} />,
+				<Box key={`s-${f.section}`} height={1} flexShrink={0}>
 					<Text bold dimColor>
 						{t(f.section)}
 					</Text>
@@ -671,6 +769,7 @@ export function ConfigForm({
 			lastSection = f.section;
 		}
 
+		if (f === current) focusRow = rows.length;
 		const focused = active && f === current;
 		const typing = focused && editing;
 		// A value being typed into, scrolled so the caret stays in view and drawn
@@ -739,7 +838,7 @@ export function ConfigForm({
 					bold={focused}
 					dimColor={!focused}
 				>
-					{(focused ? '▸ ' : '  ') + t(f.label).padEnd(22)}
+					{(focused ? '▸ ' : '  ') + labelOf(f).padEnd(22)}
 				</Text>
 				<Box width={valueWidth} flexShrink={0}>
 					<Text wrap="truncate">{display}</Text>
@@ -753,6 +852,17 @@ export function ConfigForm({
 		);
 	}
 
+	// ponytail: the help panel is assumed to wrap to three lines; measure it if
+	// a narrow pane ever clips the note.
+	const room = Math.max(
+		3,
+		height - 9 - changes.length - (project.workspace ? 2 : 0),
+	);
+	const firstRow = Math.max(
+		0,
+		Math.min(focusRow - Math.floor(room / 2), rows.length - room),
+	);
+
 	return (
 		<Box flexDirection="column" paddingX={1} overflow="hidden" height={height}>
 			<Box height={1} flexShrink={0}>
@@ -762,7 +872,7 @@ export function ConfigForm({
 					{t('SOURCE')}
 				</Text>
 			</Box>
-			{rows}
+			{rows.slice(firstRow, firstRow + room)}
 			{project.workspace && (
 				<Box marginTop={1} flexShrink={0}>
 					<Text dimColor>
@@ -810,7 +920,7 @@ export function ConfigForm({
 			>
 				<Text wrap="wrap">
 					<Text bold color={ACCENT}>
-						{t(current.label)}
+						{labelOf(current)}
 					</Text>
 					<Text dimColor> · {t(current.help)}</Text>
 				</Text>

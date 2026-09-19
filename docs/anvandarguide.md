@@ -236,14 +236,23 @@ Kolumnen **KÄLLA** visar var varje värde kommer ifrån:
 - `package.json` – ett standardvärde från `package.json`
 - `↑ dev` / `<miljö>` – i en annan miljö än basmiljön: ärvt från basen, eller
   överskrivet här
+- `manifest.json` – ett fält i appens manifest
 - `nyckelring` – en hemlighet är sparad
 - `✗ krävs` – saknas
+
+Sektionen **MANIFEST** redigerar själva `manifest.json`: id, version, namn,
+beskrivning, författare och hjälp-URL. Ett flerspråkigt namn eller en
+flerspråkig beskrivning får en rad per språk. Värden byts ut på plats, så
+kommentarer och formatering i filen finns kvar; att lägga till eller ta bort ett
+fält i ett manifest med kommentarer får göras för hand.
 
 Under formuläret listar **PACKAGE.JSON-SYNK** de gemensamma värden i katalogens
 `.dev_properties.json` som `package.json` ännu inte har, varken här eller i en
 `package.json` längre upp. `y` kopierar in dem i `package.json` så att de kan
 checkas in. Användarspecifika fält kopieras aldrig, inte heller inifrån
-`environments`. Samma sektion och `y` fungerar i **Arbetsyteinställningar**, mot
+`environments`. För en app listas också manifestets `version`, `description`
+och `author` när appens `package.json` skiljer sig; manifestet vinner, och ett
+`author`-objekt i `package.json` lämnas orört. Samma sektion och `y` fungerar i **Arbetsyteinställningar**, mot
 rotens `package.json`. Saknar arbetsytans rot en `package.json` säger sektionen
 det, och `y` skapar en. Kan `package.json` inte läsas eller skrivas visar `svc`
 en varning i stället för att spara.

@@ -93,7 +93,11 @@ test('package.json defaults sit under .dev_properties.json, the root first', t =
 	const twoRoot = path.join(root, 'restapps', 'two');
 	fs.writeFileSync(
 		path.join(twoRoot, 'package.json'),
-		JSON.stringify({addonName: 'Two', svc: {username: 'not@shared.se'}}),
+		JSON.stringify({
+			version: '1.0.0',
+			addonName: 'Two',
+			svc: {username: 'not@shared.se'},
+		}),
 	);
 
 	const two = detectProject(twoRoot)!;

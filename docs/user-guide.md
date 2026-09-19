@@ -235,14 +235,23 @@ The **SOURCE** column shows where each value comes from:
 - `package.json` – a default from `package.json`
 - `↑ dev` / `<env>` – on a non-base environment: inherited from the base, or
   overridden here
+- `manifest.json` – a field of the app's manifest
 - `keychain` – a secret is stored
 - `✗ required` – missing
+
+The **MANIFEST** section edits `manifest.json` itself: id, version, name,
+description, author and help URL. A localized name or description gets one row
+per language. Values are replaced in place, so comments and formatting in the
+file survive; adding or removing a field in a manifest with comments has to be
+done by hand.
 
 Below the form, **PACKAGE.JSON SYNC** lists the shared values in this
 directory's `.dev_properties.json` that `package.json` does not provide yet,
 either here or in a `package.json` further up. `y` copies them into
 `package.json` so they can be committed. User-specific fields are never copied,
-not even from inside `environments`. The same section and `y` work in
+not even from inside `environments`. For an app it also lists the manifest's
+`version`, `description` and `author` when the app's `package.json` differs;
+the manifest wins, and an `author` object in `package.json` is left alone. The same section and `y` work in
 **Workspace settings**, against the root `package.json`. When the workspace root has no `package.json`
 yet, the section says so and `y` creates one. If `package.json` cannot be read
 or written, `svc` shows a warning instead of saving.

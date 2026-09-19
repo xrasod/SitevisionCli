@@ -253,6 +253,26 @@ const sv: Record<string, string> = {
 	'required for signed deploys': 'krävs för signerad driftsättning',
 	'blank = prompt each run': 'tomt = fråga varje gång',
 	SIGNING: 'SIGNERING',
+	MANIFEST: 'MANIFEST',
+	'App id': 'App-id',
+	Version: 'Version',
+	Name: 'Namn',
+	Description: 'Beskrivning',
+	Author: 'Författare',
+	'Help URL': 'Hjälp-URL',
+	'Not saved: {label} is required.': 'Inte sparat: {label} krävs.',
+	'Identifier of the app in Sitevision; it also names the zip. Changing it makes the next deploy a new app instead of an update.':
+		'Appens identifierare i Sitevision; den namnger också zip-filen. Ändras den blir nästa driftsättning en ny app i stället för en uppdatering.',
+	'Version of the app. Id and version together identify an upload, so bump it to deploy a new version instead of overwriting the current one.':
+		'Appens version. Id och version identifierar tillsammans en uppladdning, så höj den för att driftsätta en ny version i stället för att skriva över den nuvarande.',
+	'Name shown when importing and administering the app in the Sitevision editor. A multilingual manifest needs at least English.':
+		'Namnet som visas när appen importeras och administreras i Sitevisions redigerare. Ett flerspråkigt manifest behöver minst engelska.',
+	'Short description shown next to the name in the Sitevision editor.':
+		'Kort beskrivning som visas bredvid namnet i Sitevisions redigerare.',
+	'Who made the app, shown in the Sitevision editor.':
+		'Vem som gjort appen, visas i Sitevisions redigerare.',
+	"Link to the app's documentation, shown in the Sitevision editor.":
+		'Länk till appens dokumentation, visas i Sitevisions redigerare.',
 	ENVIRONMENT: 'MILJÖ',
 	'Environment name': 'Miljönamn',
 	Production: 'Produktion',

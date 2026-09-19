@@ -758,6 +758,8 @@ export function Shell({
 							base: rawProject.devProperties,
 							environment: env,
 							workspaceRoot,
+							manifest: project.manifest,
+							manifestPath: project.paths.manifest,
 						}}
 						active={formActive}
 						width={narrow ? columns : columns - sidebar}

@@ -15,7 +15,7 @@ import {
 	setDeployPassword,
 	getSessionCookie,
 } from './keychain.js';
-import {parseJsonc} from './jsonc.js';
+import {parseJsonc, stripJsonComments} from './jsonc.js';
 import {getLanguage} from './i18n.js';
 
 // Re-export types for backward compatibility
@@ -409,6 +409,59 @@ export function readManifest(
 	return null;
 }
 
+const JSON_STRING = String.raw`"(?:[^"\\]|\\.)*"`;
+const escapeRegExp = (s: string) =>
+	s.replaceAll(/[$()*+.?[\\\]^{|}]/g, String.raw`\$&`);
+
+/**
+ * Set one text field of manifest.json, or one language of a localized field.
+ * An empty value removes the key. A value that is already a string is replaced
+ * in the text, so comments and formatting survive; anything else rewrites the
+ * file, which is refused when that would drop comments.
+ */
+export function writeManifestField(
+	manifestPath: string,
+	key: string,
+	value: string,
+	lang?: string,
+): void {
+	const raw = fs.readFileSync(manifestPath, 'utf-8');
+	const wanted = parseJsonc<Record<string, unknown>>(raw);
+	const holder = lang ? (wanted[key] as Record<string, unknown>) : wanted;
+	const leaf = lang ?? key;
+	// JSON.stringify drops an undefined key.
+	holder[leaf] = value || undefined;
+
+	const prefix = lang
+		? String.raw`"${escapeRegExp(key)}"\s*:\s*\{[^}]*?"${escapeRegExp(lang)}"\s*:\s*`
+		: String.raw`"${escapeRegExp(key)}"\s*:\s*`;
+	const patched = raw.replace(
+		new RegExp(`(${prefix})${JSON_STRING}`),
+		(_, before: string) => before + JSON.stringify(value),
+	);
+	let patchedOk = false;
+	try {
+		patchedOk = JSON.stringify(parseJsonc(patched)) === JSON.stringify(wanted);
+	} catch {}
+
+	if (patchedOk) {
+		fs.writeFileSync(manifestPath, patched);
+		return;
+	}
+
+	if (stripJsonComments(raw) !== raw) {
+		throw new Error(
+			`${manifestPath} has comments; add or remove "${leaf}" by hand`,
+		);
+	}
+
+	const indent = /^(?<indent>[\t ]+)/m.exec(raw)?.groups?.['indent'] ?? '\t';
+	fs.writeFileSync(
+		manifestPath,
+		JSON.stringify(wanted, null, indent) + (raw.endsWith('\n') ? '\n' : ''),
+	);
+}
+
 /**
  * Detect if the current directory is a Sitevision project
  */
@@ -766,6 +819,40 @@ function pendingSync(dir: string): Array<{key: string; value: unknown}> {
 	return pending;
 }
 
+// Manifest fields package.json mirrors under the same name; the manifest wins.
+const MANIFEST_PACKAGE_KEYS = ['version', 'description', 'author'] as const;
+
+/**
+ * Manifest values the app's own package.json does not mirror yet. Nothing when
+ * either file is missing, so syncing never creates a package.json for this.
+ */
+function pendingManifestSync(
+	dir: string,
+): Array<{key: string; from?: string; value: string}> {
+	const packageJson = readPackageJson(dir) as Record<string, unknown> | null;
+	if (!packageJson) return [];
+	let manifest: SitevisionManifest | undefined;
+	try {
+		manifest = readManifest(dir)?.manifest;
+	} catch {}
+
+	if (!manifest) return [];
+	const pending: Array<{key: string; from?: string; value: string}> = [];
+	for (const key of MANIFEST_PACKAGE_KEYS) {
+		const value =
+			key === 'description'
+				? localizedText(manifest.description, 'en')
+				: manifest[key];
+		const current = packageJson[key];
+		// ponytail: an author object ({name, email}) is left alone.
+		if (!value || typeof value !== 'string' || value === current) continue;
+		if (current !== undefined && typeof current !== 'string') continue;
+		pending.push({key, from: current, value});
+	}
+
+	return pending;
+}
+
 /** What an unset field means, so spelling out the default is not a change. */
 export const IMPLICIT_VALUES: Record<string, unknown> = {
 	authMethod: 'basic',
@@ -782,15 +869,22 @@ export function getPackageJsonSyncChanges(
 	dir: string,
 ): PackageJsonSyncChange[] {
 	const current = readPackageDefaults(dir) as Record<string, unknown>;
-	return pendingSync(dir).map(({key, value}) =>
-		current[key] === undefined
-			? {key: packageLabel(key), to: display(value)}
-			: {
-					key: packageLabel(key),
-					from: display(current[key]),
-					to: display(value),
-				},
-	);
+	return [
+		...pendingSync(dir).map(({key, value}) =>
+			current[key] === undefined
+				? {key: packageLabel(key), to: display(value)}
+				: {
+						key: packageLabel(key),
+						from: display(current[key]),
+						to: display(value),
+					},
+		),
+		...pendingManifestSync(dir).map(({key, from, value}) => ({
+			key,
+			...(from !== undefined && {from}),
+			to: value,
+		})),
+	];
 }
 
 export function hasPackageJson(dir: string): boolean {
@@ -798,14 +892,18 @@ export function hasPackageJson(dir: string): boolean {
 }
 
 /**
- * Copy the pending shared values from .dev_properties.json into package.json,
- * creating package.json when the directory has none. Throws if it cannot be
+ * Copy the pending shared values from .dev_properties.json, and the manifest
+ * fields package.json mirrors, into package.json, creating package.json when
+ * the directory has none. Throws if it cannot be
  * read or written.
  */
 export function syncDevPropertiesToPackageJson(dir: string): boolean {
 	const pending = pendingSync(dir);
-	if (pending.length === 0 && hasPackageJson(dir)) return false;
+	const mirrored = pendingManifestSync(dir);
+	if (pending.length + mirrored.length === 0 && hasPackageJson(dir))
+		return false;
 	updatePackageJson(dir, packageJson => {
+		for (const {key, value} of mirrored) packageJson[key] = value;
 		for (const {key, value} of pending) {
 			const topKey = PACKAGE_TOP_KEYS[key];
 			if (topKey) {

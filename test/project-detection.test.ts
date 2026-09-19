@@ -128,6 +128,40 @@ test('package.json sync copies shared values only, and preserves formatting', t 
 	t.false(syncDevPropertiesToPackageJson(dir));
 });
 
+test('package.json sync mirrors manifest version, description and author', t => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-mirror-'));
+	fs.writeFileSync(
+		path.join(dir, 'manifest.json'),
+		JSON.stringify({
+			id: 'one',
+			version: '1.2.0',
+			type: 'WebApp',
+			name: {sv: 'Ett', en: 'One'},
+			description: {sv: 'Beskrivning', en: 'Description'},
+			author: 'Me',
+		}),
+	);
+	// Without a package.json there is nothing to mirror into.
+	t.deepEqual(getPackageJsonSyncChanges(dir), []);
+
+	fs.writeFileSync(
+		path.join(dir, 'package.json'),
+		JSON.stringify({name: 'one', version: '1.0.0', author: {name: 'Team'}}),
+	);
+	t.deepEqual(getPackageJsonSyncChanges(dir), [
+		{key: 'version', from: '1.0.0', to: '1.2.0'},
+		{key: 'description', to: 'Description'},
+	]);
+	t.true(syncDevPropertiesToPackageJson(dir));
+	const parsed = JSON.parse(
+		fs.readFileSync(path.join(dir, 'package.json'), 'utf8'),
+	) as Record<string, unknown>;
+	t.is(parsed['version'], '1.2.0');
+	t.is(parsed['description'], 'Description');
+	t.deepEqual(parsed['author'], {name: 'Team'}, 'author object left alone');
+	t.deepEqual(getPackageJsonSyncChanges(dir), []);
+});
+
 test('sync creates a missing package.json and throws on a broken one', t => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-nopkg-'));
 	fs.mkdirSync(path.join(dir, '.git'));

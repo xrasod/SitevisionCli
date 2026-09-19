@@ -9,8 +9,13 @@ import {
 	getPackageJsonSyncChanges,
 	normalizeDomain,
 	writeDevProperties,
+	writeManifestField,
 } from '../source/utils/project-detection.js';
-import {ConfigForm, saveConfig} from '../source/shell/ConfigForm.js';
+import {
+	ConfigForm,
+	manifestFields,
+	saveConfig,
+} from '../source/shell/ConfigForm.js';
 
 const delay = async (ms: number) =>
 	new Promise(resolve => {
@@ -94,6 +99,7 @@ test('in app mode saveConfig writes the complete file from package.json defaults
 	fs.writeFileSync(
 		path.join(dir, 'package.json'),
 		JSON.stringify({
+			version: '1.0.0',
 			developmentDomain: 'pkg.example',
 			siteName: 'Site',
 			addonName: 'Addon',
@@ -298,4 +304,60 @@ test('a domain typed with a protocol is saved as a bare host', async t => {
 	// The note explains why what was typed is not what was stored.
 	t.true(frame.includes('a domain is a host only'));
 	t.false(frame.includes('✗ host only'));
+});
+
+test('writeManifestField edits in place and keeps comments', t => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-manifest-'));
+	const file = path.join(dir, 'manifest.json');
+	const raw = `{
+  "id": "one",
+  "version": "1.0.0", // bump me
+  "type": "WebApp",
+  "name": { // Multilingual-manifest requires SV 10.1
+    "sv": "Ett",
+    "en": "One"
+  },
+  "description": { "sv": "Beskrivning", "en": "Description" }
+}
+`;
+	fs.writeFileSync(file, raw);
+	writeManifestField(file, 'version', '1.0.1');
+	writeManifestField(file, 'description', 'A "quoted" $1 text', 'en');
+	t.is(
+		fs.readFileSync(file, 'utf8'),
+		raw
+			.replace('"1.0.0"', '"1.0.1"')
+			.replace('"Description"', String.raw`"A \"quoted\" $1 text"`),
+	);
+	// Adding a key would mean rewriting the file and losing the comments.
+	t.throws(() => writeManifestField(file, 'author', 'Me'), {
+		message: /has comments/,
+	});
+});
+
+test('writeManifestField adds and removes keys in a plain manifest', t => {
+	const app = workspaceApp();
+	const file = path.join(app, 'manifest.json');
+	writeManifestField(file, 'author', 'Me');
+	t.is(detectProject(app)!.manifest.author, 'Me');
+	writeManifestField(file, 'author', '');
+	t.false('author' in detectProject(app)!.manifest);
+});
+
+test('manifestFields gives a localized field one row per language', t => {
+	const keys = manifestFields({
+		id: 'one',
+		version: '1.0.0',
+		type: 'WebApp',
+		name: {sv: 'Ett', en: 'One'},
+	}).map(f => f.key);
+	t.deepEqual(keys, [
+		'manifest.id',
+		'manifest.version',
+		'manifest.name.sv',
+		'manifest.name.en',
+		'manifest.description',
+		'manifest.author',
+		'manifest.helpUrl',
+	]);
 });
