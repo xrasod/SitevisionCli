@@ -2,9 +2,9 @@ import https from 'node:https';
 
 /**
  * True if version `a` is strictly greater than `b`, comparing the numeric
- * MAJOR.MINOR.PATCH core. Pre-release suffixes (e.g. `-beta.1`) are ignored.
+ * MAJOR.MINOR.PATCH core. With equal cores, a stable `a` beats a pre-release `b`.
  */
-function isNewer(a: string, b: string): boolean {
+export function isNewer(a: string, b: string): boolean {
 	const core = (v: string) => (v.split('-')[0] ?? '').split('.');
 	const pa = core(a);
 	const pb = core(b);
@@ -14,7 +14,8 @@ function isNewer(a: string, b: string): boolean {
 		if (da > db) return true;
 		if (da < db) return false;
 	}
-	return false;
+
+	return !a.includes('-') && b.includes('-');
 }
 
 /**

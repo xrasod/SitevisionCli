@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {render} from 'ink-testing-library';
+import {resolveEnvironment} from '../source/utils/environments.js';
 import {
 	detectProject,
 	getPackageJsonSyncChanges,
@@ -360,4 +361,93 @@ test('manifestFields gives a localized field one row per language', t => {
 		'manifest.author',
 		'manifest.helpUrl',
 	]);
+});
+
+test('an environment addon name set for one workspace app never reaches another', t => {
+	const one = workspaceApp();
+	const root = path.resolve(one, '..', '..');
+	fs.writeFileSync(
+		path.join(root, '.dev_properties.json'),
+		JSON.stringify({
+			domain: 'site.example',
+			siteName: 'Site',
+			username: 'me@example.com',
+			authMethod: 'basic',
+			environments: {prod: {domain: 'prod.example'}},
+		}),
+	);
+	fs.writeFileSync(
+		path.join(one, 'package.json'),
+		JSON.stringify({addonName: 'One'}),
+	);
+	const two = path.join(root, 'webapps', 'two');
+	fs.mkdirSync(two);
+	fs.writeFileSync(
+		path.join(two, 'manifest.json'),
+		JSON.stringify({id: 'two', name: 'Two', version: '1.0.0', type: 'WebApp'}),
+	);
+	fs.writeFileSync(
+		path.join(two, 'package.json'),
+		JSON.stringify({addonName: 'Two'}),
+	);
+
+	const raw = detectProject(one)!;
+	saveConfig(
+		{
+			root: one,
+			devProperties: resolveEnvironment(raw.devProperties!, 'prod'),
+			base: raw.devProperties,
+			environment: 'prod',
+			workspaceRoot: root,
+		},
+		formValues({domain: 'prod.example', addonName: 'One Prod'}),
+		new Set(['addonName']),
+	);
+
+	const prodAddon = (app: string) =>
+		resolveEnvironment(detectProject(app)!.devProperties!, 'prod').addonName;
+	t.is(prodAddon(one), 'One Prod');
+	t.is(prodAddon(two), 'Two');
+	t.is(readJson(path.join(one, 'package.json'))['addonName'], 'One');
+});
+
+test('switching auth method keeps the oauth2 block and keys the form does not know', t => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-switch-'));
+	fs.mkdirSync(path.join(dir, '.git'));
+	fs.writeFileSync(
+		path.join(dir, 'manifest.json'),
+		JSON.stringify({id: 'x', name: 'X', version: '1.0.0', type: 'WebApp'}),
+	);
+	fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+	const oauth2 = {
+		authorizationEndpoint: 'https://site.example/authorize',
+		tokenEndpoint: 'https://site.example/token',
+		clientId: 'client-1',
+		redirectPort: 9000,
+	};
+	fs.writeFileSync(
+		path.join(dir, '.dev_properties.json'),
+		JSON.stringify({
+			domain: 'site.example',
+			siteName: 'Site',
+			addonName: 'Addon',
+			username: 'me@example.com',
+			authMethod: 'oauth2',
+			oauth2,
+			sessionLoginUrl: 'https://site.example/login',
+			teamNote: 'hand-written',
+		}),
+	);
+
+	saveConfig(
+		detectProject(dir)!,
+		formValues({addonName: 'Addon', authMethod: 'basic'}),
+		new Set(['authMethod']),
+	);
+
+	const saved = readJson(path.join(dir, '.dev_properties.json'));
+	t.is(saved['authMethod'], 'basic');
+	t.deepEqual(saved['oauth2'], oauth2);
+	t.is(saved['sessionLoginUrl'], 'https://site.example/login');
+	t.is(saved['teamNote'], 'hand-written');
 });

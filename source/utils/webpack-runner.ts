@@ -8,8 +8,10 @@
 import path from 'path';
 import fs from 'fs';
 import {createRequire} from 'module';
+import {pathToFileURL} from 'url';
 import type {BuildOptions, BuildResult} from '../types/index.js';
 import {copyChunksToResources} from './zip.js';
+import {findInstalledPackage} from './sitevision-scripts-runner.js';
 
 // =============================================================================
 // TYPES
@@ -135,9 +137,7 @@ export class WebpackRunner {
 		}
 
 		// Load webpack from project's node_modules
-		const webpackPath = path.join(this.projectRoot, 'node_modules', 'webpack');
-
-		if (!fs.existsSync(webpackPath)) {
+		if (!WebpackRunner.isWebpackAvailable(this.projectRoot)) {
 			throw new Error(
 				'webpack not found in project. Make sure webpack is installed: npm install webpack',
 			);
@@ -175,7 +175,8 @@ export class WebpackRunner {
 		}
 
 		try {
-			const configModule = await import(configPath);
+			// A bare Windows path (C:\\...) is not a valid import specifier.
+			const configModule = await import(pathToFileURL(configPath).href);
 			const configFactory: WebpackConfigFactory =
 				configModule.default || configModule;
 
@@ -339,8 +340,7 @@ export class WebpackRunner {
 	 * Check if webpack is available in the project
 	 */
 	static isWebpackAvailable(projectRoot: string): boolean {
-		const webpackPath = path.join(projectRoot, 'node_modules', 'webpack');
-		return fs.existsSync(webpackPath);
+		return findInstalledPackage(projectRoot, 'webpack') !== null;
 	}
 
 	/**

@@ -32,3 +32,15 @@ test('selectSessionCookie reports diagnostics when no JSESSIONID is present', t 
 	// Names the domains it actually saw, to guide the user.
 	t.regex(result.error ?? '', /login\.idp\.com/);
 });
+
+test("selectSessionCookie never captures an unrelated host's JSESSIONID", t => {
+	const result = selectSessionCookie(
+		[
+			{name: 'JSESSIONID', value: 'idp-session', domain: 'idp.other.com'},
+			{name: 'JSESSIONID', value: 'lookalike', domain: 'evil-example.com'},
+		],
+		'example.com',
+	);
+	t.is(result.cookie, undefined);
+	t.regex(result.error ?? '', /idp\.other\.com/);
+});

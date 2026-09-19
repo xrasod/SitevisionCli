@@ -143,6 +143,30 @@ function readDevPropertiesFile(dir: string): Partial<DevProperties> | null {
 }
 
 /**
+ * Merge config layers, later ones winning. `environments` merges per name, so a
+ * layer that overrides one field of an environment keeps the rest of it.
+ */
+export function mergeDevLayers(
+	...layers: Array<Partial<DevProperties> | null | undefined>
+): Partial<DevProperties> {
+	let merged: Partial<DevProperties> = {};
+	for (const layer of layers) {
+		if (!layer) continue;
+		const environments = {...merged.environments};
+		for (const [name, override] of Object.entries(layer.environments ?? {})) {
+			environments[name] = {...environments[name], ...override};
+		}
+
+		merged = {...merged, ...layer};
+		if (Object.keys(environments).length > 0) {
+			merged.environments = environments;
+		}
+	}
+
+	return merged;
+}
+
+/**
  * The dev properties a workspace root defines (its own file merged over any
  * ancestors'), with the deploy password resolved from the keychain like an
  * app's would be. Used to edit shared config from the shell.
@@ -150,10 +174,10 @@ function readDevPropertiesFile(dir: string): Partial<DevProperties> | null {
 export function readWorkspaceDevProperties(
 	root: string,
 ): Partial<DevProperties> {
-	const merged = {
-		...readInheritedDevProperties(root),
-		...readDevPropertiesFile(root),
-	};
+	const merged = mergeDevLayers(
+		readInheritedDevProperties(root),
+		readDevPropertiesFile(root),
+	);
 	if (merged.domain && merged.username && !merged.password) {
 		merged.password =
 			process.env['SITEVISION_DEPLOY_PASSWORD'] ??
@@ -168,22 +192,16 @@ export function readWorkspaceDevProperties(
 export function readAncestorDevProperties(
 	root: string,
 ): Partial<DevProperties> {
-	let merged: Partial<DevProperties> = {};
-	for (const dir of ancestorDirs(root)) {
-		merged = {...merged, ...readDevPropertiesFile(dir)};
-	}
-
-	return merged;
+	return mergeDevLayers(
+		...ancestorDirs(root).map(dir => readDevPropertiesFile(dir)),
+	);
 }
 
 /** Shared defaults from package.json: the workspace root's first, the app's on top. */
 export function readPackageDefaultsChain(root: string): Partial<DevProperties> {
-	let merged: Partial<DevProperties> = {};
-	for (const dir of [...ancestorDirs(root), root]) {
-		merged = {...merged, ...readPackageDefaults(dir)};
-	}
-
-	return merged;
+	return mergeDevLayers(
+		...[...ancestorDirs(root), root].map(dir => readPackageDefaults(dir)),
+	);
 }
 
 /**
@@ -193,10 +211,10 @@ export function readPackageDefaultsChain(root: string): Partial<DevProperties> {
 export function readInheritedDevProperties(
 	root: string,
 ): Partial<DevProperties> {
-	return {
-		...readPackageDefaultsChain(root),
-		...readAncestorDevProperties(root),
-	};
+	return mergeDevLayers(
+		readPackageDefaultsChain(root),
+		readAncestorDevProperties(root),
+	);
 }
 
 // =============================================================================
@@ -214,10 +232,17 @@ interface AppIdConfig {
 /**
  * Get app ID configuration from environment or defaults
  */
-function getAppIdConfig(): AppIdConfig {
+export function getAppIdConfig(): AppIdConfig {
 	return {
-		prefix: process.env['SITEVISION_APP_ID_PREFIX'] || '',
-		suffix: process.env['SITEVISION_APP_ID_SUFFIX'] || '',
+		// svc's own names first, then the ones sitevision-scripts reads.
+		prefix:
+			process.env['SITEVISION_APP_ID_PREFIX'] ||
+			process.env['APP_ID_PREFIX'] ||
+			'',
+		suffix:
+			process.env['SITEVISION_APP_ID_SUFFIX'] ||
+			process.env['APP_ID_SUFFIX'] ||
+			'',
 	};
 }
 
@@ -369,7 +394,7 @@ export function buildImportEndpointUrl(
 export class ManifestParseError extends Error {
 	constructor(manifestPath: string, cause: unknown) {
 		const reason = cause instanceof Error ? cause.message : String(cause);
-		super(`${manifestPath} is not valid JSON: ${reason}`);
+		super(`${manifestPath} ${reason}`);
 		this.name = 'ManifestParseError';
 	}
 }
@@ -394,16 +419,30 @@ export function readManifest(
 
 		// Manifests may contain comments (Sitevision's own docs show them), so
 		// parse as JSONC.
+		let manifest: SitevisionManifest;
 		try {
-			return {
-				manifestPath,
-				manifest: parseJsonc<SitevisionManifest>(
-					fs.readFileSync(manifestPath, 'utf-8'),
-				),
-			};
+			manifest = parseJsonc<SitevisionManifest>(
+				fs.readFileSync(manifestPath, 'utf-8'),
+			);
 		} catch (error) {
-			throw new ManifestParseError(manifestPath, error);
+			throw new ManifestParseError(
+				manifestPath,
+				`is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+			);
 		}
+
+		if (typeof manifest !== 'object' || manifest === null) {
+			throw new ManifestParseError(manifestPath, 'must be a JSON object');
+		}
+
+		// Zip names, endpoints and the build all derive from these.
+		for (const key of ['id', 'version', 'type'] as const) {
+			if (typeof manifest[key] !== 'string' || manifest[key] === '') {
+				throw new ManifestParseError(manifestPath, `is missing "${key}"`);
+			}
+		}
+
+		return {manifestPath, manifest};
 	}
 
 	return null;
@@ -508,7 +547,7 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
 
 		if (hasDevProperties) {
 			try {
-				const parsed = {...inherited, ...own} as DevProperties & {
+				const parsed = mergeDevLayers(inherited, own) as DevProperties & {
 					password?: string;
 				};
 				hasLegacyPassword =
@@ -600,7 +639,7 @@ export function requireProject(cwd?: string): ProjectInfo {
 export function appTypeOf(
 	manifest: SitevisionManifest,
 ): SimpleAppType | undefined {
-	const type = manifest.type.toLowerCase();
+	const type = String(manifest.type ?? '').toLowerCase();
 	if (type.startsWith('web')) return 'web';
 	if (type.startsWith('widget')) return 'widget';
 	if (type.startsWith('rest')) return 'rest';
@@ -680,6 +719,14 @@ export function writeDevProperties(
 					JSON.stringify(inherited[key]) !== JSON.stringify(value)),
 		),
 	);
+
+	// A plaintext password already in the file (sitevision-scripts puts it
+	// there) moves to the keychain; if that fails it stays rather than be lost.
+	const legacy = readDevPropertiesFile(projectRoot)?.password;
+	if (legacy) {
+		const {domain, username} = {...inherited, ...persisted} as DevProperties;
+		if (!setDeployPassword(domain, username, legacy)) own['password'] = legacy;
+	}
 
 	fs.writeFileSync(devPropertiesPath, JSON.stringify(own, null, 2));
 }
@@ -975,11 +1022,16 @@ export function migrateLegacyPassword(project: ProjectInfo): boolean {
 				fs.writeFileSync(file, JSON.stringify(rest, null, 2));
 			}
 		} catch {
-			// Unreadable file: nothing to migrate there.
+			// Unreadable file: nothing to migrate there. Unwritable: checked below.
 		}
 	}
-	project.hasLegacyPassword = false;
-	return true;
+
+	// Moved only if no file still holds it.
+	const left = [project.root, ...ancestorDirs(project.root)].some(
+		dir => readDevPropertiesFile(dir)?.password,
+	);
+	project.hasLegacyPassword = left;
+	return !left;
 }
 
 /**

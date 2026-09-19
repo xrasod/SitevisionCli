@@ -94,7 +94,9 @@ export class ProcessRunner extends EventEmitter {
 
 	run(): Promise<ProcessResult> {
 		return new Promise((resolve, reject) => {
-			this.process = spawnChild(this.command, this.args, {
+			// One pre-joined string: the shell resolves npm.cmd on Windows, and Node
+			// deprecates shell + args (DEP0190). Callers pass trusted args only.
+			this.process = spawnChild([this.command, ...this.args].join(' '), [], {
 				cwd: this.cwd || process.cwd(),
 				env: this.env,
 				shell: true,
@@ -120,7 +122,7 @@ export class ProcessRunner extends EventEmitter {
 			});
 
 			this.process.on('close', code => {
-				const exitCode = code ?? 0;
+				const exitCode = code ?? 1;
 				this.emit('exit', exitCode);
 
 				resolve({

@@ -27,6 +27,19 @@ cd "$(dirname "$0")/.."
 
 BUMP="${1:-patch}"
 
+# A pre-release must never land on "latest".
+if [[ "$BUMP" == pre* ]]; then
+	echo "✗ '${BUMP}' is a pre-release bump — use publish-beta.sh." >&2
+	exit 1
+fi
+
+# Stable releases come from main, so the default branch is what was published.
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+if [[ "$BRANCH" != "main" ]]; then
+	echo "✗ On '${BRANCH}' — stable releases are published from main." >&2
+	exit 1
+fi
+
 # Fail early on a dirty tree so the automatic revert (git checkout) below can't
 # clobber unrelated edits.
 if [[ -n "$(git status --porcelain)" ]]; then
@@ -59,6 +72,13 @@ rollback() {
 	git checkout -- package.json package-lock.json
 }
 trap rollback ERR
+trap 'rollback; exit 130' INT TERM
+
+# The changelog ships in the package and drives the in-app "what's new".
+if ! grep -qx "## ${NEW_VERSION#v}" CHANGELOG.md; then
+	echo "✗ CHANGELOG.md has no '## ${NEW_VERSION#v}' heading — add and commit the entry first." >&2
+	false
+fi
 
 echo "→ Building ${NEW_VERSION}…"
 npm run build
@@ -67,7 +87,8 @@ echo "→ Publishing ${NEW_VERSION} to 'latest'…"
 npm publish
 
 # Published successfully — make the bump permanent in git.
-trap - ERR
+trap - ERR INT TERM
+# If this fails the package is already out: commit the bump by hand, don't re-run.
 git commit -m "release ${NEW_VERSION}" -- package.json package-lock.json
 git tag "${NEW_VERSION}"
 

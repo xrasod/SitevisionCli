@@ -1,3 +1,10 @@
+// Without a terminal nobody can answer: prompts resolve to their "no answer"
+// value (default, nothing, empty password) and the caller reports what is missing.
+const interactive = () => Boolean(process.stdin.isTTY);
+
+// 130 = 128 + SIGINT, so `svc sign && svc deploy` stops at a cancelled prompt.
+const cancelled = () => process.exit(130);
+
 /**
  * Prompt for a yes/no answer. Returns true for y/Y.
  * Pressing Enter (empty answer) returns `defaultYes` (default: false).
@@ -7,6 +14,11 @@ export function promptYesNo(
 	defaultYes = false,
 ): Promise<boolean> {
 	return new Promise(resolve => {
+		if (!interactive()) {
+			resolve(defaultYes);
+			return;
+		}
+
 		process.stdout.write(prompt);
 		const stdin = process.stdin;
 		stdin.setRawMode(true);
@@ -21,7 +33,7 @@ export function promptYesNo(
 			process.stdout.write(`${char}\n`);
 			const charCode = char.charCodeAt(0);
 			if (charCode === 3) {
-				process.exit();
+				cancelled();
 			}
 			// Enter (CR/LF) or empty input → use the default
 			if (char === '' || charCode === 13 || charCode === 10) {
@@ -41,6 +53,11 @@ export function promptYesNo(
  */
 export function promptEnter(prompt: string): Promise<void> {
 	return new Promise(resolve => {
+		if (!interactive()) {
+			resolve();
+			return;
+		}
+
 		process.stdout.write(prompt);
 		const stdin = process.stdin;
 		stdin.setRawMode(true);
@@ -51,7 +68,7 @@ export function promptEnter(prompt: string): Promise<void> {
 			const char = data[0] || '';
 			const charCode = char.charCodeAt(0);
 			if (charCode === 3) {
-				process.exit();
+				cancelled();
 			}
 
 			if (char === '' || charCode === 13 || charCode === 10) {
@@ -72,6 +89,11 @@ export function promptEnter(prompt: string): Promise<void> {
  */
 export function promptPassword(prompt: string): Promise<string> {
 	return new Promise(resolve => {
+		if (!interactive()) {
+			resolve('');
+			return;
+		}
+
 		process.stdout.write(prompt);
 		const stdin = process.stdin;
 		stdin.setRawMode(true);
@@ -80,6 +102,8 @@ export function promptPassword(prompt: string): Promise<string> {
 
 		let password = '';
 		const onData = (data: string) => {
+			// Arrow keys and the like arrive as escape sequences, not as text.
+			if (data.startsWith('\u001B')) return;
 			// Handle each character in the input (supports paste)
 			for (const char of data) {
 				const charCode = char.charCodeAt(0);
@@ -100,7 +124,7 @@ export function promptPassword(prompt: string): Promise<string> {
 					}
 				} else if (charCode === 3) {
 					// Ctrl+C
-					process.exit();
+					cancelled();
 				} else if (charCode >= 32) {
 					// Printable characters
 					password += char;

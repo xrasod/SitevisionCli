@@ -41,18 +41,20 @@ export function selectSessionCookie(
 	all: RawCookie[],
 	siteDomain: string,
 ): CaptureResult {
-	const sessions = all.filter(c => c.name === 'JSESSIONID');
-	if (sessions.length === 0) {
+	// Only a session on the deploy site counts: a Java IdP sets a JSESSIONID of
+	// its own, and that one must never be sent to the site.
+	const chosen = all.find(
+		c => c.name === 'JSESSIONID' && domainRelated(c.domain, siteDomain),
+	);
+	if (!chosen) {
 		const domains = [...new Set(all.map(c => bareDomain(c.domain)))];
 		return {
-			error: `No JSESSIONID among ${all.length} cookies. Domains seen: ${
+			error: `No JSESSIONID for ${siteDomain} among ${all.length} cookies. Domains seen: ${
 				domains.join(', ') || 'none'
 			}. If these are only your IdP, open a Sitevision page in the browser, then press Enter again.`,
 		};
 	}
 
-	const chosen =
-		sessions.find(c => domainRelated(c.domain, siteDomain)) ?? sessions[0]!;
 	const cookies = all.filter(c => domainRelated(c.domain, chosen.domain));
 	return {
 		cookie: cookies.map(c => `${c.name}=${c.value}`).join('; '),

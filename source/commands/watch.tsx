@@ -7,14 +7,6 @@ export const watchCommand: Command = {
 	name: 'watch',
 	description: 'Watch and rebuild (optionally signing) without deploying',
 	requiresProject: true,
-	flags: {
-		signed: {
-			type: 'boolean',
-			description: 'Sign after each build',
-			alias: 's',
-			default: false,
-		},
-	},
 	async execute({project, flags}) {
 		let signingCredentials: SigningCredentials | undefined;
 		if (flags['signed']) {

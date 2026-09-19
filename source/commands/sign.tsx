@@ -1,6 +1,7 @@
 import React from 'react';
-import {render, Box, Text, useInput} from 'ink';
+import {render, Box, Text} from 'ink';
 import {type Command} from './types.js';
+import {useFinish} from './use-finish.js';
 import {StatusIndicator} from '../components/StatusIndicator.js';
 import {signApp} from '../utils/sitevision-api.js';
 import {resolveSigningPassword} from '../utils/signing-password.js';
@@ -13,8 +14,6 @@ interface SignScreenProps {
 	manifest: SitevisionManifest;
 	devProperties: DevProperties;
 	password: string;
-	onBack?: () => void;
-	onRetryCredentials?: () => void;
 }
 
 type SignStatus = 'signing' | 'success' | 'error';
@@ -32,24 +31,13 @@ export function SignScreen({
 	manifest,
 	devProperties,
 	password,
-	onBack,
-	onRetryCredentials,
 }: SignScreenProps) {
 	const [state, setState] = React.useState<SignState>({
 		status: 'signing',
 		message: 'Signing app via developer.sitevision.se...',
 	});
 
-	useInput((input, key) => {
-		if (state.status !== 'signing') {
-			if (onBack && (key.escape || input === 'q')) {
-				onBack();
-			}
-			if (onRetryCredentials && state.status === 'error' && input === 'r') {
-				onRetryCredentials();
-			}
-		}
-	});
+	useFinish(state.status === 'signing' ? undefined : state.status);
 
 	React.useEffect(() => {
 		async function runSign() {
@@ -135,15 +123,6 @@ export function SignScreen({
 					<Text color="red">{state.error}</Text>
 				</Box>
 			)}
-
-			{state.status !== 'signing' && (
-				<Box marginTop={1} flexDirection="column">
-					{state.status === 'error' && onRetryCredentials && (
-						<Text dimColor>Press r to retry with new credentials</Text>
-					)}
-					{onBack && <Text dimColor>Press q or Esc to return to menu</Text>}
-				</Box>
-			)}
 		</Box>
 	);
 }
@@ -162,6 +141,7 @@ export const signCommand: Command = {
 			console.log(
 				'Run \x1b[36msetup-signing\x1b[0m to configure credentials.\n',
 			);
+			process.exitCode = 1;
 			return;
 		}
 
@@ -171,6 +151,7 @@ export const signCommand: Command = {
 
 		if (!password) {
 			console.log('\x1b[31mError: Password is required\x1b[0m');
+			process.exitCode = 1;
 			return;
 		}
 

@@ -3,7 +3,11 @@ import {Box, Text, useInput} from 'ink';
 import Spinner from 'ink-spinner';
 import {t} from '../utils/i18n.js';
 import type {DevProperties} from '../types/index.js';
-import {beginOAuth2Login, openBrowser} from '../utils/oauth2-auth.js';
+import {
+	beginOAuth2Login,
+	oauth2ConfigProblem,
+	openBrowser,
+} from '../utils/oauth2-auth.js';
 import {
 	beginCookieLogin,
 	type CookieLoginSession,
@@ -45,12 +49,14 @@ export function AuthLoginScreen({
 	const cancelOAuthRef = React.useRef<(() => void) | null>(null);
 
 	React.useEffect(() => {
+		// Set by the cleanup: the screen went away while a login was starting.
+		let gone = false;
 		void (async () => {
 			if (method === 'oauth2') {
 				const session = beginOAuth2Login(devProperties);
 				if (!session) {
 					onError(
-						'OAuth2 is not fully configured (authorization/token endpoint or client ID missing).',
+						oauth2ConfigProblem(devProperties) ?? 'Could not start the login.',
 					);
 					return;
 				}
@@ -61,6 +67,7 @@ export function AuthLoginScreen({
 				setPhase('awaiting');
 				const {token, error} = await session.complete();
 				cancelOAuthRef.current = null;
+				if (gone) return;
 				if (token) {
 					onComplete({accessToken: token});
 				} else {
@@ -68,9 +75,14 @@ export function AuthLoginScreen({
 				}
 			} else {
 				const session = await beginCookieLogin(devProperties);
+				if (gone) {
+					void session?.close();
+					return;
+				}
+
 				if (!session) {
 					onError(
-						'Could not open a login browser (is Chrome installed?). Set SITEVISION_SESSION_COOKIE or pass --cookie with a cookie copied from your browser.',
+						'Could not open a login browser (is Chrome installed?). Set SITEVISION_SESSION_COOKIE to a cookie copied from your browser.',
 					);
 					return;
 				}
@@ -84,6 +96,7 @@ export function AuthLoginScreen({
 		// Release resources if the screen unmounts before completing: close the
 		// browser (cookie) and the loopback server (oauth2, frees the port).
 		return () => {
+			gone = true;
 			void cookieRef.current?.close();
 			cookieRef.current = null;
 			cancelOAuthRef.current?.();
@@ -104,15 +117,22 @@ export function AuthLoginScreen({
 			if (!session) return;
 			setPhase('capturing');
 			void (async () => {
-				const result = await session.capture();
-				if (result.cookie) {
-					cookieRef.current = null;
-					await session.close();
-					onComplete({sessionCookie: result.cookie});
-				} else {
-					// Keep the browser open so the user can navigate and retry.
-					setNote(result.error ?? 'No session cookie found.');
-					setPhase('awaiting');
+				try {
+					const result = await session.capture();
+					if (result.cookie) {
+						cookieRef.current = null;
+						await session.close();
+						onComplete({sessionCookie: result.cookie});
+					} else {
+						// Keep the browser open so the user can navigate and retry.
+						setNote(result.error ?? 'No session cookie found.');
+						setPhase('awaiting');
+					}
+				} catch (error) {
+					// The browser window was closed: nothing left to capture from.
+					onError(
+						`Could not read the session from the browser: ${error instanceof Error ? error.message : String(error)}`,
+					);
 				}
 			})();
 		}

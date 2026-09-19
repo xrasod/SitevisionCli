@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, Box, Text, useApp, useInput, useStdout} from 'ink';
+import {render, Box, Text, useApp, useInput, useStdin, useStdout} from 'ink';
 import {type Command} from './types.js';
 import {StatusIndicator} from '../components/StatusIndicator.js';
 import {promptPassword, promptYesNo} from '../utils/password-prompt.js';
@@ -23,12 +23,16 @@ export function DevScreen({project, options}: DevScreenProps) {
 	const task = React.useMemo(() => startDev(project, options), []);
 	const live = tasks.find(t => t.id === task.id) ?? task;
 
-	useInput((input, key) => {
-		if (key.escape || input === 'q') {
-			live.stop();
-			exit();
-		}
-	});
+	const {isRawModeSupported} = useStdin();
+	useInput(
+		(input, key) => {
+			if (key.escape || input === 'q') {
+				live.stop();
+				exit();
+			}
+		},
+		{isActive: isRawModeSupported},
+	);
 
 	const status =
 		live.status === 'running'
@@ -64,6 +68,7 @@ export async function resolveSigningForCli(
 	) {
 		console.log('\n\x1b[33mSigning credentials not configured.\x1b[0m');
 		console.log('Run \x1b[36msetup-signing\x1b[0m to configure credentials.\n');
+		process.exitCode = 1;
 		return undefined;
 	}
 
@@ -71,6 +76,7 @@ export async function resolveSigningForCli(
 	const password = await resolveSigningPassword(signingUsername);
 	if (!password) {
 		console.log('\x1b[31mError: Password is required for signed mode\x1b[0m');
+		process.exitCode = 1;
 		return undefined;
 	}
 
@@ -85,14 +91,6 @@ export const devCommand: Command = {
 	name: 'dev',
 	description: 'Start development server with watch mode',
 	requiresProject: true,
-	flags: {
-		signed: {
-			type: 'boolean',
-			description: 'Use signed mode (sign before each deploy)',
-			alias: 's',
-			default: false,
-		},
-	},
 	async execute({project, flags}) {
 		const dev = project.devProperties;
 		if (!project.hasDevProperties || !dev) {
@@ -100,6 +98,7 @@ export const devCommand: Command = {
 			console.log(
 				'Create a .dev_properties.json file with domain, siteName, addonName, and username, then run setup.\n',
 			);
+			process.exitCode = 1;
 			return;
 		}
 
@@ -113,6 +112,7 @@ export const devCommand: Command = {
 			console.log(
 				'\n\x1b[33mNo token/cookie available. Run `svc` and use Dev from the shell, or set SITEVISION_ACCESS_TOKEN / SITEVISION_SESSION_COOKIE.\x1b[0m\n',
 			);
+			process.exitCode = 1;
 			return;
 		}
 
@@ -124,6 +124,7 @@ export const devCommand: Command = {
 			);
 			if (!pw) {
 				console.log('\x1b[31mError: Password is required\x1b[0m');
+				process.exitCode = 1;
 				return;
 			}
 

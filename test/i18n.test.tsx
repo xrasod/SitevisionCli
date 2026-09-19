@@ -8,6 +8,7 @@ import {t as tr, setLanguage, getLanguage} from '../source/utils/i18n.js';
 import {getSettings} from '../source/utils/config.js';
 import {localizedText} from '../source/utils/project-detection.js';
 import {SettingsScreen} from '../source/shell/Settings.js';
+import {actions} from '../source/shell/actions.js';
 
 const delay = async (ms: number) =>
 	new Promise(resolve => {
@@ -58,3 +59,14 @@ test.serial(
 		setLanguage('en');
 	},
 );
+
+test.serial('every action label has a Swedish translation', t => {
+	setLanguage('sv');
+	// Command names stay as they are typed: svc dev, svc build, ...
+	const commands = new Set(['Dev', 'Watch', 'Build', 'Sign']);
+	const untranslated = [...actions.map(action => action.label), 'Navigator']
+		.filter(label => !commands.has(label))
+		.filter(label => tr(label) === label);
+	setLanguage('en');
+	t.deepEqual(untranslated, []);
+});

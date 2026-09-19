@@ -1,6 +1,45 @@
-import {Entry} from '@napi-rs/keyring';
+import {createRequire} from 'node:module';
+import type {Entry as KeyringEntry} from '@napi-rs/keyring';
 
 const SERVICE = 'sitevision-cli';
+
+type EntryClass = new (service: string, account: string) => KeyringEntry;
+let EntryImpl: EntryClass | null | undefined;
+
+type Store = Pick<
+	KeyringEntry,
+	'getPassword' | 'setPassword' | 'deletePassword'
+>;
+
+// SVC_NO_KEYCHAIN=memory (the test suite): secrets live and die with the process.
+const memory = new Map<string, string>();
+const memoryEntry = (account: string): Store => ({
+	getPassword: () => memory.get(account) ?? null,
+	setPassword(password) {
+		memory.set(account, password);
+	},
+	deletePassword: () => memory.delete(account),
+});
+
+// Loaded on first use so a missing native binding never breaks startup.
+function entry(account: string): Store {
+	const off = process.env['SVC_NO_KEYCHAIN'];
+	if (off === 'memory') return memoryEntry(account);
+	if (off) throw new Error('Keychain disabled');
+	if (EntryImpl === undefined) {
+		try {
+			const keyring = createRequire(import.meta.url)('@napi-rs/keyring') as {
+				Entry: EntryClass;
+			};
+			EntryImpl = keyring.Entry;
+		} catch {
+			EntryImpl = null;
+		}
+	}
+
+	if (!EntryImpl) throw new Error('Keychain unavailable');
+	return new EntryImpl(SERVICE, account);
+}
 
 function deployAccount(domain: string, username: string): string {
 	return `deploy:${username}@${domain}`;
@@ -24,24 +63,37 @@ function sessionCookieAccount(domain: string, username: string): string {
 
 function safeGet(account: string): string | null {
 	try {
-		return new Entry(SERVICE, account).getPassword();
+		return entry(account).getPassword();
 	} catch {
 		return null;
 	}
 }
 
+let saveFailed = () => {
+	console.warn(
+		'\u001B[33mCould not save to the OS keychain; you will be asked again next time.\u001B[0m',
+	);
+};
+
+/** Replace how a failed keychain save is reported (the shell shows a notice). */
+export function onKeychainSaveFailed(listener: () => void): void {
+	saveFailed = listener;
+}
+
 function safeSet(account: string, password: string): boolean {
 	try {
-		new Entry(SERVICE, account).setPassword(password);
+		entry(account).setPassword(password);
 		return true;
 	} catch {
+		// Callers mostly ignore the result, so the user hears it from here.
+		saveFailed();
 		return false;
 	}
 }
 
 function safeDelete(account: string): void {
 	try {
-		new Entry(SERVICE, account).deletePassword();
+		entry(account).deletePassword();
 	} catch {
 		// ignore
 	}

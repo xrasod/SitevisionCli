@@ -1,6 +1,7 @@
 import React from 'react';
-import {render, Box, Text, useInput} from 'ink';
+import {render, Box, Text} from 'ink';
 import {type Command} from './types.js';
+import {useFinish} from './use-finish.js';
 import {StatusIndicator} from '../components/StatusIndicator.js';
 import {WebpackRunner, hasLocalWebpackConfig} from '../utils/webpack-runner.js';
 import {
@@ -29,7 +30,6 @@ interface BuildScreenProps {
 	projectRoot: string;
 	manifest: SitevisionManifest;
 	createZip?: boolean;
-	onBack?: () => void;
 }
 
 type BuildStatus =
@@ -54,22 +54,17 @@ export function BuildScreen({
 	projectRoot,
 	manifest,
 	createZip = true,
-	onBack,
 }: BuildScreenProps) {
 	const [state, setState] = React.useState<BuildState>({
 		status: 'cleaning',
 		message: 'Cleaning build directory...',
 	});
 
-	useInput((input, key) => {
-		if (
-			onBack &&
-			(key.escape || input === 'q') &&
-			(state.status === 'success' || state.status === 'error')
-		) {
-			onBack();
-		}
-	});
+	useFinish(
+		state.status === 'success' || state.status === 'error'
+			? state.status
+			: undefined,
+	);
 
 	const isBundled = isBundledApp(manifest);
 
@@ -307,12 +302,6 @@ export function BuildScreen({
 					<Text color="red">{state.error}</Text>
 				</Box>
 			)}
-
-			{onBack && (state.status === 'success' || state.status === 'error') && (
-				<Box marginTop={1}>
-					<Text dimColor>Press q or Esc to return to menu</Text>
-				</Box>
-			)}
 		</Box>
 	);
 }
@@ -321,15 +310,8 @@ export const buildCommand: Command = {
 	name: 'build',
 	description: 'Build the application for production',
 	requiresProject: true,
-	flags: {
-		'no-zip': {
-			type: 'boolean',
-			description: 'Skip creating the zip archive',
-			default: false,
-		},
-	},
 	async execute({project, flags}) {
-		const createZip = !flags['no-zip'];
+		const createZip = flags['zip'] !== false;
 		const {waitUntilExit} = render(
 			<BuildScreen
 				projectRoot={project.root}

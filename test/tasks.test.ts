@@ -4,6 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import {detectProject} from '../source/utils/project-detection.js';
 import {
+	logLines,
+	serialized,
+	createTask,
+	stoppableTasks,
+	scaffoldRunning,
 	startBuild,
 	startDev,
 	getTasks,
@@ -90,4 +95,82 @@ test('watch ignores events that change no file and rebuilds on a real edit', asy
 	t.true(await until(() => builds() === 2));
 	task.stop();
 	t.is(task.status, 'stopped');
+});
+
+test('log text is split on CRLF too, and loses terminal control codes', t => {
+	t.deepEqual(logLines('one\r\ntwo\r\n'), ['one', 'two']);
+	t.deepEqual(logLines('\u001B[32mgreen\u001B[0m\nplain'), ['green', 'plain']);
+	t.deepEqual(logLines('progress 10%\rprogress 90%'), ['progress 90%']);
+});
+
+const delay = async (ms: number) =>
+	new Promise(resolve => {
+		setTimeout(resolve, ms);
+	});
+
+test('serialized runs one at a time and only keeps the latest waiting value', async t => {
+	const started: number[] = [];
+	const finished: number[] = [];
+	const release: Array<() => void> = [];
+	const deploy = serialized(async (version: number) => {
+		started.push(version);
+		await new Promise<void>(resolve => {
+			release.push(resolve);
+		});
+		finished.push(version);
+	});
+
+	// Three quick saves while the first deploy is still uploading.
+	const first = deploy(1);
+	void deploy(2);
+	void deploy(3);
+	t.deepEqual(started, [1]);
+
+	release[0]!();
+	await delay(10);
+	// 2 was superseded; 3 only starts once 1 is done, so it is what ends up live.
+	t.deepEqual(started, [1, 3]);
+	t.deepEqual(finished, [1]);
+	release[1]!();
+	await first;
+	t.deepEqual(finished, [1, 3]);
+
+	// Idle again: the next save runs straight away.
+	const again = deploy(4);
+	release[2]!();
+	await again;
+	t.deepEqual(finished, [1, 3, 4]);
+});
+
+test('serialized keeps going after a failed run', async t => {
+	const seen: number[] = [];
+	const run = serialized(async (value: number) => {
+		seen.push(value);
+		if (value === 1) throw new Error('boom');
+	});
+	await t.throwsAsync(run(1));
+	await run(2);
+	t.deepEqual(seen, [1, 2]);
+});
+
+test('a running scaffold can be stopped from whichever app is selected', t => {
+	const noop = () => {};
+	const app = {root: '/ws/apps/one', manifest: {id: 'one', name: 'One'}};
+	const other = {root: '/ws/apps/two', manifest: {id: 'two', name: 'Two'}};
+	const scaffold = createTask(
+		'create',
+		{root: '/ws/apps/brand-new', manifest: {id: 'brand-new', name: 'New'}},
+		'create-sitevision-app',
+		noop,
+	);
+	const build = createTask('build', other, 'build', noop);
+
+	t.deepEqual(stoppableTasks(app.root), [scaffold.task]);
+	t.deepEqual(stoppableTasks(other.root), [scaffold.task, build.task]);
+	t.true(scaffoldRunning());
+
+	scaffold.finish('stopped');
+	build.finish('stopped');
+	t.deepEqual(stoppableTasks(other.root), []);
+	t.false(scaffoldRunning());
 });

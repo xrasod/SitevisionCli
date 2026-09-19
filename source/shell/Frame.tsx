@@ -34,33 +34,47 @@ export function TopBar({
 	version,
 	environment,
 }: TopBarProps) {
+	// Narrow terminals squeeze the domain first, then the context, then the
+	// login. `svc` and the environment badge never give way: the badge is the
+	// one thing that says a deploy goes to production.
 	return (
-		<Box paddingX={1} justifyContent="space-between" height={1}>
-			<Box flexShrink={1} marginRight={2}>
-				<Text wrap="truncate">
-					<Text bold color={ACCENT}>
-						svc
-					</Text>
-					{environment && (
-						<Text>
-							{' '}
-							<Text backgroundColor={environment.color} color="black" bold>
-								{` ${environment.name.toUpperCase()} `}
-							</Text>
+		<Box paddingX={1} height={1} overflow="hidden">
+			<Box flexShrink={0}>
+				<Text bold color={ACCENT}>
+					svc
+				</Text>
+				{environment && (
+					<Text>
+						{' '}
+						<Text backgroundColor={environment.color} color="black" bold>
+							{` ${environment.name.toUpperCase()} `}
 						</Text>
-					)}
-					<Text dimColor> {context}</Text>
+					</Text>
+				)}
+			</Box>
+			<Box flexShrink={2} flexGrow={1} marginRight={2} minWidth={0}>
+				<Text dimColor wrap="truncate">
+					{' '}
+					{context}
 				</Text>
 			</Box>
-			<Box flexShrink={0}>
+			{domain && (
+				<Box flexShrink={100} minWidth={0} marginRight={1}>
+					<Text dimColor wrap="truncate">
+						{domain}
+					</Text>
+				</Box>
+			)}
+			<Box flexShrink={1} minWidth={0}>
 				<Text wrap="truncate">
-					{domain && <Text dimColor>{domain} </Text>}
 					<Text color={auth.ready ? 'green' : 'yellow'}>
 						{auth.ready ? '●' : '○'}
 					</Text>
-					<Text> {auth.label} </Text>
-					<Text dimColor>v{version}</Text>
+					<Text> {auth.label}</Text>
 				</Text>
+			</Box>
+			<Box flexShrink={0}>
+				<Text dimColor> v{version}</Text>
 			</Box>
 		</Box>
 	);

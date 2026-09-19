@@ -52,11 +52,20 @@ const cli = meow(
 	  sign          Sign the app for production deployment
 	  deploy        Deploy the application
 	  info          Show project information
+	  setup-signing Store the signing username and certificate
 
 	Options
-	  --minimal     Shell: compact layout for small terminals
-	  --help        Show this help message
-	  --version     Show version number
+	  --signed, -s      dev/watch: sign after each build
+	  --force, -f       deploy: overwrite the existing addon version
+	  --production, -p  deploy: upload the signed zip to production
+	  --activate, -a    deploy: activate after a production deploy
+	  --no-zip          build: skip the zip archive
+	  --minimal         Shell: compact layout for small terminals
+	  --help            Show this help message
+	  --version         Show version number
+
+	Credentials for CI come from the environment: SITEVISION_DEPLOY_PASSWORD,
+	SITEVISION_ACCESS_TOKEN or SITEVISION_SESSION_COOKIE.
 
 	Examples
 	  $ svc                     # Shell: run inside an app, or at the repo root
@@ -72,9 +81,20 @@ const cli = meow(
 `,
 	{
 		importMeta: import.meta,
+		allowUnknownFlags: false,
 		flags: {
 			signed: {
 				type: 'boolean',
+				shortFlag: 's',
+				default: false,
+			},
+			zip: {
+				type: 'boolean',
+				default: true,
+			},
+			activate: {
+				type: 'boolean',
+				shortFlag: 'a',
 				default: false,
 			},
 			force: {
@@ -86,12 +106,6 @@ const cli = meow(
 				type: 'boolean',
 				shortFlag: 'p',
 				default: false,
-			},
-			token: {
-				type: 'string',
-			},
-			cookie: {
-				type: 'string',
 			},
 			minimal: {
 				type: 'boolean',
@@ -195,6 +209,16 @@ async function runShell(
 	process.stdout.write('\x1b[?1049h\x1b[H');
 	// Also leave the alternate screen when a signal exits past the finally.
 	process.once('exit', () => process.stdout.write('\x1b[?1049l'));
+	// A crash outside React would print into the alternate screen and vanish
+	// with it: leave it first, then report.
+	const crash = (error: unknown) => {
+		process.stdout.write('\x1b[?1049l');
+		console.error('svc crashed:', error);
+		shutdown(1);
+	};
+
+	process.once('uncaughtException', crash);
+	process.once('unhandledRejection', crash);
 	try {
 		const art =
 			process.stdin.isTTY && settings.introAnimation && !cli.flags.minimal
@@ -272,7 +296,10 @@ async function main() {
 		setLastSeenVersion(pkg.version);
 
 		// Check npm for a newer published release.
-		const latestVersion = await checkForUpdate(pkg.name, pkg.version);
+		const latestVersion =
+			process.stdout.isTTY && !process.env['CI']
+				? await checkForUpdate(pkg.name, pkg.version)
+				: null;
 		if (latestVersion) {
 			console.log(
 				`\x1b[33m  ↑ update available: ${pkg.version} → ${latestVersion}  (run: npm i -g ${pkg.name})\x1b[0m`,
@@ -339,25 +366,6 @@ async function main() {
 			);
 		}
 	})();
-
-	// --token / --cookie override the resolved bearer token / session cookie for
-	// this run (manual / CI path, alongside SITEVISION_ACCESS_TOKEN and
-	// SITEVISION_SESSION_COOKIE).
-	if (cli.flags.token || cli.flags.cookie) {
-		if (project.devProperties) {
-			if (cli.flags.token) {
-				project.devProperties.accessToken = cli.flags.token;
-			}
-
-			if (cli.flags.cookie) {
-				project.devProperties.sessionCookie = cli.flags.cookie;
-			}
-		} else {
-			console.log(
-				'\x1b[33m--token/--cookie needs a .dev_properties.json (domain, site, addon) to deploy against.\x1b[0m',
-			);
-		}
-	}
 
 	// Get the command
 	const command = getCommand(commandName);

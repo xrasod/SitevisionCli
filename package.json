@@ -1,7 +1,22 @@
 {
 	"name": "sitevision-cli",
 	"version": "1.0.0-beta.32",
+	"description": "Build, sign and deploy Sitevision apps from the terminal",
 	"license": "MIT",
+	"author": "Rasmus Söderström",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/xrasod/SitevisionCli.git"
+	},
+	"homepage": "https://github.com/xrasod/SitevisionCli#readme",
+	"bugs": "https://github.com/xrasod/SitevisionCli/issues",
+	"keywords": [
+		"sitevision",
+		"cli",
+		"webapp",
+		"restapp",
+		"deploy"
+	],
 	"bin": {
 		"svc": "dist/cli.js"
 	},
@@ -10,9 +25,10 @@
 		"node": ">=22"
 	},
 	"scripts": {
-		"build": "tsc",
+		"build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc",
 		"dev": "tsc --watch",
 		"test": "prettier --check . && xo && ava",
+		"prepublishOnly": "npm test && npm run build",
 		"release": "./scripts/publish.sh",
 		"release:beta": "./scripts/publish-beta.sh"
 	},
@@ -52,7 +68,11 @@
 		],
 		"nodeArguments": [
 			"--import=tsx"
-		]
+		],
+		"environmentVariables": {
+			"SVC_NO_KEYCHAIN": "memory",
+			"XDG_CONFIG_HOME": "test/.xdg"
+		}
 	},
 	"prettier": "@vdemedes/prettier-config"
 }

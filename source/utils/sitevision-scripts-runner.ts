@@ -19,22 +19,36 @@
 import path from 'path';
 import fs from 'fs';
 import {killChild, spawnChild} from './process-runner.js';
+import {getAppIdConfig, getFullAppId} from './project-detection.js';
 
 /**
- * Resolve the path to the sitevision-scripts CLI entry inside a project.
+ * Directory of an installed package, looked up the way Node does: the project's
+ * node_modules, then each parent's, since workspaces hoist to the repo root.
+ */
+export function findInstalledPackage(
+	projectRoot: string,
+	name: string,
+): string | null {
+	let dir = path.resolve(projectRoot);
+	for (;;) {
+		const candidate = path.join(dir, 'node_modules', name);
+		if (fs.existsSync(candidate)) return candidate;
+		const parent = path.dirname(dir);
+		if (parent === dir) return null;
+		dir = parent;
+	}
+}
+
+const PACKAGE = '@sitevision/sitevision-scripts';
+
+/**
+ * Resolve the path to the sitevision-scripts CLI entry for a project.
  * Returns null if the package is not installed.
  */
 export function getSitevisionScriptsBin(projectRoot: string): string | null {
-	const bin = path.join(
-		projectRoot,
-		'node_modules',
-		'@sitevision',
-		'sitevision-scripts',
-		'bin',
-		'sitevision-scripts.js',
-	);
-
-	return fs.existsSync(bin) ? bin : null;
+	const dir = findInstalledPackage(projectRoot, PACKAGE);
+	const bin = dir && path.join(dir, 'bin', 'sitevision-scripts.js');
+	return bin && fs.existsSync(bin) ? bin : null;
 }
 
 /**
@@ -47,21 +61,15 @@ export function hasSitevisionScripts(projectRoot: string): boolean {
 /**
  * Path of the zip that `sitevision-scripts build` writes.
  *
- * IMPORTANT: this mirrors sitevision-scripts' own app-id convention
- * (`APP_ID_PREFIX`/`APP_ID_SUFFIX` env vars + `dist/<appId>.zip`), which differs
- * from the CLI's own `getZipPath` env vars (`SITEVISION_APP_ID_*`). For delegated
- * builds the package is the one writing the file, so its convention is the source
- * of truth — using `getZipPath` here would look for the wrong filename whenever a
- * prefix/suffix is configured.
+ * sitevision-scripts names it from `APP_ID_PREFIX`/`APP_ID_SUFFIX`; the build is
+ * started with those set from `getAppIdConfig`, so this is the same file that
+ * sign and deploy look for.
  */
 export function getDelegatedZipPath(
 	projectRoot: string,
 	manifestId: string,
 ): string {
-	const prefix = process.env['APP_ID_PREFIX'] ?? '';
-	const suffix = process.env['APP_ID_SUFFIX'] ?? '';
-	const appId = `${prefix}${manifestId}${suffix}`;
-	return path.join(projectRoot, 'dist', `${appId}.zip`);
+	return path.join(projectRoot, 'dist', `${getFullAppId(manifestId)}.zip`);
 }
 
 // =============================================================================
@@ -105,10 +113,7 @@ export function getSitevisionScriptsVersion(
 	projectRoot: string,
 ): string | null {
 	const packageJsonPath = path.join(
-		projectRoot,
-		'node_modules',
-		'@sitevision',
-		'sitevision-scripts',
+		findInstalledPackage(projectRoot, PACKAGE) ?? projectRoot,
 		'package.json',
 	);
 
@@ -235,8 +240,10 @@ export async function runSitevisionScriptsBuild(
 	return new Promise(resolve => {
 		let output = '';
 
+		const {prefix, suffix} = getAppIdConfig();
 		const child = spawnChild(process.execPath, [bin, 'build'], {
 			cwd: projectRoot,
+			env: {...process.env, APP_ID_PREFIX: prefix, APP_ID_SUFFIX: suffix},
 			stdio: ['ignore', 'pipe', 'pipe'],
 		});
 		const abort = () => {

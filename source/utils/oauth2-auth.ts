@@ -43,17 +43,42 @@ export function createPkcePair(): {verifier: string; challenge: string} {
 	return {verifier, challenge};
 }
 
-function hasOAuth2Config(config?: OAuth2Config): config is OAuth2Config {
-	return Boolean(
-		config?.authorizationEndpoint && config.tokenEndpoint && config.clientId,
-	);
+/**
+ * Why this project's OAuth2 settings cannot be used, if they cannot. The
+ * endpoints may come from a committed package.json, and the keychain secrets
+ * are stored per site, so they only ever go to that site, over TLS.
+ */
+export function oauth2ConfigProblem(dev: DevProperties): string | undefined {
+	const config = dev.oauth2;
+	if (
+		!config?.authorizationEndpoint ||
+		!config.tokenEndpoint ||
+		!config.clientId
+	) {
+		return 'OAuth2 is not fully configured (authorization/token endpoint or client ID missing).';
+	}
+
+	const schemes = dev.useHTTPForDevDeploy ? ['https:', 'http:'] : ['https:'];
+	for (const endpoint of [config.authorizationEndpoint, config.tokenEndpoint]) {
+		const url = URL.canParse(endpoint) ? new URL(endpoint) : undefined;
+		if (!url || !schemes.includes(url.protocol)) {
+			return `OAuth2 endpoint ${endpoint} must be an https URL.`;
+		}
+	}
+
+	const tokenHost = new URL(config.tokenEndpoint).host.toLowerCase();
+	if (tokenHost !== dev.domain.toLowerCase()) {
+		return `OAuth2 token endpoint is on ${tokenHost}, not on ${dev.domain}. Stored secrets are only sent to the site they belong to.`;
+	}
+
+	return undefined;
 }
 
 async function postToken(
 	config: OAuth2Config,
 	params: Record<string, string>,
 	secret?: string,
-): Promise<{tokens?: TokenResponse; error?: string}> {
+): Promise<{tokens?: TokenResponse; error?: string; status?: number}> {
 	const body = Buffer.from(new URLSearchParams(params).toString());
 	try {
 		const response = await makeRequest(config.tokenEndpoint, {
@@ -68,6 +93,7 @@ async function postToken(
 		});
 		if (response.statusCode !== 200) {
 			return {
+				status: response.statusCode,
 				error: `Token endpoint returned ${response.statusCode}: ${summarizeErrorBody(
 					response.body,
 					response.headers,
@@ -263,7 +289,7 @@ export function beginOAuth2Login(dev: DevProperties): {
 	cancel: () => void;
 } | null {
 	const config = dev.oauth2;
-	if (!hasOAuth2Config(config)) return null;
+	if (!config || oauth2ConfigProblem(dev)) return null;
 
 	const {domain} = dev;
 	const secret = getOAuth2ClientSecret(domain, config.clientId) ?? undefined;
@@ -325,7 +351,7 @@ export async function resolveOAuth2AccessToken(
 	dev: DevProperties,
 ): Promise<string | null> {
 	const config = dev.oauth2;
-	if (!hasOAuth2Config(config)) return null;
+	if (!config || oauth2ConfigProblem(dev)) return null;
 
 	const {domain} = dev;
 	const secret = getOAuth2ClientSecret(domain, config.clientId) ?? undefined;
@@ -333,7 +359,7 @@ export async function resolveOAuth2AccessToken(
 	const storedRefresh = getOAuth2RefreshToken(domain, config.clientId);
 	if (!storedRefresh) return null;
 
-	const {tokens} = await postToken(
+	const {tokens, status} = await postToken(
 		config,
 		{
 			grant_type: 'refresh_token',
@@ -349,7 +375,11 @@ export async function resolveOAuth2AccessToken(
 		return tokens.access_token;
 	}
 
-	// Stale/expired refresh token — drop it so the next run logs in fresh.
-	deleteOAuth2RefreshToken(domain, config.clientId);
+	// Only a rejection (invalid_grant) means the token is dead. Offline, a
+	// timeout or a 5xx says nothing about it, so it stays.
+	if (status === 400 || status === 401) {
+		deleteOAuth2RefreshToken(domain, config.clientId);
+	}
+
 	return null;
 }

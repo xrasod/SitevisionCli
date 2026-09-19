@@ -238,6 +238,8 @@ export interface SigningResponse {
 export interface DeployResponse {
 	success: boolean;
 	executableId?: string;
+	// Production deploys that asked for activation: whether it happened.
+	activated?: boolean;
 	message?: string;
 	error?: string;
 	// Set when the failure looks like a stale/rejected session or token, so the

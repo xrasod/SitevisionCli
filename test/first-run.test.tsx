@@ -4,11 +4,11 @@ import path from 'node:path';
 import {createElement} from 'react';
 import test from 'ava';
 import {render} from 'ink-testing-library';
-import {WelcomeScreen} from './source/components/WelcomeScreen.js';
-import {AnimatedLogo} from './source/components/AnimatedLogo.js';
-import {AUTHOR} from './source/utils/branding.js';
-import {isFirstRun, markFirstRunComplete} from './source/utils/config.js';
-import type {ProjectInfo} from './source/types/index.js';
+import {WelcomeScreen} from '../source/components/WelcomeScreen.js';
+import {AnimatedLogo} from '../source/components/AnimatedLogo.js';
+import {AUTHOR} from '../source/utils/branding.js';
+import {isFirstRun, markFirstRunComplete} from '../source/utils/config.js';
+import type {ProjectInfo} from '../source/types/index.js';
 
 test('first-run flag round-trips through the global config', t => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-test-'));

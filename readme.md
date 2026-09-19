@@ -81,8 +81,8 @@ svc watch [--signed]                  # build on change, no deploy
 svc info                              # project information
 ```
 
-Direct commands use the base environment. `--token` and `--cookie` pass an
-OAuth2 token or session cookie for one run.
+Direct commands use the base environment. `SITEVISION_ACCESS_TOKEN` and
+`SITEVISION_SESSION_COOKIE` pass an OAuth2 token or session cookie for one run.
 
 ## Configuration
 

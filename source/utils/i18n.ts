@@ -167,8 +167,8 @@ const sv: Record<string, string> = {
 	'e.g. test or prod, overriding domain and auth':
 		't.ex. test eller prod, med egen domän och auth',
 	'Environment name (e.g. test, prod)': 'Miljönamn (t.ex. test, prod)',
-	'Deploy the signed {id} to {env} and activate it?':
-		'Driftsätt signerade {id} till {env} och aktivera?',
+	'Deploy the signed {id} to {env} (addon {addon}) and activate it?':
+		'Driftsätt signerade {id} till {env} (addon {addon}) och aktivera?',
 	'Dev never deploys to a production environment ({env}). Switch with v.':
 		'Dev driftsätter aldrig till en produktionsmiljö ({env}). Byt med v.',
 	'switched to {env}': 'bytte till {env}',
@@ -180,6 +180,13 @@ const sv: Record<string, string> = {
 	'Activate a remote version': 'Aktivera en fjärrversion',
 	'Stop running task': 'Stoppa pågående uppgift',
 	'Edit config': 'Redigera konfig',
+	'New app': 'Ny app',
+	'A new app is still being created. Stop it and quit?':
+		'En ny app håller på att skapas. Avbryta den och avsluta?',
+	'An app is already being created.': 'En app håller redan på att skapas.',
+	'Could not save to the OS keychain; you will be asked again next time.':
+		'Kunde inte spara i nyckelringen; du får frågan igen nästa gång.',
+	Navigator: 'Navigering',
 	'Sync package.json': 'Synka package.json',
 	'Migrate password to OS keychain': 'Flytta lösenord till nyckelringen',
 	'Install dependencies': 'Installera beroenden',

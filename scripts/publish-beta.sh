@@ -27,6 +27,12 @@ cd "$(dirname "$0")/.."
 
 BUMP="${1:-prerelease}"
 
+# A stable bump here would publish a stable version under the "beta" tag.
+if [[ "$BUMP" != pre* ]]; then
+	echo "✗ '${BUMP}' is not a pre-release bump — use publish.sh for stable releases." >&2
+	exit 1
+fi
+
 # Fail early on a dirty tree so the automatic revert (git checkout) below can't
 # clobber unrelated edits.
 if [[ -n "$(git status --porcelain)" ]]; then
@@ -51,6 +57,13 @@ rollback() {
 	git checkout -- package.json package-lock.json
 }
 trap rollback ERR
+trap 'rollback; exit 130' INT TERM
+
+# The changelog ships in the package and drives the in-app "what's new".
+if ! grep -qx "## ${NEW_VERSION#v}" CHANGELOG.md; then
+	echo "✗ CHANGELOG.md has no '## ${NEW_VERSION#v}' heading — add and commit the entry first." >&2
+	false
+fi
 
 echo "→ Building ${NEW_VERSION}…"
 npm run build
@@ -59,7 +72,8 @@ echo "→ Publishing ${NEW_VERSION} under the 'beta' tag…"
 npm publish --tag beta
 
 # Published successfully — make the bump permanent in git.
-trap - ERR
+trap - ERR INT TERM
+# If this fails the package is already out: commit the bump by hand, don't re-run.
 git commit -m "beta release ${NEW_VERSION}" -- package.json package-lock.json
 git tag "${NEW_VERSION}"
 

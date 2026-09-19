@@ -11,6 +11,8 @@ import {
 	checkSitevisionScriptsCompatibility,
 	SUPPORTED_SITEVISION_SCRIPTS_RANGE,
 } from '../source/utils/sitevision-scripts-runner.js';
+import {getZipPath} from '../source/utils/project-detection.js';
+import type {SitevisionManifest} from '../source/types/index.js';
 
 const BIN_REL = path.join(
 	'node_modules',
@@ -119,7 +121,7 @@ test('getDelegatedZipPath matches sitevision-scripts app-id convention', t => {
 			path.join('/proj', 'dist', 'my-app.zip'),
 		);
 
-		// Honors the package's own env vars (NOT the CLI's SITEVISION_* ones).
+		// Honors the package's own env vars.
 		process.env['APP_ID_PREFIX'] = 'acme-';
 		process.env['APP_ID_SUFFIX'] = '-v2';
 		t.is(
@@ -215,4 +217,53 @@ test('runSitevisionScriptsBuild reports failure on a non-zero exit', async t => 
 	t.false(result.success);
 	t.regex(result.error ?? '', /exited with code 2/);
 	t.regex(result.output, /boom/);
+});
+
+test.serial(
+	'build, sign and deploy agree on the zip whichever prefix variable is set',
+	async t => {
+		const names = [
+			'APP_ID_PREFIX',
+			'APP_ID_SUFFIX',
+			'SITEVISION_APP_ID_PREFIX',
+			'SITEVISION_APP_ID_SUFFIX',
+		];
+		const previous = names.map(name => process.env[name]);
+		const manifest = {id: 'my-app', version: '1.0.0', type: 'WebApp'};
+		// The fake build prints the app id sitevision-scripts would use.
+		const dir = makeProject(
+			'console.log("id=" + (process.env.APP_ID_PREFIX ?? "") + "my-app" + (process.env.APP_ID_SUFFIX ?? ""));',
+		);
+		try {
+			for (const [prefix, suffix] of [
+				['APP_ID_PREFIX', 'APP_ID_SUFFIX'],
+				['SITEVISION_APP_ID_PREFIX', 'SITEVISION_APP_ID_SUFFIX'],
+			] as const) {
+				for (const name of names) Reflect.deleteProperty(process.env, name);
+				process.env[prefix] = 'acme-';
+				process.env[suffix] = '-v2';
+				const expected = path.join(dir, 'dist', 'acme-my-app-v2.zip');
+				t.is(getDelegatedZipPath(dir, 'my-app'), expected);
+				t.is(getZipPath(dir, manifest as SitevisionManifest), expected);
+				// eslint-disable-next-line no-await-in-loop
+				const result = await runSitevisionScriptsBuild(dir);
+				t.regex(result.output, /id=acme-my-app-v2/);
+			}
+		} finally {
+			for (const [index, name] of names.entries()) {
+				if (previous[index] === undefined) {
+					Reflect.deleteProperty(process.env, name);
+				} else process.env[name] = previous[index];
+			}
+		}
+	},
+);
+
+test('sitevision-scripts hoisted to the workspace root is found', t => {
+	const root = makeProject('');
+	const app = path.join(root, 'apps', 'one');
+	fs.mkdirSync(app, {recursive: true});
+	fs.writeFileSync(path.join(app, 'package.json'), '{}');
+	t.true(hasSitevisionScripts(app));
+	t.is(getSitevisionScriptsBin(app), path.join(root, BIN_REL));
 });

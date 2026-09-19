@@ -204,3 +204,22 @@ test('a domain read from a file loses any scheme or path', t => {
 	);
 	t.is(detectProject(root)?.devProperties?.domain, 'site.example');
 });
+
+test('a manifest saved with a UTF-8 BOM is accepted', t => {
+	const dir = projectDir('﻿{"id": "x", "version": "1.0.0", "type": "WebApp"}');
+	t.is(detectProject(dir)?.manifest.id, 'x');
+});
+
+test('a manifest missing id, version or type is rejected by name', t => {
+	for (const [manifest, missing] of [
+		['{"version": "1.0.0", "type": "WebApp"}', 'id'],
+		['{"id": "x", "type": "WebApp"}', 'version'],
+		['{"id": "x", "version": "1.0.0"}', 'type'],
+		['null', 'object'],
+	] as const) {
+		const error = t.throws(() => detectProject(projectDir(manifest)), {
+			instanceOf: ManifestParseError,
+		});
+		t.true(error.message.includes(missing), error.message);
+	}
+});

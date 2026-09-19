@@ -144,7 +144,7 @@ async function buildZipBuffer(entries: ZipEntry[]): Promise<Buffer> {
 		const localHeader = Buffer.alloc(30);
 		localHeader.writeUInt32LE(0x04034b50, 0);
 		localHeader.writeUInt16LE(20, 4); // version needed to extract
-		localHeader.writeUInt16LE(0, 6); // general purpose flag
+		localHeader.writeUInt16LE(0x08_00, 6); // general purpose flag: UTF-8 names
 		localHeader.writeUInt16LE(method, 8);
 		localHeader.writeUInt16LE(dosTime, 10);
 		localHeader.writeUInt16LE(dosDate, 12);
@@ -162,7 +162,7 @@ async function buildZipBuffer(entries: ZipEntry[]): Promise<Buffer> {
 		centralHeader.writeUInt32LE(0x02014b50, 0);
 		centralHeader.writeUInt16LE(20, 4); // version made by
 		centralHeader.writeUInt16LE(20, 6); // version needed
-		centralHeader.writeUInt16LE(0, 8); // general purpose flag
+		centralHeader.writeUInt16LE(0x08_00, 8); // general purpose flag: UTF-8 names
 		centralHeader.writeUInt16LE(method, 10);
 		centralHeader.writeUInt16LE(dosTime, 12);
 		centralHeader.writeUInt16LE(dosDate, 14);
@@ -283,6 +283,12 @@ export async function createBuildZip(
 		throw new Error(`Build directory not found: ${buildDir}. Run build first.`);
 	}
 
+	if (!fs.existsSync(path.join(buildDir, 'manifest.json'))) {
+		throw new Error(
+			`${buildDir} has no manifest.json, so the zip would not be an app. Keep manifest.json in src/ or static/.`,
+		);
+	}
+
 	return createZip(buildDir, zipPath);
 }
 
@@ -352,18 +358,16 @@ export function copyStaticToBuild(projectRoot: string): void {
 export function copySrcToBuild(projectRoot: string): void {
 	const srcDir = path.join(projectRoot, 'src');
 	const buildDir = path.join(projectRoot, 'build');
+	fs.mkdirSync(buildDir, {recursive: true});
 
-	if (!fs.existsSync(srcDir)) {
-		return;
+	// A manifest kept at the project root is detected, so it has to ship too;
+	// one in src/ or static/ is copied over it.
+	const rootManifest = path.join(projectRoot, 'manifest.json');
+	if (fs.existsSync(rootManifest)) {
+		fs.copyFileSync(rootManifest, path.join(buildDir, 'manifest.json'));
 	}
 
-	// Ensure build directory exists
-	if (!fs.existsSync(buildDir)) {
-		fs.mkdirSync(buildDir, {recursive: true});
-	}
-
-	// Copy src directory contents to build
-	copyDirRecursive(srcDir, buildDir);
+	if (fs.existsSync(srcDir)) copyDirRecursive(srcDir, buildDir);
 }
 
 /**

@@ -39,6 +39,7 @@ import {
 	runningTasks,
 	startActivate,
 	getTasks,
+	scaffoldRunning,
 	type Task,
 } from '../utils/tasks.js';
 import {PasswordInput} from '../components/PasswordInput.js';
@@ -80,6 +81,7 @@ import {
 	resolveEnvironment,
 } from '../utils/environments.js';
 import {t} from '../utils/i18n.js';
+import {onKeychainSaveFailed} from '../utils/keychain.js';
 import {
 	actionForKey,
 	actions,
@@ -91,7 +93,7 @@ import {
 	type Tab,
 } from './actions.js';
 
-type Overlay =
+export type Overlay =
 	| {kind: 'palette'}
 	| {
 			kind: 'password';
@@ -180,9 +182,16 @@ export function Shell({
 	const [focus, setFocus] = useState<'nav' | 'content'>(
 		workspaceRoot && !onboard ? 'nav' : 'content',
 	);
-	const [overlay, setOverlay] = useState<Overlay | null>(
-		updatedFrom ? {kind: 'changelog', since: updatedFrom} : null,
+	const [overlays, setOverlays] = useState<Overlay[]>(
+		updatedFrom ? [{kind: 'changelog', since: updatedFrom}] : [],
 	);
+	const setOverlay = useCallback((next: Overlay | null) => {
+		setOverlays(stack => overlayStack(stack, next));
+	}, []);
+	const [editing, setEditing] = useState(false);
+	// A confirm that turns up mid-edit stays hidden until the field is done.
+	const top = overlays.at(-1) ?? null;
+	const overlay = top?.kind === 'confirm' && editing ? null : top;
 	const [filter, setFilter] = useState('');
 	const [versions, setVersions] = useState<Record<string, VersionsState>>({});
 	const [versionRow, setVersionRow] = useState(0);
@@ -276,10 +285,38 @@ export function Shell({
 		[],
 	);
 
+	// "Save to keychain" that did not save would otherwise just ask again.
+	useEffect(() => {
+		onKeychainSaveFailed(() => {
+			notify(
+				t(
+					'Could not save to the OS keychain; you will be asked again next time.',
+				),
+				'warn',
+			);
+		});
+	}, [notify]);
+
 	const quit = useCallback(() => {
-		for (const task of getTasks()) if (task.status === 'running') task.stop();
-		exit();
-	}, [exit]);
+		const leave = () => {
+			for (const task of getTasks()) if (task.status === 'running') task.stop();
+			exit();
+		};
+
+		// Between the scaffolder's questions nothing is open, so q is live:
+		// quitting then would leave a half-made app behind without a word.
+		if (scaffoldRunning()) {
+			setOverlay({
+				kind: 'confirm',
+				message: t('A new app is still being created. Stop it and quit?'),
+				resolve(yes) {
+					if (yes) leave();
+				},
+			});
+		} else {
+			leave();
+		}
+	}, [exit, setOverlay]);
 
 	const context = useMemo<ActionContext>(
 		() => ({
@@ -337,6 +374,11 @@ export function Shell({
 				notify(t('environment {env} added', {env: clean}), 'ok');
 			},
 			async createApp() {
+				if (scaffoldRunning()) {
+					notify(t('An app is already being created.'), 'warn');
+					return;
+				}
+
 				const promptText = async (
 					label: string,
 					initial?: string,
@@ -591,7 +633,7 @@ export function Shell({
 				notify(error instanceof Error ? error.message : String(error), 'error');
 			});
 		},
-		[context, project, notify],
+		[context, project, notify, setOverlay],
 	);
 
 	const fetchVersions = useCallback(
@@ -646,18 +688,25 @@ export function Shell({
 			task.error ? 'error' : 'ok',
 		);
 		await fetchVersions();
-	}, [versions, project, versionRow, context, notify, fetchVersions]);
+	}, [
+		versions,
+		versionsKey,
+		project,
+		versionRow,
+		context,
+		notify,
+		fetchVersions,
+	]);
 
 	// A popover owns the keyboard; the form stays mounted underneath it.
 	const formActive =
 		(tab === 'config' || settings) && focus === 'content' && !overlay;
-	const [editing, setEditing] = useState(false);
 	const pickAddon = useCallback(
 		async () =>
 			new Promise<string | null>(resolve => {
 				setOverlay({kind: 'picker', resolve});
 			}),
-		[],
+		[setOverlay],
 	);
 	// A freshly created app: once it is the selected project, offer its addon.
 	useEffect(() => {
@@ -715,6 +764,9 @@ export function Shell({
 				return;
 			}
 
+			// Ctrl+D is not d: only plain keys are shortcuts.
+			if (key.ctrl || key.meta) return;
+
 			if (input === '/') {
 				setOverlay({kind: 'palette'});
 				return;
@@ -763,6 +815,26 @@ export function Shell({
 				return;
 			}
 
+			if (settings && focus === 'content') {
+				// Settings pane: the form owns everything but q, y and Tab/Esc above.
+				if (input === 'q') quit();
+				else if (input === 'y') {
+					try {
+						if (syncDevPropertiesToPackageJson(workspaceRoot!)) {
+							reload();
+							notify(t('package.json updated'), 'ok');
+						}
+					} catch (error) {
+						notify(
+							error instanceof Error ? error.message : String(error),
+							'error',
+						);
+					}
+				}
+
+				return;
+			}
+
 			if (input === 'a' && tab !== 'versions') {
 				setTab('versions');
 				setFocus('content');
@@ -782,26 +854,6 @@ export function Shell({
 				setTab(
 					TABS[(i + (key.rightArrow ? 1 : TABS.length - 1)) % TABS.length]!.id,
 				);
-				return;
-			}
-
-			if (settings && focus === 'content') {
-				// Settings pane: the form owns everything but q, y and Tab/Esc above.
-				if (input === 'q') quit();
-				else if (input === 'y') {
-					try {
-						if (syncDevPropertiesToPackageJson(workspaceRoot!)) {
-							reload();
-							notify(t('package.json updated'), 'ok');
-						}
-					} catch (error) {
-						notify(
-							error instanceof Error ? error.message : String(error),
-							'error',
-						);
-					}
-				}
-
 				return;
 			}
 
@@ -1318,16 +1370,30 @@ function renderOverlay(
 	}
 }
 
-function Confirm({
+/**
+ * The open overlays, last one shown. `null` closes the shown one. A new overlay
+ * covers the current one instead of replacing it, so whoever awaits the covered
+ * one still gets an answer. A confirm goes underneath: background tasks raise
+ * them, and on top it would take the keys being typed into a prompt.
+ */
+export function overlayStack(
+	stack: Overlay[],
+	next: Overlay | null,
+): Overlay[] {
+	if (next === null) return stack.slice(0, -1);
+	return next.kind === 'confirm' ? [next, ...stack] : [...stack, next];
+}
+
+export function Confirm({
 	message,
 	onAnswer,
 }: {
 	message: string;
 	onAnswer: (yes: boolean) => void;
 }) {
-	useInput(input => {
+	useInput((input, key) => {
 		if (input === 'y' || input === 'Y') onAnswer(true);
-		else if (input === 'n' || input === 'N') onAnswer(false);
+		else if (input === 'n' || input === 'N' || key.escape) onAnswer(false);
 	});
 	return (
 		<Box flexDirection="column" paddingX={1}>

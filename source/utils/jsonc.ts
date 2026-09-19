@@ -83,5 +83,6 @@ export function stripJsonComments(input: string): string {
  * SyntaxError if the content is invalid even after comments are removed.
  */
 export function parseJsonc<T>(input: string): T {
-	return JSON.parse(stripJsonComments(input)) as T;
+	// Editors on Windows may prepend a BOM, which JSON.parse rejects.
+	return JSON.parse(stripJsonComments(input.replace(/^\uFEFF/, ''))) as T;
 }

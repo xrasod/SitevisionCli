@@ -80,8 +80,8 @@ function InfoScreen({project}: InfoScreenProps) {
 			{!project.hasDevProperties && (
 				<Box marginTop={1}>
 					<Text color="yellow">
-						⚠ No dev properties found. Run{' '}
-						<Text bold>setup-dev-properties</Text> to configure.
+						⚠ No dev properties found. Run <Text bold>svc</Text> and press{' '}
+						<Text bold>e</Text> to configure.
 					</Text>
 				</Box>
 			)}

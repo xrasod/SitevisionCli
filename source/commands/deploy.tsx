@@ -1,6 +1,7 @@
 import React from 'react';
-import {render, Box, Text, useInput} from 'ink';
+import {render, Box, Text, useApp, useInput, useStdin} from 'ink';
 import {type Command} from './types.js';
+import {useFinish} from './use-finish.js';
 import {StatusIndicator} from '../components/StatusIndicator.js';
 import {deployApp, deployProduction} from '../utils/sitevision-api.js';
 import {
@@ -32,9 +33,6 @@ interface DeployScreenProps {
 	force: boolean;
 	production: boolean;
 	activate: boolean;
-	onBack?: () => void;
-	onRetryCredentials?: () => void;
-	onChangeAuthMethod?: () => void;
 }
 
 type DeployStatus = 'deploying' | 'success' | 'error';
@@ -53,9 +51,6 @@ export function DeployScreen({
 	force,
 	production,
 	activate,
-	onBack,
-	onRetryCredentials,
-	onChangeAuthMethod,
 }: DeployScreenProps) {
 	const [state, setState] = React.useState<DeployState>({
 		status: 'deploying',
@@ -75,9 +70,29 @@ export function DeployScreen({
 	const deployStartedRef = React.useRef(false);
 
 	const authMethod = devProperties.authMethod ?? 'basic';
-	// OAuth2 and cookie can re-authenticate in-place; basic re-prompts via the
-	// parent (TUI password entry).
-	const canRelogin = authMethod === 'oauth2' || authMethod === 'cookie';
+	const {exit} = useApp();
+	const {isRawModeSupported: interactive} = useStdin();
+	// OAuth2 and cookie can re-authenticate in-place, given a terminal to do it in.
+	const canRelogin =
+		interactive && (authMethod === 'oauth2' || authMethod === 'cookie');
+
+	useFinish(
+		state.status === 'deploying' ? undefined : state.status,
+		state.status === 'error' && canRelogin,
+	);
+
+	// A browser login needs a terminal; without one only env/flag credentials work.
+	const startLogin = () => {
+		if (interactive) {
+			setPhase('login');
+		} else {
+			setState({
+				status: 'error',
+				error:
+					'No stored login and no terminal to log in from. Set SITEVISION_ACCESS_TOKEN or SITEVISION_SESSION_COOKIE.',
+			});
+		}
+	};
 
 	// Discard the stored credential and force a fresh login. This is the
 	// "retry with new credentials" action for token/cookie auth — the usual fix
@@ -108,24 +123,14 @@ export function DeployScreen({
 		setPhase('login');
 	};
 
-	useInput((input, key) => {
-		if (state.status !== 'deploying') {
-			if (onBack && (key.escape || input === 'q')) {
-				onBack();
-			}
-			if (state.status === 'error' && input === 'r') {
-				if (canRelogin) {
-					retryWithFreshLogin();
-				} else if (onRetryCredentials) {
-					onRetryCredentials();
-				}
-			}
-
-			if (state.status === 'error' && input === 'm' && onChangeAuthMethod) {
-				onChangeAuthMethod();
-			}
-		}
-	});
+	useInput(
+		(input, key) => {
+			if (state.status !== 'error') return;
+			if (input === 'r') retryWithFreshLogin();
+			if (key.escape || input === 'q') exit();
+		},
+		{isActive: canRelogin},
+	);
 
 	// Decide once whether we can deploy straight away or must log in first.
 	React.useEffect(() => {
@@ -136,7 +141,7 @@ export function DeployScreen({
 
 		if (authMethod === 'cookie') {
 			// env/keychain cookie is already loaded in devProperties; none here.
-			setPhase('login');
+			startLogin();
 			return;
 		}
 
@@ -152,7 +157,7 @@ export function DeployScreen({
 					setCredential({accessToken: token});
 					setPhase('deploy');
 				} else {
-					setPhase('login');
+					startLogin();
 				}
 			})();
 			return;
@@ -220,6 +225,12 @@ export function DeployScreen({
 							status: 'error',
 							error: result.error || 'Deployment failed',
 						});
+						return;
+					}
+
+					// Uploaded but not live: that is a failed `--activate`, not a success.
+					if (activate && !result.activated) {
+						setState({status: 'error', error: result.message});
 						return;
 					}
 
@@ -296,11 +307,7 @@ export function DeployScreen({
 					setState({status: 'error', error: message});
 				}}
 				onCancel={() => {
-					if (onBack) {
-						onBack();
-					} else {
-						setState({status: 'error', error: 'Login cancelled.'});
-					}
+					setState({status: 'error', error: 'Login cancelled.'});
 				}}
 			/>
 		);
@@ -349,18 +356,11 @@ export function DeployScreen({
 				</Box>
 			)}
 
-			{state.status !== 'deploying' && (
-				<Box marginTop={1} flexDirection="column">
-					{state.status === 'error' && canRelogin && (
-						<Text dimColor>Press r to log in again with fresh credentials</Text>
-					)}
-					{state.status === 'error' && !canRelogin && onRetryCredentials && (
-						<Text dimColor>Press r to retry with new credentials</Text>
-					)}
-					{state.status === 'error' && onChangeAuthMethod && (
-						<Text dimColor>Press m to change auth method</Text>
-					)}
-					{onBack && <Text dimColor>Press q or Esc to return to menu</Text>}
+			{state.status === 'error' && canRelogin && (
+				<Box marginTop={1}>
+					<Text dimColor>
+						Press r to log in again with fresh credentials, q to quit
+					</Text>
 				</Box>
 			)}
 		</Box>
@@ -371,26 +371,6 @@ export const deployCommand: Command = {
 	name: 'deploy',
 	description: 'Deploy the application',
 	requiresProject: true,
-	flags: {
-		force: {
-			type: 'boolean',
-			description: 'Force deployment (overwrite existing)',
-			alias: 'f',
-			default: false,
-		},
-		production: {
-			type: 'boolean',
-			description: 'Deploy to production (requires signed app)',
-			alias: 'p',
-			default: false,
-		},
-		activate: {
-			type: 'boolean',
-			description: 'Activate the app after production deployment',
-			alias: 'a',
-			default: false,
-		},
-	},
 	async execute({project, flags}) {
 		// Check if dev properties are configured
 		if (!project.hasDevProperties || !project.devProperties) {
@@ -398,6 +378,7 @@ export const deployCommand: Command = {
 			console.log(
 				'Create a .dev_properties.json file with domain, siteName, addonName, and username, then run setup.\n',
 			);
+			process.exitCode = 1;
 			return;
 		}
 
@@ -413,6 +394,7 @@ export const deployCommand: Command = {
 			);
 			if (!password) {
 				console.log('\x1b[31mError: Password is required\x1b[0m');
+				process.exitCode = 1;
 				return;
 			}
 			const remember = await promptYesNo(

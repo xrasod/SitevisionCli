@@ -4,8 +4,8 @@ This project publishes to npm as [`sitevision-cli`](https://www.npmjs.com/packag
 
 Two helper scripts handle versioning, building, tagging, and publishing. You
 only pick the **bump type** — `npm version` does the math and writes the new
-version into `package.json` _and_ `package-lock.json`, then creates a git
-commit and tag.
+version into `package.json` _and_ `package-lock.json`. The script commits and
+tags only after a successful publish, and reverts the bump if anything fails.
 
 | Command                | npm dist-tag | Who gets it                                  | Default bump |
 | ---------------------- | ------------ | -------------------------------------------- | ------------ |
@@ -19,9 +19,12 @@ commit and tag.
 ## Before you release
 
 - Be **logged in to npm** with publish rights (`npm whoami`).
-- Have a **clean working tree** — both scripts refuse to run otherwise (this is
-  also what `npm version` needs to create its commit/tag). Commit or stash
-  first.
+- Have a **clean working tree** — both scripts refuse to run otherwise, since a
+  failed run reverts `package.json` with `git checkout`. Commit or stash first.
+- **Commit the changelog entry first**: `CHANGELOG.md` needs a `## <new version>`
+  heading, or the script stops before publishing.
+- Stable releases are published **from `main`**; betas from any branch.
+- `npm publish` runs the tests and a clean build first (`prepublishOnly`).
 - After publishing, push the version commit and tag: `git push --follow-tags`.
 
 ## Stable releases

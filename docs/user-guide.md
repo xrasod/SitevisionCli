@@ -390,13 +390,13 @@ secret stay; clear those by emptying the fields in Config.
 
 **OAuth2 access token**
 
-1. `--token` or `SITEVISION_ACCESS_TOKEN`
+1. `SITEVISION_ACCESS_TOKEN`
 2. Silent refresh with the keychain refresh token
 3. Browser login
 
 **Session cookie**
 
-1. `--cookie` or `SITEVISION_SESSION_COOKIE`
+1. `SITEVISION_SESSION_COOKIE`
 2. Keychain `session:<username>@<domain>`
 3. Browser login
 
@@ -526,18 +526,17 @@ press `l` or deploy.
   use the manual path below.
 - Some identity providers (conditional access, device trust) refuse a browser
   started this way. Log in in your normal browser instead, copy the cookie
-  header from the developer tools and pass it with `--cookie` or
-  `SITEVISION_SESSION_COOKIE`.
+  header from the developer tools and pass it in `SITEVISION_SESSION_COOKIE`.
 
 ### Which method works where
 
-|                                                    | `basic`                   | `oauth2`                                        | `cookie`                                                                           |
-| -------------------------------------------------- | ------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Shell (`svc`): deploy, dev, versions, addon picker | prompt                    | browser login                                   | browser login                                                                      |
-| `svc deploy`                                       | prompt                    | refresh token, else browser login               | keychain cookie, else browser login                                                |
-| `svc dev`                                          | prompt                    | only with `--token` / `SITEVISION_ACCESS_TOKEN` | keychain cookie from an earlier login, or `--cookie` / `SITEVISION_SESSION_COOKIE` |
-| `svc watch`                                        | not needed (no deploy)    | not needed                                      | not needed                                                                         |
-| Signing (`s`, `svc sign`, `--signed`)              | separate signing password | separate signing password                       | separate signing password                                                          |
+|                                                    | `basic`                   | `oauth2`                            | `cookie`                                                              |
+| -------------------------------------------------- | ------------------------- | ----------------------------------- | --------------------------------------------------------------------- |
+| Shell (`svc`): deploy, dev, versions, addon picker | prompt                    | browser login                       | browser login                                                         |
+| `svc deploy`                                       | prompt                    | refresh token, else browser login   | keychain cookie, else browser login                                   |
+| `svc dev`                                          | prompt                    | only with `SITEVISION_ACCESS_TOKEN` | keychain cookie from an earlier login, or `SITEVISION_SESSION_COOKIE` |
+| `svc watch`                                        | not needed (no deploy)    | not needed                          | not needed                                                            |
+| Signing (`s`, `svc sign`, `--signed`)              | separate signing password | separate signing password           | separate signing password                                             |
 
 In practice: with `oauth2` or `cookie`, run dev from the shell.
 
@@ -655,8 +654,8 @@ Every command runs in the current app directory and uses the base environment.
 ```bash
 svc build
 svc sign
-svc deploy [--force] [--production [--activate]] [--token <t>] [--cookie <c>]
-svc dev [--signed] [--token <t>] [--cookie <c>]
+svc deploy [--force] [--production [--activate]]
+svc dev [--signed]
 svc watch [--signed]
 svc info
 ```
@@ -667,15 +666,15 @@ svc info
 
 **Environment variables**
 
-| Variable                               | Effect                                                                 |
-| -------------------------------------- | ---------------------------------------------------------------------- |
-| `SITEVISION_DEPLOY_PASSWORD`           | Deploy password; skips keychain and prompt                             |
-| `SITEVISION_SIGNING_PASSWORD`          | Signing password; skips keychain and prompt                            |
-| `SITEVISION_ACCESS_TOKEN`              | OAuth2 bearer token (when `authMethod` is `oauth2`); same as `--token` |
-| `SITEVISION_SESSION_COOKIE`            | Cookie header (when `authMethod` is `cookie`); same as `--cookie`      |
-| `SITEVISION_APP_ID_PREFIX` / `_SUFFIX` | Added around the manifest id in zip names for in-process builds        |
-| `APP_ID_PREFIX` / `APP_ID_SUFFIX`      | The same for builds delegated to sitevision-scripts                    |
-| `XDG_CONFIG_HOME`                      | Location of the global settings                                        |
+| Variable                               | Effect                                                                          |
+| -------------------------------------- | ------------------------------------------------------------------------------- |
+| `SITEVISION_DEPLOY_PASSWORD`           | Deploy password; skips keychain and prompt                                      |
+| `SITEVISION_SIGNING_PASSWORD`          | Signing password; skips keychain and prompt                                     |
+| `SITEVISION_ACCESS_TOKEN`              | OAuth2 bearer token (when `authMethod` is `oauth2`)                             |
+| `SITEVISION_SESSION_COOKIE`            | Cookie header (when `authMethod` is `cookie`)                                   |
+| `SITEVISION_APP_ID_PREFIX` / `_SUFFIX` | Added around the manifest id in zip names; `APP_ID_PREFIX` / `_SUFFIX` work too |
+| `APP_ID_PREFIX` / `APP_ID_SUFFIX`      | The same for builds delegated to sitevision-scripts                             |
+| `XDG_CONFIG_HOME`                      | Location of the global settings                                                 |
 
 Environment variables are never written anywhere.
 
@@ -693,18 +692,18 @@ with `basic` is usually the simplest choice for CI.
 
 ## 9. Troubleshooting
 
-| Message                                                        | What to do                                                                                               |
-| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| "No Sitevision apps found here."                               | Run inside an app, or at a repository root with apps at most three levels down.                          |
-| "Unauthorized. Check username and password."                   | Wrong deploy password. **Log out** in the palette, then deploy again to be asked.                        |
-| "Unauthorized. The access token was rejected or has expired."  | Press `l` to log in again.                                                                               |
-| "Unauthorized. The session cookie was rejected or has expired" | Press `l`; a new browser login runs.                                                                     |
-| "Zip not found … Run build first."                             | `b` first. For production: `b` then `s`.                                                                 |
-| "Conflict. Addon already exists."                              | Use force deploy (`P` / `--force`).                                                                      |
-| "Dev never deploys to a production environment"                | Switch environment with `v`, or use `w` (watch).                                                         |
-| Keys do nothing                                                | Focus is in the navigator, where typing filters. Press `Enter` or `Tab`.                                 |
-| Password prompt every time                                     | Tick **Save to OS keychain** at the prompt, or enter the password in the Config tab.                     |
-| "No token/cookie available" from `svc dev`                     | Run dev from the shell instead, or pass `--token` / `--cookie`. See the table in [5](#5-authentication). |
+| Message                                                        | What to do                                                                                                                               |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| "No Sitevision apps found here."                               | Run inside an app, or at a repository root with apps at most three levels down.                                                          |
+| "Unauthorized. Check username and password."                   | Wrong deploy password. **Log out** in the palette, then deploy again to be asked.                                                        |
+| "Unauthorized. The access token was rejected or has expired."  | Press `l` to log in again.                                                                                                               |
+| "Unauthorized. The session cookie was rejected or has expired" | Press `l`; a new browser login runs.                                                                                                     |
+| "Zip not found … Run build first."                             | `b` first. For production: `b` then `s`.                                                                                                 |
+| "Conflict. Addon already exists."                              | Use force deploy (`P` / `--force`).                                                                                                      |
+| "Dev never deploys to a production environment"                | Switch environment with `v`, or use `w` (watch).                                                                                         |
+| Keys do nothing                                                | Focus is in the navigator, where typing filters. Press `Enter` or `Tab`.                                                                 |
+| Password prompt every time                                     | Tick **Save to OS keychain** at the prompt, or enter the password in the Config tab.                                                     |
+| "No token/cookie available" from `svc dev`                     | Run dev from the shell instead, or set `SITEVISION_ACCESS_TOKEN` / `SITEVISION_SESSION_COOKIE`. See the table in [5](#5-authentication). |
 
 ## Reference
 

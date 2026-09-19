@@ -200,6 +200,11 @@ export function makeRequest(
 					headers: res.headers as Record<string, string>,
 				});
 			});
+			// A connection cut mid-body never emits 'end'.
+			res.on('error', reject);
+			res.on('close', () => {
+				if (!res.complete) reject(new Error('Response was cut off'));
+			});
 		});
 
 		// Abort hung connections instead of blocking the CLI indefinitely.
@@ -587,29 +592,30 @@ export async function deployProduction(
 		return deployResult;
 	}
 
-	// If activation requested and we have an executable ID
-	if (config.activate && deployResult.executableId) {
-		const activationResult = await activateApp(
-			deployResult.executableId,
-			config,
-			appType,
-		);
-		if (!activationResult.success) {
-			return {
-				success: true,
-				executableId: deployResult.executableId,
-				message: `Deployed successfully but activation failed: ${activationResult.error}`,
-			};
-		}
+	if (!config.activate) return deployResult;
 
+	if (!deployResult.executableId) {
 		return {
-			success: true,
-			executableId: deployResult.executableId,
-			message: 'Deployed and activated successfully',
+			...deployResult,
+			activated: false,
+			message:
+				'Deployed, but not activated: the server did not return an executable id.',
 		};
 	}
 
-	return deployResult;
+	const activationResult = await activateApp(
+		deployResult.executableId,
+		config,
+		appType,
+	);
+	return {
+		success: true,
+		executableId: deployResult.executableId,
+		activated: activationResult.success,
+		message: activationResult.success
+			? 'Deployed and activated successfully'
+			: `Deployed successfully but activation failed: ${activationResult.error}`,
+	};
 }
 
 // =============================================================================

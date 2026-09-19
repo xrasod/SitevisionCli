@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {EventEmitter} from 'node:events';
+import {stripVTControlCharacters} from 'node:util';
 import {useSyncExternalStore} from 'react';
 import type {
 	ProjectInfo,
@@ -106,6 +107,18 @@ export function runningTasks(appRoot?: string): Task[] {
 	);
 }
 
+/** A scaffold belongs to no listed app yet, so it counts for every one. */
+export function scaffoldRunning(): boolean {
+	return runningTasks().some(t => t.kind === 'create');
+}
+
+/** What "stop" means for the selected app: its own tasks and any scaffold. */
+export function stoppableTasks(appRoot: string): Task[] {
+	return runningTasks().filter(
+		t => t.kind === 'create' || t.appRoot === appRoot,
+	);
+}
+
 export function clearFinished(): void {
 	tasks = tasks.filter(t => t.status === 'running');
 	notify();
@@ -142,7 +155,7 @@ export function createTask(
 	notify();
 
 	const log: Log = (tag, text, level = 'info') => {
-		for (const line of text.trimEnd().split('\n')) {
+		for (const line of logLines(text)) {
 			task.lines.push({time: Date.now(), tag, level, text: line});
 		}
 
@@ -331,6 +344,10 @@ async function deployOnce(
 	}
 
 	if (!result.success) throw new Error(result.error ?? 'Deployment failed');
+	if (options.production && options.activate && !result.activated) {
+		throw new Error(result.message ?? 'Deployed, but not activated');
+	}
+
 	log(
 		'dep',
 		`${result.message ?? 'deployed'}${result.executableId ? ` · exec ${result.executableId}` : ''}`,
@@ -485,6 +502,8 @@ export interface DevOptions {
 	onAddonMissing?: DeployOptions['onAddonMissing'];
 }
 
+const WEBPACK_UNSEEN_TARGETS = ['static', 'manifest.json'];
+
 const WATCH_TARGETS = [
 	'src',
 	'static',
@@ -503,8 +522,6 @@ export function startDev(project: ProjectInfo, options: DevOptions): Task {
 	const watchers: fs.FSWatcher[] = [];
 	let webpack: WebpackRunner | null = null;
 	let debounce: NodeJS.Timeout | undefined;
-	let building = false;
-	let pending = false;
 
 	const controller = new AbortController();
 
@@ -554,42 +571,28 @@ export function startDev(project: ProjectInfo, options: DevOptions): Task {
 		setPhase(task, 'error');
 	};
 
-	const rebuild = async () => {
-		if (building) {
-			pending = true;
-			return;
-		}
-
-		building = true;
+	const rebuild = serialized<void>(async () => {
+		if (controller.signal.aborted) return;
 		try {
-			do {
-				pending = false;
-				try {
-					// eslint-disable-next-line no-await-in-loop
-					const zip = await buildOnce(
-						project,
-						task,
-						log,
-						'development',
-						controller.signal,
-					);
-					// eslint-disable-next-line no-await-in-loop
-					await afterBuild(zip);
-				} catch (error) {
-					fail(error);
-				}
-			} while (pending && !controller.signal.aborted);
-		} finally {
-			building = false;
+			const zip = await buildOnce(
+				project,
+				task,
+				log,
+				'development',
+				controller.signal,
+			);
+			await afterBuild(zip);
+		} catch (error) {
+			fail(error);
 		}
-	};
+	});
 
 	// Size + mtime of every watched file. An event that leaves this unchanged
 	// (editor metadata, xattrs, identical re-save) is noise and must not
 	// rebuild, or a stray event during sign/deploy loops forever.
-	const snapshot = () => {
+	const snapshot = (targets: string[]) => {
 		const entries: string[] = [];
-		for (const name of WATCH_TARGETS) {
+		for (const name of targets) {
 			const target = path.join(root, name);
 			const stat = fs.statSync(target, {throwIfNoEntry: false});
 			if (!stat) continue;
@@ -612,24 +615,24 @@ export function startDev(project: ProjectInfo, options: DevOptions): Task {
 
 	let fingerprint = '';
 
-	const onChange = (name: string, event: string, file: string | null) => {
-		const where = file ? path.join(name, file) : name;
-		clearTimeout(debounce);
-		debounce = setTimeout(() => {
-			const next = snapshot();
-			if (next === fingerprint) {
-				log('fs', `${event} ${where} · no file changed, ignored`, 'warn');
-				return;
-			}
+	const watchFiles = (targets: string[], changed: () => void) => {
+		const onChange = (name: string, event: string, file: string | null) => {
+			const where = file ? path.join(name, file) : name;
+			clearTimeout(debounce);
+			debounce = setTimeout(() => {
+				const next = snapshot(targets);
+				if (next === fingerprint) {
+					log('fs', `${event} ${where} · no file changed, ignored`, 'warn');
+					return;
+				}
 
-			fingerprint = next;
-			log('fs', `${event} ${where}`);
-			void rebuild();
-		}, 300);
-	};
+				fingerprint = next;
+				log('fs', `${event} ${where}`);
+				changed();
+			}, 300);
+		};
 
-	const watchFiles = () => {
-		for (const name of WATCH_TARGETS) {
+		for (const name of targets) {
 			const target = path.join(root, name);
 			if (!fs.existsSync(target)) continue;
 			const isDir = fs.statSync(target).isDirectory();
@@ -640,8 +643,8 @@ export function startDev(project: ProjectInfo, options: DevOptions): Task {
 			);
 		}
 
-		fingerprint = snapshot();
-		log('svc', `watching ${WATCH_TARGETS.join(', ')}`);
+		fingerprint = snapshot(targets);
+		log('svc', `watching ${targets.join(', ')}`);
 	};
 
 	void (async () => {
@@ -661,26 +664,34 @@ export function startDev(project: ProjectInfo, options: DevOptions): Task {
 					restApp:
 						getAppType(manifest) !== 'web' && getAppType(manifest) !== 'widget',
 				});
+				// Zip, sign and deploy what is in build/ now. Webpack compiles and
+				// static edits both end here, one at a time, the latest one last.
+				let compiled = false;
+				const repackage = serialized<void>(async () => {
+					if (!compiled || controller.signal.aborted) return;
+					try {
+						copyStaticToBuild(root);
+						await afterBuild(
+							await createBuildZip(root, getFullAppId(manifest.id)),
+						);
+					} catch (error) {
+						fail(error);
+					}
+				});
 				await webpack.watch(result => {
-					void (async () => {
-						reportBuild(result, log);
-						if (!result.success) {
-							setPhase(task, 'error');
-							return;
-						}
-
-						try {
-							copyStaticToBuild(root);
-							await afterBuild(
-								await createBuildZip(root, getFullAppId(manifest.id)),
-							);
-						} catch (error) {
-							fail(error);
-						}
-					})();
+					reportBuild(result, log);
+					compiled = result.success;
+					if (result.success) void repackage();
+					else setPhase(task, 'error');
+				});
+				// Webpack watches what it bundles; what is copied in as-is it never sees.
+				watchFiles(WEBPACK_UNSEEN_TARGETS, () => {
+					void repackage();
 				});
 			} else {
-				watchFiles();
+				watchFiles(WATCH_TARGETS, () => {
+					void rebuild();
+				});
 				await rebuild();
 			}
 		} catch (error) {
@@ -689,4 +700,43 @@ export function startDev(project: ProjectInfo, options: DevOptions): Task {
 	})();
 
 	return task;
+}
+
+/**
+ * Run `run` one call at a time. Calls made meanwhile collapse into one run with
+ * the latest value, so of several quick saves the last is what gets deployed
+ * last, never an older one that happened to upload slower.
+ */
+export function serialized<T>(
+	run: (value: T) => Promise<void>,
+): (value: T) => Promise<void> {
+	let running = false;
+	let waiting: {value: T} | undefined;
+	return async value => {
+		waiting = {value};
+		if (running) return;
+		running = true;
+		try {
+			while (waiting) {
+				const {value: current} = waiting;
+				waiting = undefined;
+				// eslint-disable-next-line no-await-in-loop
+				await run(current);
+			}
+		} finally {
+			running = false;
+		}
+	};
+}
+
+/**
+ * Child output as log rows: split on LF or CRLF, no colour or cursor codes, and
+ * of a line redrawn with bare CRs (progress bars) only the final state. Any of
+ * those left in would move the cursor inside Ink's frame.
+ */
+export function logLines(text: string): string[] {
+	return stripVTControlCharacters(text)
+		.trimEnd()
+		.split(/\r?\n/)
+		.map(line => line.slice(line.lastIndexOf('\r') + 1));
 }

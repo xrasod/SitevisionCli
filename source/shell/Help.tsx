@@ -89,9 +89,10 @@ export function HelpPanel({
 	const inner = useRef<DOMElement>(null);
 	const [top, setTop] = useState(0);
 	const [total, setTotal] = useState(0);
+	// The text depends on the pane and the language, both fixed while this is open.
 	useEffect(() => {
 		if (inner.current) setTotal(measureElement(inner.current).height);
-	});
+	}, [here, where, height]);
 	const visible = Math.max(1, height - 1);
 	const max = Math.max(0, total - visible);
 

@@ -1,6 +1,10 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {Box, Text, useInput} from 'ink';
-import type {DevProperties, SitevisionManifest} from '../types/index.js';
+import type {
+	DevProperties,
+	EnvironmentOverride,
+	SitevisionManifest,
+} from '../types/index.js';
 import {
 	findDevPropertiesPath,
 	getPackageJsonSyncChanges,
@@ -333,8 +337,9 @@ const sameValue = (key: string, a: unknown, b: unknown) =>
 
 /**
  * App mode writes the app's complete file. Workspace mode never creates an
- * app's .dev_properties.json: changes go to the root file, and the addon name
- * to the app's package.json. An app that already has its own file keeps it.
+ * app's .dev_properties.json: changes go to the root file, and addon names (the
+ * base one and each environment's) to the app's package.json, since the root
+ * file is shared by every app. An app that already has its own file keeps it.
  */
 function writeConfigFile(project: ConfigTarget, file: DevProperties): void {
 	const {workspaceRoot} = project;
@@ -364,6 +369,43 @@ function writeConfigFile(project: ConfigTarget, file: DevProperties): void {
 			updatePackageJson(project.root, packageJson => {
 				packageJson['addonName'] = after[key] || undefined;
 			});
+		} else if (key === 'environments') {
+			const environments = Object.entries(
+				(after[key] ?? {}) as Record<string, EnvironmentOverride>,
+			);
+			root[key] = Object.fromEntries(
+				environments.map(([name, {addonName: _addonName, ...shared}]) => [
+					name,
+					shared,
+				]),
+			);
+			updatePackageJson(project.root, packageJson => {
+				const svc = {...(packageJson['svc'] as Record<string, unknown>)};
+				const own = new Map(
+					Object.entries(
+						(svc['environments'] ?? {}) as Record<string, EnvironmentOverride>,
+					),
+				);
+				for (const [name, {addonName}] of environments) {
+					const override = {
+						...own.get(name),
+						addonName: addonName || undefined,
+					};
+					if (Object.values(override).every(value => value === undefined)) {
+						own.delete(name);
+					} else {
+						own.set(name, override);
+					}
+				}
+
+				svc['environments'] =
+					own.size > 0 ? Object.fromEntries(own) : undefined;
+				packageJson['svc'] = Object.values(svc).some(
+					value => value !== undefined,
+				)
+					? svc
+					: undefined;
+			});
 		} else {
 			root[key] = after[key];
 		}
@@ -379,21 +421,22 @@ export function saveConfig(
 	edited: Set<string>,
 ): void {
 	const method = values['authMethod'] as Method;
+	// Start from what is there: keys the form does not show, and the settings of
+	// the auth methods not in use, survive a save.
 	const next: DevProperties = {
+		...project.devProperties,
 		domain: values['domain']!,
 		siteName: values['siteName']!,
 		addonName: values['addonName']!,
 		username: values['username']!,
 		authMethod: method,
 		useHTTPForDevDeploy: values['useHTTPForDevDeploy'] === 'yes',
+		baseEnvironment:
+			values['baseEnvironment']?.trim().toLowerCase() || undefined,
+		production: values['production'] === 'yes' ? true : undefined,
+		signingUsername: values['signingUsername'] || undefined,
+		certificateName: values['certificateName'] || undefined,
 	};
-	if (values['baseEnvironment'])
-		next.baseEnvironment = values['baseEnvironment'].trim().toLowerCase();
-	if (values['production'] === 'yes') next.production = true;
-	if (values['signingUsername'])
-		next.signingUsername = values['signingUsername'];
-	if (values['certificateName'])
-		next.certificateName = values['certificateName'];
 	if (method === 'oauth2') {
 		const scopes = values['scopes']!.split(/[\s,]+/).filter(Boolean);
 		next.oauth2 = {
@@ -405,8 +448,8 @@ export function saveConfig(
 				redirectPort: project.devProperties.oauth2.redirectPort,
 			}),
 		};
-	} else if (method === 'cookie' && values['sessionLoginUrl']) {
-		next.sessionLoginUrl = values['sessionLoginUrl'];
+	} else if (method === 'cookie') {
+		next.sessionLoginUrl = values['sessionLoginUrl'] || undefined;
 	}
 
 	const env = project.environment;
@@ -509,6 +552,11 @@ export function ConfigForm({
 	onEditingChange: (editing: boolean) => void;
 }) {
 	const [values, setValues] = useState<Values>(() => fromProject(project));
+	// What the form holds when an async lookup lands, not when it started.
+	const latest = useRef({values, project});
+	useEffect(() => {
+		latest.current = {values, project};
+	});
 	const [cursor, setCursor] = useState(0);
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState('');
@@ -596,15 +644,16 @@ export function ConfigForm({
 		).then(found => {
 			if (cancelled) return;
 			if (found) {
+				const now = latest.current.values;
 				const next = {
-					...values,
+					...now,
 					authorizationEndpoint:
-						values['authorizationEndpoint'] || found.authorizationEndpoint,
-					tokenEndpoint: values['tokenEndpoint'] || found.tokenEndpoint,
+						now['authorizationEndpoint'] || found.authorizationEndpoint,
+					tokenEndpoint: now['tokenEndpoint'] || found.tokenEndpoint,
 				};
 				setValues(next);
 				try {
-					saveConfig(project, next, new Set());
+					saveConfig(latest.current.project, next, new Set());
 				} catch (error) {
 					setNote(t('Not saved: {error}', {error: errorText(error)}));
 					return;

@@ -6,3 +6,6 @@ dist
 
 # JetBrains IDEs
 .idea/
+
+# Test sandbox
+test/.xdg

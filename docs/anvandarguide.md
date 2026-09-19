@@ -391,13 +391,13 @@ ligger kvar; ta bort dem genom att tömma fälten i Konfig.
 
 **OAuth2-åtkomsttoken**
 
-1. `--token` eller `SITEVISION_ACCESS_TOKEN`
+1. `SITEVISION_ACCESS_TOKEN`
 2. Tyst förnyelse med refresh-token från nyckelringen
 3. Inloggning i webbläsaren
 
 **Sessionscookie**
 
-1. `--cookie` eller `SITEVISION_SESSION_COOKIE`
+1. `SITEVISION_SESSION_COOKIE`
 2. Nyckelringen `session:<username>@<domain>`
 3. Inloggning i webbläsaren
 
@@ -530,18 +530,18 @@ sparade cookien och ber dig logga in igen.
   eller använd den manuella vägen nedan.
 - Vissa identitetsleverantörer (villkorsstyrd åtkomst, enhetskrav) nekar en
   webbläsare som startats på det här sättet. Logga då in i din vanliga
-  webbläsare, kopiera cookie-headern från utvecklarverktygen och skicka den med
-  `--cookie` eller `SITEVISION_SESSION_COOKIE`.
+  webbläsare, kopiera cookie-headern från utvecklarverktygen och skicka den i
+  `SITEVISION_SESSION_COOKIE`.
 
 ### Vilken metod fungerar var
 
-|                                                        | `basic`                           | `oauth2`                                       | `cookie`                                                                                          |
-| ------------------------------------------------------ | --------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Skalet (`svc`): driftsätt, dev, versioner, tilläggsval | fråga                             | inloggning i webbläsaren                       | inloggning i webbläsaren                                                                          |
-| `svc deploy`                                           | fråga                             | refresh-token, annars inloggning i webbläsaren | cookie i nyckelringen, annars inloggning i webbläsaren                                            |
-| `svc dev`                                              | fråga                             | bara med `--token` / `SITEVISION_ACCESS_TOKEN` | cookie i nyckelringen från en tidigare inloggning, eller `--cookie` / `SITEVISION_SESSION_COOKIE` |
-| `svc watch`                                            | behövs inte (ingen driftsättning) | behövs inte                                    | behövs inte                                                                                       |
-| Signering (`s`, `svc sign`, `--signed`)                | separat signeringslösenord        | separat signeringslösenord                     | separat signeringslösenord                                                                        |
+|                                                        | `basic`                           | `oauth2`                                       | `cookie`                                                                             |
+| ------------------------------------------------------ | --------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Skalet (`svc`): driftsätt, dev, versioner, tilläggsval | fråga                             | inloggning i webbläsaren                       | inloggning i webbläsaren                                                             |
+| `svc deploy`                                           | fråga                             | refresh-token, annars inloggning i webbläsaren | cookie i nyckelringen, annars inloggning i webbläsaren                               |
+| `svc dev`                                              | fråga                             | bara med `SITEVISION_ACCESS_TOKEN`             | cookie i nyckelringen från en tidigare inloggning, eller `SITEVISION_SESSION_COOKIE` |
+| `svc watch`                                            | behövs inte (ingen driftsättning) | behövs inte                                    | behövs inte                                                                          |
+| Signering (`s`, `svc sign`, `--signed`)                | separat signeringslösenord        | separat signeringslösenord                     | separat signeringslösenord                                                           |
 
 I praktiken: med `oauth2` eller `cookie`, kör dev från skalet.
 
@@ -657,8 +657,8 @@ Alla kommandon körs i aktuell appkatalog och använder basmiljön.
 ```bash
 svc build
 svc sign
-svc deploy [--force] [--production [--activate]] [--token <t>] [--cookie <c>]
-svc dev [--signed] [--token <t>] [--cookie <c>]
+svc deploy [--force] [--production [--activate]]
+svc dev [--signed]
 svc watch [--signed]
 svc info
 ```
@@ -669,15 +669,15 @@ svc info
 
 **Miljövariabler**
 
-| Variabel                               | Effekt                                                                  |
-| -------------------------------------- | ----------------------------------------------------------------------- |
-| `SITEVISION_DEPLOY_PASSWORD`           | Driftsättningslösenord; hoppar över nyckelring och fråga                |
-| `SITEVISION_SIGNING_PASSWORD`          | Signeringslösenord; hoppar över nyckelring och fråga                    |
-| `SITEVISION_ACCESS_TOKEN`              | OAuth2 bearer-token (när `authMethod` är `oauth2`); samma som `--token` |
-| `SITEVISION_SESSION_COOKIE`            | Cookie-header (när `authMethod` är `cookie`); samma som `--cookie`      |
-| `SITEVISION_APP_ID_PREFIX` / `_SUFFIX` | Läggs runt manifest-id i zip-namnet vid byggen som körs i CLI:t         |
-| `APP_ID_PREFIX` / `APP_ID_SUFFIX`      | Samma sak för byggen som lämnas över till sitevision-scripts            |
-| `XDG_CONFIG_HOME`                      | Plats för de globala inställningarna                                    |
+| Variabel                               | Effekt                                                                          |
+| -------------------------------------- | ------------------------------------------------------------------------------- |
+| `SITEVISION_DEPLOY_PASSWORD`           | Driftsättningslösenord; hoppar över nyckelring och fråga                        |
+| `SITEVISION_SIGNING_PASSWORD`          | Signeringslösenord; hoppar över nyckelring och fråga                            |
+| `SITEVISION_ACCESS_TOKEN`              | OAuth2 bearer-token (när `authMethod` är `oauth2`)                              |
+| `SITEVISION_SESSION_COOKIE`            | Cookie-header (när `authMethod` är `cookie`)                                    |
+| `SITEVISION_APP_ID_PREFIX` / `_SUFFIX` | Läggs runt manifest-id i zip-namnet; `APP_ID_PREFIX` / `_SUFFIX` fungerar också |
+| `APP_ID_PREFIX` / `APP_ID_SUFFIX`      | Samma sak för byggen som lämnas över till sitevision-scripts                    |
+| `XDG_CONFIG_HOME`                      | Plats för de globala inställningarna                                            |
 
 Miljövariabler skrivs aldrig någonstans.
 
@@ -695,18 +695,18 @@ med `basic` är oftast det enklaste för CI.
 
 ## 9. Felsökning
 
-| Meddelande                                                     | Gör så här                                                                                               |
-| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| "No Sitevision apps found here."                               | Kör i en app, eller i roten av ett repo med appar högst tre nivåer ner.                                  |
-| "Unauthorized. Check username and password."                   | Fel driftsättningslösenord. **Logga ut** i paletten och driftsätt igen för att få frågan.                |
-| "Unauthorized. The access token was rejected or has expired."  | Tryck `l` för att logga in igen.                                                                         |
-| "Unauthorized. The session cookie was rejected or has expired" | Tryck `l`; en ny inloggning i webbläsaren startar.                                                       |
-| "Zip not found … Run build first."                             | `b` först. För produktion: `b` och sedan `s`.                                                            |
-| "Conflict. Addon already exists."                              | Driftsätt med tvång (`P` / `--force`).                                                                   |
-| "Dev driftsätter aldrig till en produktionsmiljö"              | Byt miljö med `v`, eller använd `w` (watch).                                                             |
-| Tangenterna gör ingenting                                      | Fokus är i navigatorn, där det du skriver filtrerar. Tryck `Enter` eller `Tab`.                          |
-| Lösenordsfråga varje gång                                      | Kryssa i **Spara i nyckelringen** vid frågan, eller ange lösenordet i fliken Konfig.                     |
-| "No token/cookie available" från `svc dev`                     | Kör dev från skalet i stället, eller skicka `--token` / `--cookie`. Se tabellen i [5](#5-autentisering). |
+| Meddelande                                                     | Gör så här                                                                                                                              |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| "No Sitevision apps found here."                               | Kör i en app, eller i roten av ett repo med appar högst tre nivåer ner.                                                                 |
+| "Unauthorized. Check username and password."                   | Fel driftsättningslösenord. **Logga ut** i paletten och driftsätt igen för att få frågan.                                               |
+| "Unauthorized. The access token was rejected or has expired."  | Tryck `l` för att logga in igen.                                                                                                        |
+| "Unauthorized. The session cookie was rejected or has expired" | Tryck `l`; en ny inloggning i webbläsaren startar.                                                                                      |
+| "Zip not found … Run build first."                             | `b` först. För produktion: `b` och sedan `s`.                                                                                           |
+| "Conflict. Addon already exists."                              | Driftsätt med tvång (`P` / `--force`).                                                                                                  |
+| "Dev driftsätter aldrig till en produktionsmiljö"              | Byt miljö med `v`, eller använd `w` (watch).                                                                                            |
+| Tangenterna gör ingenting                                      | Fokus är i navigatorn, där det du skriver filtrerar. Tryck `Enter` eller `Tab`.                                                         |
+| Lösenordsfråga varje gång                                      | Kryssa i **Spara i nyckelringen** vid frågan, eller ange lösenordet i fliken Konfig.                                                    |
+| "No token/cookie available" från `svc dev`                     | Kör dev från skalet i stället, eller sätt `SITEVISION_ACCESS_TOKEN` / `SITEVISION_SESSION_COOKIE`. Se tabellen i [5](#5-autentisering). |
 
 Felmeddelanden från servern och direktkommandona är på engelska även när
 gränssnittet är på svenska.

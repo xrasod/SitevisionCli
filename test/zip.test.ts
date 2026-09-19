@@ -3,7 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import zlib from 'zlib';
-import {createZip} from '../source/utils/zip.js';
+import {createBuildZip, createZip} from '../source/utils/zip.js';
 
 interface ParsedEntry {
 	name: string;
@@ -118,4 +118,27 @@ test('createZip overwrites an existing archive', async t => {
 
 	const buf = fs.readFileSync(out);
 	t.deepEqual(buf.subarray(0, 4), Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+});
+
+test('createBuildZip refuses a build without a manifest', async t => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-zip-'));
+	fs.mkdirSync(path.join(root, 'build'));
+	fs.writeFileSync(path.join(root, 'build', 'index.js'), '');
+	await t.throwsAsync(createBuildZip(root, 'app'), {message: /manifest\.json/});
+
+	fs.writeFileSync(path.join(root, 'build', 'manifest.json'), '{}');
+	t.true(fs.existsSync(await createBuildZip(root, 'app')));
+});
+
+test('createZip marks file names as UTF-8 so å, ä and ö survive', async t => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-zip-'));
+	const src = path.join(dir, 'src');
+	fs.mkdirSync(src);
+	fs.writeFileSync(path.join(src, 'räksmörgås.js'), '');
+	const zip = await createZip(src, path.join(dir, 'out.zip'));
+	const data = fs.readFileSync(zip);
+	// General-purpose flag bit 11 in the local header and the central directory.
+	t.is(data.readUInt16LE(6), 0x08_00);
+	const central = data.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+	t.is(data.readUInt16LE(central + 8), 0x08_00);
 });

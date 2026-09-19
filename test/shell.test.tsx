@@ -6,12 +6,23 @@ import path from 'node:path';
 import {render} from 'ink-testing-library';
 import {Box} from 'ink';
 import {detectProject} from '../source/utils/project-detection.js';
-import {Shell} from '../source/shell/Shell.js';
+import {
+	Confirm,
+	overlayStack,
+	Shell,
+	type Overlay,
+} from '../source/shell/Shell.js';
 import {CommandPalette} from '../source/shell/CommandPalette.js';
 import {Log, Overview} from '../source/shell/Tabs.js';
 import type {Task} from '../source/utils/tasks.js';
 import {fuzzyMatch, type Action} from '../source/shell/actions.js';
-import {navMatches, navMove, NavigatorStrip} from '../source/shell/Frame.js';
+import {stripVTControlCharacters} from 'node:util';
+import {
+	navMatches,
+	navMove,
+	NavigatorStrip,
+	TopBar,
+} from '../source/shell/Frame.js';
 import {ChangelogPanel} from '../source/shell/Changelog.js';
 
 const delay = async (ms: number) =>
@@ -353,4 +364,79 @@ test('an invalid new app name keeps the prompt open and says why', async t => {
 	t.true(lastFrame()?.includes('Create it in folder'));
 	stdin.write('\u001B');
 	await delay(30);
+});
+
+test('Ctrl-modified keys never fire a shell action', async t => {
+	const {stdin, lastFrame} = render(
+		<Shell apps={[project()]} version="9.9.9" />,
+	);
+	await delay(20);
+	stdin.write('\u0005'); // Ctrl+E
+	await delay(30);
+	t.true(lastFrame()?.includes('▸ overview'));
+	stdin.write('e');
+	await delay(30);
+	t.true(lastFrame()?.includes('▸ config'));
+});
+
+test('Esc cancels a confirm, as the bottom bar says', async t => {
+	const answers: boolean[] = [];
+	const {stdin} = render(
+		<Confirm
+			message="Deploy to production?"
+			onAnswer={yes => {
+				answers.push(yes);
+			}}
+		/>,
+	);
+	await delay(20);
+	stdin.write('\u001B');
+	await delay(60);
+	t.deepEqual(answers, [false]);
+});
+
+test('a new overlay never drops the one it covers', t => {
+	const resolve = () => {};
+	const picker: Overlay = {kind: 'picker', resolve};
+	const password: Overlay = {kind: 'password', label: 'pw', resolve};
+	const confirm: Overlay = {kind: 'confirm', message: 'create?', resolve};
+
+	// A prompt the open overlay is waiting for goes on top, and closing it
+	// brings the first one back.
+	let stack = overlayStack([picker], password);
+	t.is(stack.at(-1), password);
+	stack = overlayStack(stack, null);
+	t.deepEqual(stack, [picker]);
+
+	// A confirm (background tasks raise them) waits its turn instead of
+	// stealing the keys being typed into a prompt.
+	stack = overlayStack([password], confirm);
+	t.is(stack.at(-1), password);
+	t.deepEqual(overlayStack(stack, null), [confirm]);
+	t.deepEqual(overlayStack([], confirm), [confirm]);
+	t.deepEqual(overlayStack([], null), []);
+});
+
+const stringWidth = (text: string) =>
+	[...stripVTControlCharacters(text)].length;
+
+test('the environment badge survives a narrow terminal and the bar never overflows', t => {
+	for (const width of [120, 60, 40]) {
+		const {lastFrame} = render(
+			<Box width={width}>
+				<TopBar
+					context="workspace ▸ webapps/booking ▸ overview"
+					domain="intranet.example-municipality.se"
+					auth={{ready: true, label: 'firstname.lastname@example.com'}}
+					version="1.0.0"
+					environment={{name: 'prod', color: 'red'}}
+				/>
+			</Box>,
+		);
+		const lines = (lastFrame() ?? '').split('\n');
+		t.is(lines.length, 1, `width ${width}`);
+		t.true(lines[0]!.includes('svc'), `width ${width}`);
+		t.true(lines[0]!.includes(' PROD '), `width ${width}`);
+		t.true(stringWidth(lines[0]!) <= width, `width ${width}: ${lines[0]!}`);
+	}
 });

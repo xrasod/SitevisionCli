@@ -223,15 +223,12 @@ export async function createAppInTerminal(
 	parentDir: string,
 ): Promise<boolean> {
 	await new Promise<void>(resolve => {
-		const child = spawn(
-			CREATE_COMMAND[0]!,
-			[...CREATE_COMMAND.slice(1), name],
-			{
-				cwd: parentDir,
-				stdio: 'inherit',
-				shell: true,
-			},
-		);
+		// `name` is validated by the caller; joined to avoid DEP0190.
+		const child = spawn([...CREATE_COMMAND, name].join(' '), {
+			cwd: parentDir,
+			stdio: 'inherit',
+			shell: true,
+		});
 		child.on('close', () => resolve());
 		child.on('error', () => resolve());
 	});
