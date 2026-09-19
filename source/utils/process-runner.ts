@@ -77,18 +77,26 @@ export class ProcessRunner extends EventEmitter {
 	private readonly command: string;
 	private readonly args: string[];
 	private readonly cwd?: string;
+	private readonly env?: NodeJS.ProcessEnv;
 
-	constructor(command: string, args: string[] = [], cwd?: string) {
+	constructor(
+		command: string,
+		args: string[] = [],
+		cwd?: string,
+		env?: NodeJS.ProcessEnv,
+	) {
 		super();
 		this.command = command;
 		this.args = args;
 		this.cwd = cwd;
+		this.env = env;
 	}
 
 	run(): Promise<ProcessResult> {
 		return new Promise((resolve, reject) => {
 			this.process = spawnChild(this.command, this.args, {
 				cwd: this.cwd || process.cwd(),
+				env: this.env,
 				shell: true,
 				stdio: 'pipe',
 			});

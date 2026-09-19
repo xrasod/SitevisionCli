@@ -310,3 +310,47 @@ test('a short content pane clips the overview instead of squeezing rows', t => {
 	t.false(frame.includes('signing user'));
 	t.is(frame.split('\n').length, 6);
 });
+
+test('an invalid new app name keeps the prompt open and says why', async t => {
+	const {root, apps} = workspace(['Alpha']);
+	const {stdin, lastFrame} = render(
+		<Shell apps={apps} workspaceRoot={root} version="9.9.9" />,
+	);
+	await delay(20);
+	stdin.write('\r');
+	await delay(20);
+	stdin.write('/');
+	await delay(20);
+	stdin.write('new app');
+	await delay(20);
+	stdin.write('\r');
+	await delay(30);
+	t.true(lastFrame()?.includes('Name of the new app'));
+
+	stdin.write('test test');
+	await delay(20);
+	stdin.write('\r');
+	await delay(30);
+	const refused = lastFrame() ?? '';
+	t.true(refused.includes('Name of the new app'), 'still asking');
+	t.true(refused.includes('test test'), 'what was typed is kept');
+	t.true(refused.includes("can't have spaces"));
+	t.true(refused.includes('Try "test-test"'));
+
+	// Capitals only get a nudge: shown once, and Enter again keeps the name.
+	for (let i = 0; i < 9; i++) stdin.write('\u007F');
+	await delay(20);
+	stdin.write('MyApp');
+	await delay(20);
+	stdin.write('\r');
+	await delay(30);
+	const nudged = lastFrame() ?? '';
+	t.true(nudged.includes('Name of the new app'), 'still asking');
+	t.true(nudged.includes('Try "my-app"'));
+	t.false(nudged.includes('✗'));
+	stdin.write('\r');
+	await delay(30);
+	t.true(lastFrame()?.includes('Create it in folder'));
+	stdin.write('\u001B');
+	await delay(30);
+});

@@ -205,16 +205,33 @@ async function runShell(
 			process.stdout.write('\x1b[2J\x1b[H');
 		}
 
-		const app = render(
-			<Shell
-				apps={apps}
-				workspaceRoot={workspaceRoot}
-				version={pkg.version}
-				minimal={cli.flags.minimal}
-				updatedFrom={updatedFrom}
-			/>,
-		);
-		await app.waitUntilExit();
+		// A handover unmounts the shell, runs its job on the normal screen with
+		// the terminal to itself, and starts the shell again.
+		for (;;) {
+			let job: (() => Promise<void>) | undefined;
+			const app = render(
+				<Shell
+					apps={apps}
+					workspaceRoot={workspaceRoot}
+					version={pkg.version}
+					minimal={cli.flags.minimal}
+					updatedFrom={updatedFrom}
+					handover={next => {
+						job = next;
+						app.unmount();
+					}}
+				/>,
+			);
+			// eslint-disable-next-line no-await-in-loop
+			await app.waitUntilExit();
+			if (!job) break;
+			process.stdout.write('\x1b[?1049l');
+			// eslint-disable-next-line no-await-in-loop
+			await job();
+			if (workspaceRoot) apps = discoverApps(workspaceRoot);
+			updatedFrom = undefined;
+			process.stdout.write('\x1b[?1049h\x1b[2J\x1b[H');
+		}
 	} finally {
 		process.stdout.write('\x1b[?1049l');
 	}

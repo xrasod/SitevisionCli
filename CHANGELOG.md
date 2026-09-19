@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.0.0-beta.32
+
+- Sitevision CLI can now create new apps. **New app** in the command palette
+  runs Sitevision's own `create-sitevision-app` as a managed experience and
+  guides you through the setup: pick a name and a folder, then answer the
+  tool's questions right in `svc`. What your workspace already knows (domain,
+  site name, username) is filled in for you, and passwords never end up in a
+  file.
+- When the app is created, `svc` fills in its manifest (the name, plus author
+  and help URL from the workspace's `package.json`) and offers to create the
+  addon on the site, so the app is ready for its first deploy.
+- If the tool cannot be run this way, `svc` hands it the terminal and picks up
+  again when it is done.
+- The Config tab has a MANIFEST section for editing `manifest.json`: id,
+  version, name, description, author and help URL, one row per language for
+  localized fields. Comments and formatting in the file are kept.
+- `y` (sync `package.json`) now also mirrors the manifest's `version`,
+  `description` and `author` into the app's `package.json`. An app whose
+  `package.json` lacks them shows as out of sync until `y` is pressed.
+
 ## 1.0.0-beta.31
 
 - The help panel (`?`) now starts with a short guide to the pane you are in:

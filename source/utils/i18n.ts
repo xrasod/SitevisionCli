@@ -254,6 +254,34 @@ const sv: Record<string, string> = {
 	'blank = prompt each run': 'tomt = fråga varje gång',
 	SIGNING: 'SIGNERING',
 	MANIFEST: 'MANIFEST',
+	// New app
+	'Name of the new app': 'Namn på den nya appen',
+	'Create it in folder': 'Skapa den i mappen',
+	'Other folder…': 'Annan mapp…',
+	'Type a name for the app, for example my-new-app.':
+		'Skriv ett namn på appen, till exempel min-nya-app.',
+	'Try "{suggestion}".': 'Prova "{suggestion}".',
+	"An app name can't have spaces.":
+		'Ett appnamn kan inte innehålla mellanslag.',
+	"An app name can't contain {chars}: it becomes the folder, the package name and the app id.":
+		'Ett appnamn kan inte innehålla {chars}: det blir mappen, paketnamnet och appens id.',
+	'Lowercase is safer: npm expects it, and "{name}" and "{lower}" are one folder on macOS and Windows but two on Linux. Try "{suggestion}", or press Enter again to keep "{name}".':
+		'Gemener är säkrare: npm förväntar sig det, och "{name}" och "{lower}" är samma mapp på macOS och Windows men två på Linux. Prova "{suggestion}", eller tryck Enter igen för att behålla "{name}".',
+	'Start the name with a letter or a digit.':
+		'Börja namnet med en bokstav eller en siffra.',
+	'{dir} already exists. Pick another name, or keep it and choose a different folder next.':
+		'{dir} finns redan. Välj ett annat namn, eller behåll det och välj en annan mapp i nästa steg.',
+	'creating {app}: installing, questions follow':
+		'skapar {app}: installerar, frågor kommer strax',
+	'The scaffolder could not be run from here':
+		'Verktyget kunde inte köras härifrån',
+	'creating {app} failed, see the log': 'kunde inte skapa {app}, se loggen',
+	'{app} created in {dir}': '{app} skapad i {dir}',
+	'{app} created': '{app} skapad',
+	'Create the addon "{addon}" on {domain} now?':
+		'Skapa tillägget "{addon}" på {domain} nu?',
+	'↑↓ move · Space toggle · Enter submit · Esc cancel':
+		'↑↓ flytta · Mellanslag markera · Enter skicka · Esc avbryt',
 	'App id': 'App-id',
 	Version: 'Version',
 	Name: 'Namn',

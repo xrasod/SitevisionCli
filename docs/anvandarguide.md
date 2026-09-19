@@ -138,6 +138,32 @@ lösenord i klartext hittas).
 Dev och watch fortsätter köra i bakgrunden medan du byter app. Flera appar kan
 köra samtidigt.
 
+### Skapa en ny app
+
+**Ny app** i kommandopaletten (`/`) skapar en app med Sitevisions eget verktyg,
+`npx @sitevision/create-sitevision-app <namn>`. `svc` frågar efter namnet och
+mappen den ska skapas i, kör verktyget som en uppgift (utdata finns i fliken
+**Logg**) och visar verktygets frågor allteftersom. Det verktyget frågar är det
+du får svara på; två saker skiljer sig från att köra det för hand:
+
+- Domän, webbplatsnamn, användarnamn och HTTP-inställningen besvaras från
+  arbetsytans konfiguration när de finns där.
+- Lösenordsfrågan hoppas över. Lösenord hör hemma i nyckelringen, inte i appens
+  `.dev_properties.json`.
+
+När verktyget är klart byter `svc` ut mallens platshållare i `manifest.json`:
+namnet blir appens namn, och `author` och `helpUrl` hämtas från `author` och
+`homepage` i `package.json` i arbetsytans rot när de är satta. I en arbetsyta
+krymps appens `.dev_properties.json` till det som skiljer sig från den
+gemensamma konfigurationen (oftast ingenting, så den tas bort) och
+tilläggsnamnet flyttas till appens `package.json`. Den nya appen väljs och `svc`
+erbjuder sig att skapa dess tillägg på webbplatsen.
+
+Går verktyget inte att styra så här (en framtida version kan ställa sina frågor
+på ett annat sätt, och Node äldre än 22.15 kan inte haka i det) kliver `svc` åt
+sidan och kör samma kommando i den vanliga terminalen, kommer sedan tillbaka och
+fyller i manifestet på samma sätt.
+
 ### Kompakt layout
 
 `svc --minimal`, eller en terminal smalare än 100 kolumner, ger en kompakt

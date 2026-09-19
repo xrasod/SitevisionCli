@@ -137,6 +137,32 @@ Only available from the command palette (`/`): **Add environment**,
 Dev and watch keep running in the background while you move between apps.
 Several apps can run at the same time.
 
+### Creating a new app
+
+**New app** in the command palette (`/`) scaffolds an app with Sitevision's own
+tool, `npx @sitevision/create-sitevision-app <name>`. `svc` asks for the name
+and the folder to create it in, runs the tool as a task (its output is in the
+**Log** tab), and shows the tool's questions as they come. Whatever the tool
+asks is what you are asked; two things differ from running it by hand:
+
+- Domain, site name, username and the HTTP setting are answered from the
+  workspace config when it has them.
+- The password question is skipped. Passwords belong in the keychain, not in
+  the app's `.dev_properties.json`.
+
+When the tool is done, `svc` replaces the template's placeholders in
+`manifest.json`: the name becomes the app name, and `author` and `helpUrl` come
+from `author` and `homepage` in the workspace root's `package.json` when they
+are set. In a workspace the app's `.dev_properties.json` is reduced to what
+differs from the shared config (usually nothing, so it is removed) and the addon
+name moves to the app's `package.json`. The new app is selected and `svc`
+offers to create its addon on the site.
+
+If the tool cannot be driven this way (a future version may ask its questions
+differently, and Node older than 22.15 cannot hook into it), `svc` steps aside
+and runs the same command on the normal terminal, then comes back and fills in
+the manifest the same way.
+
 ### Compact layout
 
 `svc --minimal`, or any terminal narrower than 100 columns, uses a compact

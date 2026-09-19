@@ -49,7 +49,8 @@ export type TaskKind =
 	| 'sign'
 	| 'deploy'
 	| 'activate'
-	| 'install';
+	| 'install'
+	| 'create';
 export type TaskStatus = 'running' | 'success' | 'error' | 'stopped';
 export type LogLevel = 'info' | 'ok' | 'warn' | 'error';
 
@@ -112,9 +113,12 @@ export function clearFinished(): void {
 
 type Log = (tag: string, text: string, level?: LogLevel) => void;
 
-function createTask(
+export function createTask(
 	kind: TaskKind,
-	project: ProjectInfo,
+	project: {
+		root: string;
+		manifest: Pick<ProjectInfo['manifest'], 'name' | 'id'>;
+	},
 	label: string,
 	stop: () => void = () => {},
 ): {
@@ -162,7 +166,7 @@ function createTask(
 	return {task, log, finish};
 }
 
-function setPhase(task: Task, phase: string) {
+export function setPhase(task: Task, phase: string) {
 	task.phase = phase;
 	notify();
 }

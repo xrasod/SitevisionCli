@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import {useCallback, useEffect, useMemo, useReducer, useState} from 'react';
 import {Box, Text, useApp, useInput, useStdout} from 'ink';
@@ -16,8 +17,18 @@ import {
 import {
 	appGroup,
 	configIncomplete,
+	discoverApps,
 	needsOnboarding,
 } from '../utils/workspace.js';
+import {
+	createAppInTerminal,
+	isEmptyOrMissing,
+	seedNewApp,
+	startCreateApp,
+	appNameAdvice,
+	appNameProblem,
+	type Ask,
+} from '../utils/create-app.js';
 import {
 	listAddons,
 	listExecutables,
@@ -71,6 +82,7 @@ import {
 import {t} from '../utils/i18n.js';
 import {
 	actionForKey,
+	actions,
 	authState,
 	resolveDeployConfig,
 	type Action,
@@ -98,7 +110,25 @@ type Overlay =
 	| {kind: 'settings'}
 	| {kind: 'help'}
 	| {kind: 'changelog'; since?: string}
-	| {kind: 'prompt'; label: string; resolve: (v: string | null) => void};
+	| {
+			kind: 'prompt';
+			label: string;
+			initial?: string;
+			// Returns what is wrong with the value; the prompt then stays open.
+			validate?: (value: string) => string | undefined;
+			// Like validate, but shown once: Enter on the same value keeps it.
+			advise?: (value: string) => string | undefined;
+			error?: string;
+			resolve: (v: string | null) => void;
+	  }
+	| {
+			kind: 'choice';
+			label: string;
+			choices: string[];
+			multi: boolean;
+			initial: number[];
+			resolve: (v: number[] | null) => void;
+	  };
 
 interface Props {
 	apps: ProjectInfo[];
@@ -108,6 +138,8 @@ interface Props {
 	minimal?: boolean;
 	// Set on the first run after an upgrade: opens the changelog since then.
 	updatedFrom?: string;
+	// Leave the shell, give `job` the real terminal, then start the shell again.
+	handover?: (job: () => Promise<void>) => void;
 }
 
 function useSize() {
@@ -131,6 +163,7 @@ export function Shell({
 	version,
 	minimal = false,
 	updatedFrom,
+	handover,
 }: Props) {
 	const {exit} = useApp();
 	const {columns, rows} = useSize();
@@ -155,6 +188,7 @@ export function Shell({
 	const [versionRow, setVersionRow] = useState(0);
 	const [logScroll, setLogScroll] = useState(0);
 	const [logWrap, setLogWrap] = useState(false);
+	const [offerAddon, setOfferAddon] = useState<string>();
 	const [notice, setNotice] = useState<{
 		text: string;
 		level: 'info' | 'ok' | 'warn' | 'error';
@@ -302,6 +336,215 @@ export function Shell({
 				writeSvcConfig(configRoot, {environment: clean});
 				notify(t('environment {env} added', {env: clean}), 'ok');
 			},
+			async createApp() {
+				const promptText = async (
+					label: string,
+					initial?: string,
+					validate?: (value: string) => string | undefined,
+					error?: string,
+					advise?: (value: string) => string | undefined,
+				) =>
+					new Promise<string | null>(resolve => {
+						setOverlay({
+							kind: 'prompt',
+							label,
+							initial,
+							validate,
+							advise,
+							error,
+							resolve,
+						});
+					});
+				const base = workspaceRoot ?? path.dirname(rawProject.root);
+				const suggested = workspaceRoot
+					? path.relative(workspaceRoot, path.dirname(rawProject.root)) || '.'
+					: base;
+				// Asked again, with the reason, until the name is free in that folder.
+				let name = '';
+				let parentDir = '';
+				let appDir = '';
+				let taken: string | undefined;
+				for (;;) {
+					// eslint-disable-next-line no-await-in-loop
+					const typed = await promptText(
+						t('Name of the new app'),
+						name,
+						appNameProblem,
+						taken,
+						appNameAdvice,
+					);
+					if (typed === null) return;
+					name = typed.trim();
+
+					// Folders that already hold apps, then a way to type another one.
+					const folders = [
+						...new Set([
+							suggested,
+							...apps.map(app =>
+								workspaceRoot
+									? path.relative(base, path.dirname(app.root)) || '.'
+									: path.dirname(app.root),
+							),
+						]),
+					].toSorted((a, b) => a.localeCompare(b));
+					// eslint-disable-next-line no-await-in-loop
+					const folderPick = await new Promise<number[] | null>(resolve => {
+						setOverlay({
+							kind: 'choice',
+							label: t('Create it in folder'),
+							choices: [...folders, t('Other folder…')],
+							multi: false,
+							initial: [folders.indexOf(suggested)],
+							resolve,
+						});
+					});
+					if (!folderPick) return;
+					const folder =
+						folders[folderPick[0]!] ??
+						// eslint-disable-next-line no-await-in-loop
+						(await promptText(t('Create it in folder'), suggested));
+					if (folder === null) return;
+					parentDir = path.resolve(base, folder.trim() || '.');
+					appDir = path.join(parentDir, name);
+					if (isEmptyOrMissing(appDir)) break;
+					taken = t(
+						'{dir} already exists. Pick another name, or keep it and choose a different folder next.',
+						{dir: path.relative(base, appDir)},
+					);
+				}
+
+				// Both were checked above, so a run that leaves no app may remove them.
+				const madeParent = !fs.existsSync(parentDir);
+				const discard = () => {
+					fs.rmSync(appDir, {recursive: true, force: true});
+					if (madeParent && isEmptyOrMissing(parentDir))
+						fs.rmSync(parentDir, {recursive: true, force: true});
+				};
+
+				fs.mkdirSync(parentDir, {recursive: true});
+				const known = (
+					workspaceRoot
+						? readWorkspaceDevProperties(workspaceRoot)
+						: rawProject.devProperties
+				) as Record<string, unknown> | undefined;
+				const ask: Ask = async question => {
+					// svc keeps passwords in the keychain, never in the app's file.
+					if (question.name === 'password') return {skip: true};
+					const shared = known?.[question.name];
+					if (
+						!question.error &&
+						['domain', 'siteName', 'username', 'useHTTPForDevDeploy'].includes(
+							question.name,
+						) &&
+						shared !== undefined &&
+						shared !== ''
+					)
+						return {value: shared};
+
+					const label = question.error
+						? `${question.message} (${question.error})`
+						: question.message;
+					if (question.type === 'confirm') {
+						const value = await new Promise<boolean>(resolve => {
+							setOverlay({kind: 'confirm', message: label, resolve});
+						});
+						return {value};
+					}
+
+					if (question.type === 'password') {
+						const secret = await new Promise<{password: string} | null>(
+							resolve => {
+								setOverlay({kind: 'password', label, resolve});
+							},
+						);
+						return secret && {value: secret.password};
+					}
+
+					if (question.choices.length > 0) {
+						const multi = question.type === 'checkbox';
+						const picked = await new Promise<number[] | null>(resolve => {
+							setOverlay({
+								kind: 'choice',
+								label,
+								choices: question.choices,
+								multi,
+								initial: [question.default ?? []].flat() as number[],
+								resolve,
+							});
+						});
+						return picked && {value: multi ? picked : picked[0]};
+					}
+
+					const initial =
+						question.default ?? (question.name === 'addonName' ? name : '');
+					const value = await promptText(
+						label,
+						typeof initial === 'string' ? initial : JSON.stringify(initial),
+					);
+					return value === null ? null : {value};
+				};
+
+				notify(t('creating {app}: installing, questions follow', {app: name}));
+				setTab('log');
+				const {done} = startCreateApp({name, parentDir, ask});
+				let outcome = await done;
+				setOverlay(null);
+				if (outcome === 'unmanaged') {
+					if (!handover) {
+						notify(t('The scaffolder could not be run from here'), 'error');
+						return;
+					}
+
+					fs.rmSync(appDir, {recursive: true, force: true});
+					handover(async () => {
+						if (await createAppInTerminal(name, parentDir))
+							seedNewApp(appDir, workspaceRoot);
+						else discard();
+					});
+					return;
+				}
+
+				if (outcome !== 'created') {
+					discard();
+					if (outcome === 'failed')
+						notify(
+							t('creating {app} failed, see the log', {app: name}),
+							'error',
+						);
+					return;
+				}
+
+				try {
+					seedNewApp(appDir, workspaceRoot);
+				} catch (error) {
+					notify(
+						error instanceof Error ? error.message : String(error),
+						'warn',
+					);
+					outcome = 'failed';
+				}
+
+				if (
+					!workspaceRoot ||
+					path.relative(workspaceRoot, appDir).startsWith('..')
+				) {
+					notify(t('{app} created in {dir}', {app: name, dir: appDir}), 'ok');
+					return;
+				}
+
+				const found = discoverApps(workspaceRoot);
+				setApps(found);
+				setFilter('');
+				setSelected(
+					Math.max(
+						0,
+						found.findIndex(app => app.root === appDir),
+					),
+				);
+				if (outcome === 'created')
+					notify(t('{app} created', {app: name}), 'ok');
+				setOfferAddon(appDir);
+			},
 			openWorkspaceSettings: workspaceRoot
 				? () => {
 						setSelected(apps.length);
@@ -416,14 +659,40 @@ export function Shell({
 			}),
 		[],
 	);
+	// A freshly created app: once it is the selected project, offer its addon.
+	useEffect(() => {
+		if (!offerAddon || project.root !== offerAddon || overlay) return;
+		setOfferAddon(undefined);
+		const addon = project.devProperties?.addonName;
+		const action = actions.find(entry => entry.id === 'create-addon');
+		if (!addon || !action || !project.devProperties?.domain) return;
+		void context
+			.confirm(
+				t('Create the addon "{addon}" on {domain} now?', {
+					addon,
+					domain: project.devProperties.domain,
+				}),
+			)
+			.then(yes => {
+				if (yes) run(action);
+			});
+	}, [offerAddon, project, overlay, context, run]);
+
 	const loadAddons = useCallback(async () => {
 		const config = await resolveDeployConfig(context);
 		return config ? listAddons(config) : {error: t('No credentials.')};
 	}, [context]);
 
 	const appTasks = tasks.filter(task => task.appRoot === project.root);
+	// A new app is not in the list while it is being created, so its log shows
+	// wherever you are; a failed one stays up until another task runs.
+	const creating = tasks.findLast(task => task.kind === 'create');
 	const logTask: Task | undefined =
-		appTasks.find(task => task.status === 'running') ?? appTasks.at(-1);
+		appTasks.find(task => task.status === 'running') ??
+		(creating?.status === 'running' ||
+		(creating?.status === 'error' && creating === tasks.at(-1))
+			? creating
+			: appTasks.at(-1));
 
 	useInput(
 		(raw, key) => {
@@ -969,10 +1238,33 @@ function renderOverlay(
 		case 'prompt':
 			return (
 				<TextPrompt
+					key={overlay.label}
 					label={overlay.label}
+					initial={overlay.initial}
+					validate={overlay.validate}
+					advise={overlay.advise}
+					error={overlay.error}
 					onSubmit={value => {
 						closeOverlay();
 						overlay.resolve(value);
+					}}
+					onCancel={() => {
+						closeOverlay();
+						overlay.resolve(null);
+					}}
+				/>
+			);
+		case 'choice':
+			return (
+				<ChoicePrompt
+					key={overlay.label}
+					label={overlay.label}
+					choices={overlay.choices}
+					multi={overlay.multi}
+					initial={overlay.initial}
+					onSubmit={picked => {
+						closeOverlay();
+						overlay.resolve(picked);
 					}}
 					onCancel={() => {
 						closeOverlay();
@@ -1045,20 +1337,92 @@ function Confirm({
 	);
 }
 
-function TextPrompt({
+function ChoicePrompt({
 	label,
+	choices,
+	multi,
+	initial,
 	onSubmit,
 	onCancel,
 }: {
 	label: string;
+	choices: string[];
+	multi: boolean;
+	initial: number[];
+	onSubmit: (picked: number[]) => void;
+	onCancel: () => void;
+}) {
+	const [cursor, setCursor] = useState(multi ? 0 : (initial[0] ?? 0));
+	const [checked, setChecked] = useState(() => new Set(multi ? initial : []));
+	useInput((input, key) => {
+		if (key.escape) onCancel();
+		else if (key.return)
+			onSubmit(multi ? [...checked].toSorted((a, b) => a - b) : [cursor]);
+		else if (key.upArrow)
+			setCursor(c => (c - 1 + choices.length) % choices.length);
+		else if (key.downArrow) setCursor(c => (c + 1) % choices.length);
+		else if (multi && input === ' ') {
+			setChecked(current => {
+				const next = new Set(current);
+				if (!next.delete(cursor)) next.add(cursor);
+				return next;
+			});
+		}
+	});
+	return (
+		<Box flexDirection="column" paddingX={1}>
+			<Text bold>{label}</Text>
+			{choices.map((choice, i) => (
+				<Text
+					key={choice}
+					color={i === cursor ? ACCENT : undefined}
+					bold={i === cursor}
+				>
+					{i === cursor ? '▸ ' : '  '}
+					{multi ? (checked.has(i) ? '◉ ' : '◯ ') : ''}
+					{choice}
+				</Text>
+			))}
+			<Text dimColor>
+				{multi
+					? t('↑↓ move · Space toggle · Enter submit · Esc cancel')
+					: t('↑↓ move · Enter select · Esc cancel')}
+			</Text>
+		</Box>
+	);
+}
+
+function TextPrompt({
+	label,
+	initial = '',
+	validate,
+	advise,
+	error,
+	onSubmit,
+	onCancel,
+}: {
+	label: string;
+	initial?: string;
+	validate?: (value: string) => string | undefined;
+	advise?: (value: string) => string | undefined;
+	error?: string;
 	onSubmit: (value: string) => void;
 	onCancel: () => void;
 }) {
-	const [value, setValue] = useState('');
+	const [value, setValue] = useState(initial);
+	const [problem, setProblem] = useState(error);
+	// The value an advice was shown for; submitting it again keeps it.
+	const [advised, setAdvised] = useState<string>();
+	const advice = advised === value ? advise?.(value) : undefined;
 	useInput((input, key) => {
 		if (key.escape) onCancel();
-		else if (key.return) onSubmit(value);
-		else if (key.backspace || key.delete) setValue(v => v.slice(0, -1));
+		else if (key.return) {
+			const invalid = validate?.(value);
+			setProblem(invalid);
+			if (invalid) return;
+			if (advise?.(value) && advised !== value) setAdvised(value);
+			else onSubmit(value);
+		} else if (key.backspace || key.delete) setValue(v => v.slice(0, -1));
 		else if (input && !key.ctrl && !key.meta) setValue(v => v + input);
 	});
 	return (
@@ -1069,6 +1433,8 @@ function TextPrompt({
 				{value}
 				<Text inverse> </Text>
 			</Text>
+			{problem && <Text color="red">✗ {problem}</Text>}
+			{!problem && advice && <Text color="yellow">{advice}</Text>}
 			<Text dimColor>{t('Press Enter to submit, Esc to cancel')}</Text>
 		</Box>
 	);
