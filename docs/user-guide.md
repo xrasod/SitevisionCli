@@ -264,6 +264,16 @@ The **SOURCE** column shows where each value comes from:
 - `manifest.json` – a field of the app's manifest
 - `keychain` – a secret is stored
 - `✗ required` – missing
+- `≠ manifest` – on **Addon name**: it is none of the manifest's names
+
+The addon name and the manifest name are two different things. The addon is an
+object in the site's Addon Repository, and every deploy goes to it by name; the
+manifest name is a label inside the zip. `svc` never changes one to match the
+other, it only points the difference out, here and under **PACKAGE.JSON SYNC**.
+To make them match, rename the addon in Sitevision (Addons, General, Settings)
+and pick it again with `Ctrl+O`. For a RESTApp the addon name is part of its
+endpoint URL, so renaming it changes that URL. The hint is not shown on a
+non-base environment, where a different addon name is usually intended.
 
 The **MANIFEST** section edits `manifest.json` itself: id, version, name,
 description, author and help URL. A localized name or description gets one row
@@ -428,8 +438,15 @@ accounts.
 4. `svc` exchanges the code for an access token and, when the provider issues
    one, a refresh token which goes into the keychain.
 5. Next time, `svc` uses the refresh token silently and no browser opens. If
-   the refresh token has expired or been revoked it is deleted and the browser
-   login runs again.
+   the provider rejects the refresh token (expired or revoked) it is deleted and
+   the browser login runs again. A network error or a server error leaves it
+   in place.
+
+Both endpoints must be `https` URLs, and the token endpoint must be on the
+site's own domain (the `domain` of the environment). The endpoints can come
+from a committed `package.json`, and the refresh token and client secret are
+only ever sent to the site they were stored for. Plain `http` is accepted only
+together with `useHTTPForDevDeploy`.
 
 If the browser does not open, the login screen prints the URL to open by hand.
 `Esc` cancels and frees the port. The login times out after five minutes.
@@ -624,7 +641,12 @@ environments is only available in the shell.
 | Not bundled                              | `src/` and `static/` copied as-is.                                                         |
 
 The result is `dist/<manifest id>.zip`. Run `i` (`npm install`) first if
-dependencies are missing; the Overview tab shows it.
+dependencies are missing; the Overview tab shows it. Dependencies hoisted to
+the repository root (npm, pnpm or yarn workspaces) are found too.
+
+The zip must contain a `manifest.json`, or the build fails. Keep it in `static/`
+(or `src/` for an app that is not bundled); a `manifest.json` at the app root is
+copied in when neither folder has one.
 
 ### Sign
 
@@ -645,6 +667,10 @@ Both build once, then watch `src`, `static`, `i18n`, `resource`, `config` and
 
 - If `signingUsername` is set, each build is signed.
 - Dev then deploys (force) each build. Watch does not.
+- Builds never overlap: changes made during a build, sign or deploy are picked
+  up in one more run afterwards, so the last save is what ends up deployed.
+- With the project's own `webpack.config.js`, webpack watches what it bundles;
+  `svc` watches `static/` and `manifest.json` next to it.
 - Output goes to the Log tab. `K` stops.
 
 ## 8. Direct commands and CI
@@ -652,17 +678,54 @@ Both build once, then watch `src`, `static`, `i18n`, `resource`, `config` and
 Every command runs in the current app directory and uses the base environment.
 
 ```bash
-svc build
+svc build [--no-zip]
 svc sign
 svc deploy [--force] [--production [--activate]]
 svc dev [--signed]
 svc watch [--signed]
 svc info
+svc setup-signing
 ```
 
+| Flag           | Short | Command        | Effect                                             |
+| -------------- | ----- | -------------- | -------------------------------------------------- |
+| `--no-zip`     |       | `build`        | Build into `build/` and leave no zip               |
+| `--force`      | `-f`  | `deploy`       | Overwrite an existing version with the same number |
+| `--production` | `-p`  | `deploy`       | Upload the signed zip instead of the dev zip       |
+| `--activate`   | `-a`  | `deploy`       | With `--production`: activate the uploaded version |
+| `--signed`     | `-s`  | `dev`, `watch` | Sign after each build                              |
+| `--minimal`    |       | (shell)        | Compact layout, see [3](#3-the-shell)              |
+
+An unknown flag is an error, so a misspelt `--production` never turns into a
+dev deploy.
+
 - `svc deploy --production` uploads the signed zip. It only activates with
-  `--activate` (the shell always activates on production).
+  `--activate` (the shell always activates on production). When `--activate`
+  was asked for and the activation fails, the command fails, even though the
+  upload went through.
 - `svc sign` asks whether to use the signing password saved in the keychain.
+- `svc setup-signing` asks for the signing username and certificate name and
+  saves them in `.dev_properties.json`. Nothing else in the file is touched.
+- Build, sign and deploy print their log line by line and then exit by
+  themselves. They run the same steps as the shell's `b`, `s` and `p`.
+
+**Exit codes**
+
+| Code  | Meaning                                                         |
+| ----- | --------------------------------------------------------------- |
+| `0`   | Done                                                            |
+| `1`   | Failed, or something needed was missing (config, password, zip) |
+| `2`   | Unknown flag                                                    |
+| `130` | A password prompt was cancelled with `Ctrl+C`                   |
+
+So `svc build && svc sign && svc deploy` stops at the first step that fails.
+
+**Without a terminal**
+
+All commands run with piped input and output. Nothing is asked then: a missing
+password is an error (set the variables below), and an `oauth2` or `cookie`
+login that would need a browser is an error too. The check for a newer `svc`
+version is skipped when output is not a terminal or `CI` is set.
 
 **Environment variables**
 
@@ -673,10 +736,13 @@ svc info
 | `SITEVISION_ACCESS_TOKEN`              | OAuth2 bearer token (when `authMethod` is `oauth2`)                             |
 | `SITEVISION_SESSION_COOKIE`            | Cookie header (when `authMethod` is `cookie`)                                   |
 | `SITEVISION_APP_ID_PREFIX` / `_SUFFIX` | Added around the manifest id in zip names; `APP_ID_PREFIX` / `_SUFFIX` work too |
-| `APP_ID_PREFIX` / `APP_ID_SUFFIX`      | The same for builds delegated to sitevision-scripts                             |
+| `SVC_NO_KEYCHAIN`                      | `1` turns the OS keychain off: nothing is read from it or saved to it           |
+| `CI`                                   | When set, the check for a newer `svc` version is skipped                        |
 | `XDG_CONFIG_HOME`                      | Location of the global settings                                                 |
 
-Environment variables are never written anywhere.
+Environment variables are never written anywhere. `SVC_NO_KEYCHAIN=1` suits CI
+machines without a keychain service; passwords then come from the variables
+above.
 
 **CI example (basic auth)**
 
@@ -692,18 +758,25 @@ with `basic` is usually the simplest choice for CI.
 
 ## 9. Troubleshooting
 
-| Message                                                        | What to do                                                                                                                               |
-| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| "No Sitevision apps found here."                               | Run inside an app, or at a repository root with apps at most three levels down.                                                          |
-| "Unauthorized. Check username and password."                   | Wrong deploy password. **Log out** in the palette, then deploy again to be asked.                                                        |
-| "Unauthorized. The access token was rejected or has expired."  | Press `l` to log in again.                                                                                                               |
-| "Unauthorized. The session cookie was rejected or has expired" | Press `l`; a new browser login runs.                                                                                                     |
-| "Zip not found … Run build first."                             | `b` first. For production: `b` then `s`.                                                                                                 |
-| "Conflict. Addon already exists."                              | Use force deploy (`P` / `--force`).                                                                                                      |
-| "Dev never deploys to a production environment"                | Switch environment with `v`, or use `w` (watch).                                                                                         |
-| Keys do nothing                                                | Focus is in the navigator, where typing filters. Press `Enter` or `Tab`.                                                                 |
-| Password prompt every time                                     | Tick **Save to OS keychain** at the prompt, or enter the password in the Config tab.                                                     |
-| "No token/cookie available" from `svc dev`                     | Run dev from the shell instead, or set `SITEVISION_ACCESS_TOKEN` / `SITEVISION_SESSION_COOKIE`. See the table in [5](#5-authentication). |
+| Message                                                        | What to do                                                                                                                                    |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| "No Sitevision apps found here."                               | Run inside an app, or at a repository root with apps at most three levels down.                                                               |
+| "Unauthorized. Check username and password."                   | Wrong deploy password. **Log out** in the palette, then deploy again to be asked.                                                             |
+| "Unauthorized. The access token was rejected or has expired."  | Press `l` to log in again.                                                                                                                    |
+| "Unauthorized. The session cookie was rejected or has expired" | Press `l`; a new browser login runs.                                                                                                          |
+| "Zip not found … Run build first."                             | `b` first. For production: `b` then `s`.                                                                                                      |
+| "Conflict. Addon already exists."                              | Use force deploy (`P` / `--force`).                                                                                                           |
+| "Dev never deploys to a production environment"                | Switch environment with `v`, or use `w` (watch).                                                                                              |
+| Keys do nothing                                                | Focus is in the navigator, where typing filters. Press `Enter` or `Tab`.                                                                      |
+| Password prompt every time                                     | Tick **Save to OS keychain** at the prompt, or enter the password in the Config tab.                                                          |
+| "No token/cookie available" from `svc dev`                     | Run dev from the shell instead, or set `SITEVISION_ACCESS_TOKEN` / `SITEVISION_SESSION_COOKIE`. See the table in [5](#5-authentication).      |
+| "Deploy config is missing …"                                   | The named setting is empty for this app and environment. Press `e` and fill it in, or add it to `.dev_properties.json`.                       |
+| "Skipped: … manifest.json is missing …"                        | That app's manifest lacks `id`, `version` or `type` (or is not valid JSON), so it is left out of the workspace. Fix the manifest and restart. |
+| "… has no manifest.json, so the zip would not be an app"       | Put `manifest.json` in `static/` (or `src/` for an app that is not bundled).                                                                  |
+| "Could not save to the OS keychain"                            | No keychain service is reachable, so you will be asked again next time. On CI, set the password variables and `SVC_NO_KEYCHAIN=1`.            |
+| "OAuth2 token endpoint is on …, not on …"                      | The token endpoint must be on the site's own domain. See [oauth2](#method-oauth2).                                                            |
+| "Deployed successfully but activation failed"                  | The new version is uploaded but the old one is still active. Activate it from the Versions tab (`a`), or fix the permission and deploy again. |
+| `≠ manifest` on Addon name                                     | The addon name is none of the manifest's names. See [Editing in the Config tab](#editing-in-the-config-tab).                                  |
 
 ## Reference
 

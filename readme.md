@@ -72,17 +72,24 @@ that apply. `svc --minimal` gives a compact layout for small panes.
 
 ```bash
 svc                                   # interactive shell
-svc build                             # build to dist/<id>.zip
+svc build [--no-zip]                  # build to dist/<id>.zip
 svc sign                              # sign to dist/<id>-signed.zip
 svc deploy [--force]                  # deploy the zip
 svc deploy --production [--activate]  # deploy the signed zip
 svc dev [--signed]                    # build + deploy on change
 svc watch [--signed]                  # build on change, no deploy
 svc info                              # project information
+svc setup-signing                     # save the signing username and certificate
 ```
 
-Direct commands use the base environment. `SITEVISION_ACCESS_TOKEN` and
-`SITEVISION_SESSION_COOKIE` pass an OAuth2 token or session cookie for one run.
+Short flags: `-f` force, `-p` production, `-a` activate, `-s` signed. An unknown
+flag is an error.
+
+Direct commands use the base environment, run without a terminal, and exit
+non-zero when a step fails, so `svc build && svc sign && svc deploy -p -a` is
+safe in CI. `SITEVISION_DEPLOY_PASSWORD` and `SITEVISION_SIGNING_PASSWORD`
+supply the passwords; `SITEVISION_ACCESS_TOKEN` and `SITEVISION_SESSION_COOKIE`
+pass an OAuth2 token or session cookie for one run.
 
 ## Configuration
 

@@ -11,7 +11,8 @@ type Store = Pick<
 	'getPassword' | 'setPassword' | 'deletePassword'
 >;
 
-// SVC_NO_KEYCHAIN=memory (the test suite): secrets live and die with the process.
+// SVC_NO_KEYCHAIN=1 turns the keychain off (documented, for CI). `memory` is
+// for the test suite only: secrets live and die with the process.
 const memory = new Map<string, string>();
 const memoryEntry = (account: string): Store => ({
 	getPassword: () => memory.get(account) ?? null,

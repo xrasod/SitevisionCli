@@ -410,7 +410,7 @@ async function main() {
 				console.log('\x1b[32m✓ Password moved to keychain.\x1b[0m\n');
 			} else {
 				console.log(
-					'\x1b[31mCould not access keychain; leaving the file unchanged.\x1b[0m\n',
+					'\x1b[31mCould not move the password; the file still holds it.\x1b[0m\n',
 				);
 			}
 		}

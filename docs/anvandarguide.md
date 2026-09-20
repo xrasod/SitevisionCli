@@ -265,6 +265,17 @@ Kolumnen **KÄLLA** visar var varje värde kommer ifrån:
 - `manifest.json` – ett fält i appens manifest
 - `nyckelring` – en hemlighet är sparad
 - `✗ krävs` – saknas
+- `≠ manifest` – på **Tilläggsnamn**: det är inget av manifestets namn
+
+Tilläggets namn och manifestets namn är två olika saker. Tillägget är ett objekt
+i webbplatsens tilläggsförråd, och varje driftsättning går dit via namnet;
+manifestets namn är en etikett inuti zip-filen. `svc` ändrar aldrig det ena för
+att matcha det andra, utan påpekar bara skillnaden, här och under
+**PACKAGE.JSON-SYNK**. För att få dem att stämma, byt namn på tillägget i
+Sitevision (Tillägg, Allmänt, Inställningar) och välj det igen med `Ctrl+O`. För
+en RESTApp ingår tilläggets namn i dess endpoint-URL, så ett namnbyte ändrar den
+adressen. Hinten visas inte i en miljö som inte är basmiljön, där ett annat
+tilläggsnamn oftast är avsiktligt.
 
 Sektionen **MANIFEST** redigerar själva `manifest.json`: id, version, namn,
 beskrivning, författare och hjälp-URL. Ett flerspråkigt namn eller en
@@ -429,8 +440,15 @@ SSO-konton.
 4. `svc` byter koden mot en åtkomsttoken och, om leverantören ger ut en, en
    refresh-token som sparas i nyckelringen.
 5. Nästa gång använder `svc` refresh-token i tysthet och ingen webbläsare
-   öppnas. Har refresh-token gått ut eller återkallats tas den bort och
-   inloggningen i webbläsaren körs igen.
+   öppnas. Avvisar leverantören refresh-token (utgången eller återkallad) tas
+   den bort och inloggningen i webbläsaren körs igen. Ett nätverksfel eller ett
+   serverfel låter den ligga kvar.
+
+Båda endpoints måste vara `https`-adresser, och token-endpointen måste ligga på
+webbplatsens egen domän (miljöns `domain`). Endpoints kan komma från en
+incheckad `package.json`, och refresh-token och klienthemlighet skickas bara
+till den webbplats de sparades för. Vanlig `http` godtas bara tillsammans med
+`useHTTPForDevDeploy`.
 
 Öppnas inte webbläsaren skriver inloggningsskärmen ut adressen så att du kan
 öppna den själv. `Esc` avbryter och frigör porten. Inloggningen avbryts efter fem
@@ -627,7 +645,12 @@ går bara i skalet.
 | Inte bundlad                               | `src/` och `static/` kopieras som de är.                                                   |
 
 Resultatet är `dist/<manifest-id>.zip`. Kör `i` (`npm install`) först om
-beroenden saknas; fliken Översikt visar det.
+beroenden saknas; fliken Översikt visar det. Beroenden som lyfts upp till
+repots rot (workspaces i npm, pnpm eller yarn) hittas också.
+
+Zip-filen måste innehålla en `manifest.json`, annars misslyckas bygget. Lägg den
+i `static/` (eller `src/` för en app som inte är bundlad); en `manifest.json` i
+appens rot kopieras in när ingen av mapparna har någon.
 
 ### Signera
 
@@ -648,6 +671,11 @@ och `manifest.json` och bygger om vid ändring.
 
 - Är `signingUsername` satt signeras varje bygge.
 - Dev driftsätter sedan (med tvång) varje bygge. Watch gör det inte.
+- Byggen överlappar aldrig: ändringar som görs under ett bygge, en signering
+  eller en driftsättning tas med i en körning till efteråt, så det som sparades
+  sist är det som hamnar på webbplatsen.
+- Med projektets egen `webpack.config.js` bevakar webpack det den paketerar;
+  `svc` bevakar `static/` och `manifest.json` vid sidan av.
 - Utdata hamnar i fliken Logg. `K` stoppar.
 
 ## 8. Direktkommandon och CI
@@ -655,17 +683,56 @@ och `manifest.json` och bygger om vid ändring.
 Alla kommandon körs i aktuell appkatalog och använder basmiljön.
 
 ```bash
-svc build
+svc build [--no-zip]
 svc sign
 svc deploy [--force] [--production [--activate]]
 svc dev [--signed]
 svc watch [--signed]
 svc info
+svc setup-signing
 ```
 
+| Flagga         | Kort | Kommando       | Effekt                                                     |
+| -------------- | ---- | -------------- | ---------------------------------------------------------- |
+| `--no-zip`     |      | `build`        | Bygg till `build/` och lämna ingen zip                     |
+| `--force`      | `-f` | `deploy`       | Skriv över en befintlig version med samma nummer           |
+| `--production` | `-p` | `deploy`       | Ladda upp den signerade zip-filen i stället för dev-zippen |
+| `--activate`   | `-a` | `deploy`       | Med `--production`: aktivera den uppladdade versionen      |
+| `--signed`     | `-s` | `dev`, `watch` | Signera efter varje bygge                                  |
+| `--minimal`    |      | (skalet)       | Kompakt layout, se [3](#3-skalet)                          |
+
+En okänd flagga är ett fel, så ett felstavat `--production` blir aldrig en
+dev-driftsättning.
+
 - `svc deploy --production` laddar upp den signerade zip-filen. Den aktiveras
-  bara med `--activate` (skalet aktiverar alltid i produktion).
+  bara med `--activate` (skalet aktiverar alltid i produktion). Om `--activate`
+  begärdes och aktiveringen misslyckas så misslyckas kommandot, även om
+  uppladdningen gick igenom.
 - `svc sign` frågar om signeringslösenordet i nyckelringen ska användas.
+- `svc setup-signing` frågar efter signeringsanvändare och certifikatnamn och
+  sparar dem i `.dev_properties.json`. Inget annat i filen rörs.
+- Build, sign och deploy skriver ut sin logg rad för rad och avslutar sedan
+  själva. De kör samma steg som skalets `b`, `s` och `p`.
+
+**Slutkoder**
+
+| Kod   | Betydelse                                                             |
+| ----- | --------------------------------------------------------------------- |
+| `0`   | Klart                                                                 |
+| `1`   | Misslyckades, eller något som behövs saknades (konfig, lösenord, zip) |
+| `2`   | Okänd flagga                                                          |
+| `130` | En lösenordsfråga avbröts med `Ctrl+C`                                |
+
+Alltså stannar `svc build && svc sign && svc deploy` vid första steget som
+misslyckas.
+
+**Utan terminal**
+
+Alla kommandon går att köra med omdirigerad in- och utdata. Då ställs inga
+frågor: ett saknat lösenord är ett fel (sätt variablerna nedan), och en
+`oauth2`- eller `cookie`-inloggning som skulle behöva en webbläsare är också ett
+fel. Kontrollen efter en nyare version av `svc` hoppas över när utdata inte är
+en terminal eller när `CI` är satt.
 
 **Miljövariabler**
 
@@ -676,10 +743,12 @@ svc info
 | `SITEVISION_ACCESS_TOKEN`              | OAuth2 bearer-token (när `authMethod` är `oauth2`)                              |
 | `SITEVISION_SESSION_COOKIE`            | Cookie-header (när `authMethod` är `cookie`)                                    |
 | `SITEVISION_APP_ID_PREFIX` / `_SUFFIX` | Läggs runt manifest-id i zip-namnet; `APP_ID_PREFIX` / `_SUFFIX` fungerar också |
-| `APP_ID_PREFIX` / `APP_ID_SUFFIX`      | Samma sak för byggen som lämnas över till sitevision-scripts                    |
+| `SVC_NO_KEYCHAIN`                      | `1` stänger av nyckelringen: inget läses därifrån och inget sparas dit          |
+| `CI`                                   | När den är satt hoppas kontrollen efter en nyare version av `svc` över          |
 | `XDG_CONFIG_HOME`                      | Plats för de globala inställningarna                                            |
 
-Miljövariabler skrivs aldrig någonstans.
+Miljövariabler skrivs aldrig någonstans. `SVC_NO_KEYCHAIN=1` passar CI-maskiner
+utan nyckelringstjänst; lösenorden kommer då från variablerna ovan.
 
 **CI-exempel (basic-auth)**
 
@@ -695,18 +764,25 @@ med `basic` är oftast det enklaste för CI.
 
 ## 9. Felsökning
 
-| Meddelande                                                     | Gör så här                                                                                                                              |
-| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| "No Sitevision apps found here."                               | Kör i en app, eller i roten av ett repo med appar högst tre nivåer ner.                                                                 |
-| "Unauthorized. Check username and password."                   | Fel driftsättningslösenord. **Logga ut** i paletten och driftsätt igen för att få frågan.                                               |
-| "Unauthorized. The access token was rejected or has expired."  | Tryck `l` för att logga in igen.                                                                                                        |
-| "Unauthorized. The session cookie was rejected or has expired" | Tryck `l`; en ny inloggning i webbläsaren startar.                                                                                      |
-| "Zip not found … Run build first."                             | `b` först. För produktion: `b` och sedan `s`.                                                                                           |
-| "Conflict. Addon already exists."                              | Driftsätt med tvång (`P` / `--force`).                                                                                                  |
-| "Dev driftsätter aldrig till en produktionsmiljö"              | Byt miljö med `v`, eller använd `w` (watch).                                                                                            |
-| Tangenterna gör ingenting                                      | Fokus är i navigatorn, där det du skriver filtrerar. Tryck `Enter` eller `Tab`.                                                         |
-| Lösenordsfråga varje gång                                      | Kryssa i **Spara i nyckelringen** vid frågan, eller ange lösenordet i fliken Konfig.                                                    |
-| "No token/cookie available" från `svc dev`                     | Kör dev från skalet i stället, eller sätt `SITEVISION_ACCESS_TOKEN` / `SITEVISION_SESSION_COOKIE`. Se tabellen i [5](#5-autentisering). |
+| Meddelande                                                     | Gör så här                                                                                                                                                |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "No Sitevision apps found here."                               | Kör i en app, eller i roten av ett repo med appar högst tre nivåer ner.                                                                                   |
+| "Unauthorized. Check username and password."                   | Fel driftsättningslösenord. **Logga ut** i paletten och driftsätt igen för att få frågan.                                                                 |
+| "Unauthorized. The access token was rejected or has expired."  | Tryck `l` för att logga in igen.                                                                                                                          |
+| "Unauthorized. The session cookie was rejected or has expired" | Tryck `l`; en ny inloggning i webbläsaren startar.                                                                                                        |
+| "Zip not found … Run build first."                             | `b` först. För produktion: `b` och sedan `s`.                                                                                                             |
+| "Conflict. Addon already exists."                              | Driftsätt med tvång (`P` / `--force`).                                                                                                                    |
+| "Dev driftsätter aldrig till en produktionsmiljö"              | Byt miljö med `v`, eller använd `w` (watch).                                                                                                              |
+| Tangenterna gör ingenting                                      | Fokus är i navigatorn, där det du skriver filtrerar. Tryck `Enter` eller `Tab`.                                                                           |
+| Lösenordsfråga varje gång                                      | Kryssa i **Spara i nyckelringen** vid frågan, eller ange lösenordet i fliken Konfig.                                                                      |
+| "No token/cookie available" från `svc dev`                     | Kör dev från skalet i stället, eller sätt `SITEVISION_ACCESS_TOKEN` / `SITEVISION_SESSION_COOKIE`. Se tabellen i [5](#5-autentisering).                   |
+| "Deploy config is missing …"                                   | Den namngivna inställningen är tom för den här appen och miljön. Tryck `e` och fyll i den, eller lägg till den i `.dev_properties.json`.                  |
+| "Skipped: … manifest.json is missing …"                        | Den appens manifest saknar `id`, `version` eller `type` (eller är inte giltig JSON), så den lämnas utanför arbetsytan. Rätta manifestet och starta om.    |
+| "… has no manifest.json, so the zip would not be an app"       | Lägg `manifest.json` i `static/` (eller `src/` för en app som inte är bundlad).                                                                           |
+| "Could not save to the OS keychain"                            | Ingen nyckelringstjänst går att nå, så du får frågan igen nästa gång. I CI: sätt lösenordsvariablerna och `SVC_NO_KEYCHAIN=1`.                            |
+| "OAuth2 token endpoint is on …, not on …"                      | Token-endpointen måste ligga på webbplatsens egen domän. Se [oauth2](#metod-oauth2).                                                                      |
+| "Deployed successfully but activation failed"                  | Den nya versionen är uppladdad men den gamla är fortfarande aktiv. Aktivera den från fliken Versioner (`a`), eller rätta behörigheten och driftsätt igen. |
+| `≠ manifest` på Tilläggsnamn                                   | Tilläggets namn är inget av manifestets namn. Se [Redigera i fliken Konfig](#redigera-i-fliken-konfig).                                                   |
 
 Felmeddelanden från servern och direktkommandona är på engelska även när
 gränssnittet är på svenska.
