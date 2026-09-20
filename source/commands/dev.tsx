@@ -6,8 +6,13 @@ import {promptPassword, promptYesNo} from '../utils/password-prompt.js';
 import {setDeployPassword} from '../utils/keychain.js';
 import {resolveSigningPassword} from '../utils/signing-password.js';
 import {startDev, useTasks, type DevOptions} from '../utils/tasks.js';
+import {toDeployConfig} from '../utils/workspace.js';
 import {Log} from '../shell/Tabs.js';
-import type {ProjectInfo, SigningCredentials} from '../types/index.js';
+import type {
+	DevProperties,
+	ProjectInfo,
+	SigningCredentials,
+} from '../types/index.js';
 
 interface DevScreenProps {
 	project: ProjectInfo;
@@ -31,7 +36,8 @@ export function DevScreen({project, options}: DevScreenProps) {
 				exit();
 			}
 		},
-		{isActive: isRawModeSupported},
+		// Undefined, not false, on a pipe; and useInput reads undefined as active.
+		{isActive: Boolean(isRawModeSupported)},
 	);
 
 	const status =
@@ -87,16 +93,40 @@ export async function resolveSigningForCli(
 	};
 }
 
+/** Basic auth without a stored password: ask for it. False when there is none. */
+export async function resolveDeployPasswordForCli(
+	dev: DevProperties,
+): Promise<boolean> {
+	if ((dev.authMethod ?? 'basic') !== 'basic' || dev.password) return true;
+	const {domain, username} = dev;
+	console.log('');
+	const password = await promptPassword(
+		`Deploy password for ${username}@${domain}: `,
+	);
+	if (!password) {
+		console.log('\x1b[31mError: Password is required\x1b[0m');
+		process.exitCode = 1;
+		return false;
+	}
+
+	if (await promptYesNo('Save password to OS keychain? (y/N): ')) {
+		setDeployPassword(domain, username, password);
+	}
+
+	dev.password = password;
+	return true;
+}
+
 export const devCommand: Command = {
 	name: 'dev',
 	description: 'Start development server with watch mode',
 	requiresProject: true,
 	async execute({project, flags}) {
 		const dev = project.devProperties;
-		if (!project.hasDevProperties || !dev) {
-			console.log('\n\x1b[33mDeployment credentials not configured.\x1b[0m');
+		const incomplete = toDeployConfig(dev);
+		if (!dev || 'error' in incomplete) {
 			console.log(
-				'Create a .dev_properties.json file with domain, siteName, addonName, and username, then run setup.\n',
+				`\n\x1b[33m${'error' in incomplete ? incomplete.error : ''}\x1b[0m\n`,
 			);
 			process.exitCode = 1;
 			return;
@@ -116,27 +146,7 @@ export const devCommand: Command = {
 			return;
 		}
 
-		if ((dev.authMethod ?? 'basic') === 'basic' && !dev.password) {
-			const {domain, username} = dev;
-			console.log('');
-			const pw = await promptPassword(
-				`Deploy password for ${username}@${domain}: `,
-			);
-			if (!pw) {
-				console.log('\x1b[31mError: Password is required\x1b[0m');
-				process.exitCode = 1;
-				return;
-			}
-
-			const remember = await promptYesNo(
-				'Save password to OS keychain? (y/N): ',
-			);
-			if (remember && domain && username) {
-				setDeployPassword(domain, username, pw);
-			}
-
-			dev.password = pw;
-		}
+		if (!(await resolveDeployPasswordForCli(dev))) return;
 
 		let signingCredentials: SigningCredentials | undefined;
 		if (flags['signed']) {
@@ -150,16 +160,7 @@ export const devCommand: Command = {
 				options={{
 					deploy: true,
 					signingCredentials,
-					deployConfig: {
-						domain: dev.domain,
-						siteName: dev.siteName,
-						addonName: dev.addonName,
-						username: dev.username,
-						password: dev.password,
-						accessToken: dev.accessToken,
-						sessionCookie: dev.sessionCookie,
-						useHTTP: dev.useHTTPForDevDeploy,
-					},
+					deployConfig: {...incomplete.config, password: dev.password},
 				}}
 			/>,
 		);

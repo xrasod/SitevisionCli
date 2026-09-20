@@ -112,13 +112,13 @@ export interface SitevisionScriptsCompat {
 export function getSitevisionScriptsVersion(
 	projectRoot: string,
 ): string | null {
-	const packageJsonPath = path.join(
-		findInstalledPackage(projectRoot, PACKAGE) ?? projectRoot,
-		'package.json',
-	);
+	const dir = findInstalledPackage(projectRoot, PACKAGE);
+	if (!dir) return null;
 
 	try {
-		const parsed = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as {
+		const parsed = JSON.parse(
+			fs.readFileSync(path.join(dir, 'package.json'), 'utf8'),
+		) as {
 			version?: string;
 		};
 		return parsed.version ?? null;

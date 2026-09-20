@@ -21,6 +21,7 @@ import {
 } from '../utils/keychain.js';
 import {resolveOAuth2AccessToken} from '../utils/oauth2-auth.js';
 import {t} from '../utils/i18n.js';
+import {toDeployConfig} from '../utils/workspace.js';
 import {
 	startBuild,
 	startDev,
@@ -148,21 +149,29 @@ export function authState(project: ProjectInfo): {
 export async function resolveDeployConfig(
 	ctx: ActionContext,
 	fresh = false,
+	// Site-level calls (list addons, log in) work before an addon is chosen.
+	{addon = true}: {addon?: boolean} = {},
 ): Promise<DeployConfig | null> {
 	const dev = ctx.project.devProperties;
-	if (!dev) {
-		ctx.notify(t('Dev properties not configured. Edit config first.'), 'warn');
+	const complete = toDeployConfig(dev, {addon});
+	if (!dev || 'error' in complete) {
+		ctx.notify(
+			dev && 'error' in complete
+				? complete.error
+				: t('Dev properties not configured. Edit config first.'),
+			'warn',
+		);
 		ctx.setTab('config');
 		return null;
 	}
 
 	const key = deployKey(ctx.project);
+	// Credentials are resolved below, per auth method.
 	const base: DeployConfig = {
-		domain: dev.domain,
-		siteName: dev.siteName,
-		addonName: dev.addonName,
-		username: dev.username,
-		useHTTP: dev.useHTTPForDevDeploy,
+		...complete.config,
+		password: undefined,
+		accessToken: undefined,
+		sessionCookie: undefined,
 	};
 	const method = dev.authMethod ?? 'basic';
 
@@ -573,7 +582,7 @@ export const actions: Action[] = [
 		enabled: hasDev,
 		async run(ctx) {
 			forgetSession(ctx.project);
-			if (await resolveDeployConfig(ctx, true))
+			if (await resolveDeployConfig(ctx, true, {addon: false}))
 				ctx.notify(t('logged in'), 'ok');
 		},
 	},

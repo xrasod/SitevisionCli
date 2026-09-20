@@ -278,7 +278,7 @@ export function Versions({
 		return (
 			<Box paddingX={1}>
 				<Text dimColor>
-					{t('Press R to fetch versions from {domain}.', {
+					{t('Press r to fetch versions from {domain}.', {
 						domain: project.devProperties.domain,
 					})}
 				</Text>

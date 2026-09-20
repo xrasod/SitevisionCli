@@ -2,13 +2,17 @@ import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 import {type Command} from './types.js';
+import {findDevPropertiesPath} from '../utils/project-detection.js';
 
-function question(rl: readline.Interface, prompt: string): Promise<string> {
-	return new Promise(resolve => {
-		rl.question(prompt, answer => {
-			resolve(answer);
-		});
-	});
+// rl.question drops lines that arrive before it is called, which is every line
+// but the first when stdin is piped. The iterator buffers them.
+function lineReader(rl: readline.Interface) {
+	const lines = rl[Symbol.asyncIterator]();
+	return async (prompt: string): Promise<string> => {
+		process.stdout.write(prompt);
+		const {value, done} = await lines.next();
+		return done ? '' : String(value);
+	};
 }
 
 export const setupSigningCommand: Command = {
@@ -21,33 +25,24 @@ export const setupSigningCommand: Command = {
 			output: process.stdout,
 		});
 
+		const question = lineReader(rl);
+
 		console.log('\n\x1b[36m\x1b[1mSetup Signing Credentials\x1b[0m\n');
 		console.log(
 			'Configure credentials for signing apps on developer.sitevision.se',
 		);
 		console.log('(Password will be prompted when running signing commands)\n');
 
-		// Find existing dev properties file
-		const devPropertiesPaths = [
-			path.join(project.root, '.dev_properties.json'),
-			path.join(project.root, '.dev-properties.json'),
-		];
-
-		let devPropertiesPath: string = devPropertiesPaths[0]!;
+		const devPropertiesPath =
+			findDevPropertiesPath(project.root) ??
+			path.join(project.root, '.dev_properties.json');
 		let existingProperties: Record<string, unknown> = {};
-
-		for (const p of devPropertiesPaths) {
-			if (fs.existsSync(p)) {
-				devPropertiesPath = p;
-				try {
-					existingProperties = JSON.parse(
-						fs.readFileSync(p, 'utf-8'),
-					) as Record<string, unknown>;
-				} catch {
-					// Invalid file, start fresh
-				}
-				break;
-			}
+		try {
+			existingProperties = JSON.parse(
+				fs.readFileSync(devPropertiesPath, 'utf8'),
+			) as Record<string, unknown>;
+		} catch {
+			// Missing or invalid file, start fresh
 		}
 
 		try {
@@ -57,7 +52,7 @@ export const setupSigningCommand: Command = {
 			const usernamePrompt = defaultUsername
 				? `Signing username [${defaultUsername}]: `
 				: 'Signing username: ';
-			let signingUsername = await question(rl, usernamePrompt);
+			let signingUsername = await question(usernamePrompt);
 			if (!signingUsername && defaultUsername) {
 				signingUsername = defaultUsername;
 			}
@@ -65,6 +60,7 @@ export const setupSigningCommand: Command = {
 			if (!signingUsername) {
 				console.log('\x1b[31mError: Signing username is required\x1b[0m');
 				rl.close();
+				process.exitCode = 1;
 				return;
 			}
 
@@ -74,24 +70,15 @@ export const setupSigningCommand: Command = {
 			const certPrompt = defaultCertName
 				? `Certificate name (blank for default) [${defaultCertName}]: `
 				: 'Certificate name (blank for default): ';
-			let certificateName = await question(rl, certPrompt);
+			let certificateName = await question(certPrompt);
 			if (!certificateName && defaultCertName) {
 				certificateName = defaultCertName;
 			}
 
 			rl.close();
 
-			// Update dev properties (strip any plaintext passwords — they live in the keychain)
-			const {
-				signingPassword: _signingRemoved,
-				password: _passwordRemoved,
-				...cleanedProperties
-			} = existingProperties as Record<string, unknown> & {
-				signingPassword?: unknown;
-				password?: unknown;
-			};
 			const updatedProperties = {
-				...cleanedProperties,
+				...existingProperties,
 				signingUsername,
 				...(certificateName && {certificateName}),
 			};
@@ -110,6 +97,7 @@ export const setupSigningCommand: Command = {
 				'\x1b[31mError setting up signing credentials:\x1b[0m',
 				error,
 			);
+			process.exitCode = 1;
 		}
 	},
 };

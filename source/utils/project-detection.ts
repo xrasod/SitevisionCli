@@ -47,6 +47,25 @@ export function localizedText(
 	return value[preferred] ?? value['en'] ?? Object.values(value)[0] ?? '';
 }
 
+/**
+ * The manifest's names when the addon name is none of them. The two are
+ * separate things (the addon is an object on the site, the name a label in the
+ * zip), so a difference is only ever pointed out, never "fixed".
+ */
+export function addonNameDrift(
+	addonName: string | undefined,
+	manifest?: {name?: LocalizedString},
+): string[] | undefined {
+	const same = (text: string) => text.trim().toLowerCase();
+	const names = (
+		typeof manifest?.name === 'string'
+			? [manifest.name]
+			: Object.values(manifest?.name ?? {})
+	).filter(name => name.trim() !== '');
+	if (!addonName?.trim() || names.length === 0) return undefined;
+	return names.some(name => same(name) === same(addonName)) ? undefined : names;
+}
+
 // =============================================================================
 // PATH UTILITIES
 // =============================================================================

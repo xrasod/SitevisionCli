@@ -1,7 +1,10 @@
 import http from 'node:http';
 import {type AddressInfo} from 'node:net';
 import test from 'ava';
-import {resolveOAuth2AccessToken} from '../source/utils/oauth2-auth.js';
+import {
+	oauth2ConfigProblem,
+	resolveOAuth2AccessToken,
+} from '../source/utils/oauth2-auth.js';
 import {
 	getOAuth2RefreshToken,
 	setOAuth2RefreshToken,
@@ -102,4 +105,16 @@ test('a plain-http token endpoint needs useHTTPForDevDeploy', async t => {
 	);
 	server.close();
 	t.is(requests(), 0);
+});
+
+test('OAuth2 settings without a domain are a problem, not a crash', t => {
+	const problem = oauth2ConfigProblem({
+		authMethod: 'oauth2',
+		oauth2: {
+			authorizationEndpoint: 'https://site.example/authorize',
+			tokenEndpoint: 'https://site.example/token',
+			clientId: 'client',
+		},
+	} as DevProperties);
+	t.regex(problem ?? '', /domain/i);
 });

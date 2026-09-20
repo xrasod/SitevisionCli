@@ -6,6 +6,7 @@ import type {
 	SitevisionManifest,
 } from '../types/index.js';
 import {
+	addonNameDrift,
 	findDevPropertiesPath,
 	getPackageJsonSyncChanges,
 	hasPackageJson,
@@ -72,7 +73,7 @@ const FIELDS: Field[] = [
 	},
 	{
 		key: 'addonName',
-		help: "Name of the addon (custom module) in the site's Addon Repository that this app is uploaded into. Ctrl+O lists the existing ones.",
+		help: "Name of the addon (custom module) in the site's Addon Repository that this app is uploaded into. Ctrl+O lists the existing ones. It is separate from the manifest name: to make them match, rename the addon in Sitevision (Addons, General, Settings) and pick it again with Ctrl+O. For a RESTApp the addon name is part of its endpoint URL.",
 		label: 'Addon name',
 		required: true,
 		hint: '^O pick from repo',
@@ -370,15 +371,23 @@ function writeConfigFile(project: ConfigTarget, file: DevProperties): void {
 				packageJson['addonName'] = after[key] || undefined;
 			});
 		} else if (key === 'environments') {
+			// `after` is this app's merged view. Only the environment being edited
+			// goes to the shared file, or the app's own overrides would reach
+			// every other app.
 			const environments = Object.entries(
 				(after[key] ?? {}) as Record<string, EnvironmentOverride>,
+			).filter(
+				([name]) => !project.environment || name === project.environment,
 			);
-			root[key] = Object.fromEntries(
-				environments.map(([name, {addonName: _addonName, ...shared}]) => [
-					name,
-					shared,
-				]),
-			);
+			root[key] = {
+				...(root[key] as Record<string, EnvironmentOverride>),
+				...Object.fromEntries(
+					environments.map(([name, {addonName: _addonName, ...shared}]) => [
+						name,
+						shared,
+					]),
+				),
+			};
 			updatePackageJson(project.root, packageJson => {
 				const svc = {...(packageJson['svc'] as Record<string, unknown>)};
 				const own = new Map(
@@ -747,10 +756,17 @@ export function ConfigForm({
 		{isActive: active},
 	);
 
+	// An environment's addon name differs from the app's name on purpose.
+	const drift = envMode
+		? undefined
+		: addonNameDrift(values['addonName'], project.manifest);
+
 	const source = (f: Field): {text: string; color?: string} => {
 		const required = f.required === true || f.required === method;
 		if (required && !(values[f.key] ?? ''))
 			return {text: t('✗ required'), color: 'red'};
+		if (f.key === 'addonName' && drift)
+			return {text: t('≠ manifest'), color: 'yellow'};
 		if (f.kind === 'secret') {
 			return {text: storedSecret(project, f.key) ? t('keychain') : '—'};
 		}
@@ -948,6 +964,15 @@ export function ConfigForm({
 									: t('{n} diffs · y to apply', {n: changes.length})}
 					</Text>
 				</Text>
+				{drift && (
+					<Text wrap="truncate">
+						<Text color="yellow">≠ </Text>
+						{t('addon name {addon} · manifest name {names}', {
+							addon: values['addonName'] ?? '',
+							names: drift.join(' / '),
+						})}
+					</Text>
+				)}
 				{changes.map(c => (
 					<Text key={c.key} wrap="truncate">
 						<Text color={c.from === undefined ? 'green' : 'yellow'}>

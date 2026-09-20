@@ -1,156 +1,108 @@
-import React from 'react';
+import {useEffect, useState} from 'react';
 import {render, Box, Text, useApp, useInput, useStdin} from 'ink';
 import {type Command} from './types.js';
+import {TaskScreen} from './TaskScreen.js';
 import {useFinish} from './use-finish.js';
+import {resolveDeployPasswordForCli} from './dev.js';
 import {StatusIndicator} from '../components/StatusIndicator.js';
-import {deployApp, deployProduction} from '../utils/sitevision-api.js';
+import {AuthLoginScreen} from '../components/AuthLoginScreen.js';
 import {
-	getDeployZipPath,
-	getSignedZipPath,
-	getAppType,
-} from '../utils/project-detection.js';
-import {zipExists} from '../utils/zip.js';
-import {promptPassword, promptYesNo} from '../utils/password-prompt.js';
-import {
-	setDeployPassword,
 	deleteSessionCookie,
 	deleteOAuth2RefreshToken,
 } from '../utils/keychain.js';
 import {resolveOAuth2AccessToken} from '../utils/oauth2-auth.js';
-import {AuthLoginScreen} from '../components/AuthLoginScreen.js';
-import type {
-	SitevisionManifest,
-	DevProperties,
-	DeployConfig,
-	DeployResponse,
-	ProductionDeployConfig,
-} from '../types/index.js';
+import {startDeploy, useTasks, type Task} from '../utils/tasks.js';
+import {toDeployConfig} from '../utils/workspace.js';
+import type {ProjectInfo} from '../types/index.js';
 
 interface DeployScreenProps {
-	projectRoot: string;
-	manifest: SitevisionManifest;
-	devProperties: DevProperties;
+	project: ProjectInfo;
 	force: boolean;
 	production: boolean;
 	activate: boolean;
 }
 
-type DeployStatus = 'deploying' | 'success' | 'error';
-
-interface DeployState {
-	status: DeployStatus;
-	message?: string;
-	executableId?: string;
-	error?: string;
+interface Credential {
+	accessToken?: string;
+	sessionCookie?: string;
 }
 
+/** Standalone `svc deploy`: log in if needed, then run the shell's deploy task. */
 export function DeployScreen({
-	projectRoot,
-	manifest,
-	devProperties,
+	project,
 	force,
 	production,
 	activate,
 }: DeployScreenProps) {
-	const [state, setState] = React.useState<DeployState>({
-		status: 'deploying',
-		message: production ? 'Deploying to production...' : 'Deploying to dev...',
-	});
-	// 'init' resolves cached credentials, 'login' shows the Ink login screen,
-	// 'deploy' runs the upload. Token/cookie login now happens here, so both the
-	// TUI and the standalone command reach it.
-	const [phase, setPhase] = React.useState<'init' | 'login' | 'deploy'>('init');
-	const [credential, setCredential] = React.useState<{
-		accessToken?: string;
-		sessionCookie?: string;
-	}>({
+	const devProperties = project.devProperties!;
+	const {exit} = useApp();
+	// Undefined, not false, on a pipe; and useInput reads undefined as active.
+	const interactive = Boolean(useStdin().isRawModeSupported);
+	// 'init' resolves cached credentials, 'login' shows the login screen,
+	// 'deploy' starts the task.
+	const [phase, setPhase] = useState<'init' | 'login' | 'deploy'>('init');
+	const [credential, setCredential] = useState<Credential>({
 		accessToken: devProperties.accessToken,
 		sessionCookie: devProperties.sessionCookie,
 	});
-	const deployStartedRef = React.useRef(false);
+	const [task, setTask] = useState<Task>();
+	// Anything that goes wrong before there is a task to show it.
+	const [failure, setFailure] = useState<string>();
 
 	const authMethod = devProperties.authMethod ?? 'basic';
-	const {exit} = useApp();
-	const {isRawModeSupported: interactive} = useStdin();
-	// OAuth2 and cookie can re-authenticate in-place, given a terminal to do it in.
+	// OAuth2 and cookie can re-authenticate in place, given a terminal to do it in.
 	const canRelogin =
 		interactive && (authMethod === 'oauth2' || authMethod === 'cookie');
+	const live = useTasks().find(t => t.id === task?.id) ?? task;
+	const failed = Boolean(failure) || live?.status === 'error';
 
-	useFinish(
-		state.status === 'deploying' ? undefined : state.status,
-		state.status === 'error' && canRelogin,
-	);
+	useFinish(failure && !task ? 'error' : undefined, canRelogin);
 
-	// A browser login needs a terminal; without one only env/flag credentials work.
+	// A browser login needs a terminal; without one only env credentials work.
 	const startLogin = () => {
 		if (interactive) {
 			setPhase('login');
 		} else {
-			setState({
-				status: 'error',
-				error:
-					'No stored login and no terminal to log in from. Set SITEVISION_ACCESS_TOKEN or SITEVISION_SESSION_COOKIE.',
-			});
+			setFailure(
+				'No stored login and no terminal to log in from. Set SITEVISION_ACCESS_TOKEN or SITEVISION_SESSION_COOKIE.',
+			);
 		}
 	};
 
-	// Discard the stored credential and force a fresh login. This is the
-	// "retry with new credentials" action for token/cookie auth — the usual fix
-	// when a session/token has expired (Sitevision reports that as a 400, not a
-	// 401, so it isn't auto-cleared).
+	// Drop the stored credential and log in again: the usual fix for an expired
+	// session or token, which Sitevision reports as a 400 rather than a 401.
 	const retryWithFreshLogin = () => {
 		const {domain, username} = devProperties;
-		if (authMethod === 'cookie' && domain && username) {
+		if (authMethod === 'cookie') {
 			deleteSessionCookie(domain, username);
-			devProperties.sessionCookie = undefined;
-		} else if (
-			authMethod === 'oauth2' &&
-			domain &&
-			devProperties.oauth2?.clientId
-		) {
+		} else if (devProperties.oauth2?.clientId) {
 			deleteOAuth2RefreshToken(domain, devProperties.oauth2.clientId);
-			devProperties.accessToken = undefined;
 		}
 
 		setCredential({});
-		deployStartedRef.current = false;
-		setState({
-			status: 'deploying',
-			message: production
-				? 'Deploying to production...'
-				: 'Deploying to dev...',
-		});
+		setFailure(undefined);
+		setTask(undefined);
 		setPhase('login');
 	};
 
 	useInput(
 		(input, key) => {
-			if (state.status !== 'error') return;
+			if (!failed) return;
 			if (input === 'r') retryWithFreshLogin();
 			if (key.escape || input === 'q') exit();
 		},
 		{isActive: canRelogin},
 	);
 
-	// Decide once whether we can deploy straight away or must log in first.
-	React.useEffect(() => {
-		if (authMethod === 'basic' || devProperties.sessionCookie) {
+	// Decide once whether to deploy straight away or log in first.
+	useEffect(() => {
+		if (authMethod === 'basic' || credential.sessionCookie) {
 			setPhase('deploy');
-			return;
-		}
-
-		if (authMethod === 'cookie') {
-			// env/keychain cookie is already loaded in devProperties; none here.
+		} else if (authMethod === 'cookie') {
 			startLogin();
-			return;
-		}
-
-		if (authMethod === 'oauth2') {
-			if (devProperties.accessToken) {
-				setPhase('deploy');
-				return;
-			}
-
+		} else if (credential.accessToken) {
+			setPhase('deploy');
+		} else {
 			void (async () => {
 				const token = await resolveOAuth2AccessToken(devProperties);
 				if (token) {
@@ -160,209 +112,68 @@ export function DeployScreen({
 					startLogin();
 				}
 			})();
-			return;
 		}
-
-		setPhase('deploy');
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
-	React.useEffect(() => {
-		if (phase !== 'deploy' || deployStartedRef.current) return;
-		deployStartedRef.current = true;
-
-		async function runDeploy() {
-			try {
-				const appType = getAppType(manifest);
-				// Credential resolved in the init effect / login screen.
-				const {accessToken, sessionCookie} = credential;
-
-				// A stale session fails without a clean 401 — clear the stored cookie
-				// so the next run re-authenticates. Skip when SITEVISION_SESSION_COOKIE
-				// is set: detection re-reads it first, so clearing would just replay
-				// the same dead cookie in a loop.
-				const clearStaleCookie = (result: DeployResponse) => {
-					if (
-						result.authExpired &&
-						authMethod === 'cookie' &&
-						!process.env['SITEVISION_SESSION_COOKIE'] &&
-						devProperties.domain &&
-						devProperties.username
-					) {
-						deleteSessionCookie(devProperties.domain, devProperties.username);
-					}
-				};
-
-				if (production) {
-					// Production deployment requires a signed zip
-					const signedZipPath = getSignedZipPath(projectRoot, manifest);
-
-					if (!zipExists(signedZipPath)) {
-						setState({
-							status: 'error',
-							error: `Signed zip not found: ${signedZipPath}\nRun 'sign' first to create the signed zip.`,
-						});
-						return;
-					}
-
-					const config: ProductionDeployConfig = {
-						domain: devProperties.domain,
-						siteName: devProperties.siteName,
-						addonName: devProperties.addonName,
-						username: devProperties.username,
-						password: devProperties.password,
-						accessToken,
-						sessionCookie,
-						useHTTP: devProperties.useHTTPForDevDeploy,
-						activate,
-					};
-
-					const result = await deployProduction(signedZipPath, config, appType);
-
-					if (!result.success) {
-						clearStaleCookie(result);
-						setState({
-							status: 'error',
-							error: result.error || 'Deployment failed',
-						});
-						return;
-					}
-
-					// Uploaded but not live: that is a failed `--activate`, not a success.
-					if (activate && !result.activated) {
-						setState({status: 'error', error: result.message});
-						return;
-					}
-
-					setState({
-						status: 'success',
-						message: result.message || 'Deployed to production successfully',
-						executableId: result.executableId,
-					});
-				} else {
-					const zipPath = getDeployZipPath(projectRoot, manifest);
-
-					if (!zipExists(zipPath)) {
-						setState({
-							status: 'error',
-							error: `Zip not found: ${zipPath}\nRun 'build' first to create the zip.`,
-						});
-						return;
-					}
-
-					const config: DeployConfig = {
-						domain: devProperties.domain,
-						siteName: devProperties.siteName,
-						addonName: devProperties.addonName,
-						username: devProperties.username,
-						password: devProperties.password,
-						accessToken,
-						sessionCookie,
-						useHTTP: devProperties.useHTTPForDevDeploy,
-					};
-
-					const result = await deployApp(zipPath, config, appType, force);
-
-					if (!result.success) {
-						clearStaleCookie(result);
-						setState({
-							status: 'error',
-							error: result.error || 'Deployment failed',
-						});
-						return;
-					}
-
-					setState({
-						status: 'success',
-						message: 'Deployed to dev successfully',
-						executableId: result.executableId,
-					});
-				}
-			} catch (error) {
-				setState({
-					status: 'error',
-					error: error instanceof Error ? error.message : String(error),
-				});
-			}
+	useEffect(() => {
+		if (phase !== 'deploy' || task) return;
+		const complete = toDeployConfig({...devProperties, ...credential});
+		if ('error' in complete) {
+			setFailure(complete.error);
+			return;
 		}
 
-		runDeploy();
+		setTask(
+			startDeploy(project, complete.config, {force, production, activate}),
+		);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [phase]);
+	}, [phase, task]);
 
-	if (phase === 'login' && state.status !== 'error') {
+	if (phase === 'login' && !failure) {
 		return (
 			<AuthLoginScreen
-				method={
-					(devProperties.authMethod ?? 'basic') === 'cookie'
-						? 'cookie'
-						: 'oauth2'
-				}
+				method={authMethod === 'cookie' ? 'cookie' : 'oauth2'}
 				devProperties={devProperties}
-				onComplete={cred => {
-					setCredential(cred);
+				onComplete={next => {
+					setCredential(next);
 					setPhase('deploy');
 				}}
-				onError={message => {
-					setState({status: 'error', error: message});
-				}}
+				onError={setFailure}
 				onCancel={() => {
-					setState({status: 'error', error: 'Login cancelled.'});
+					setFailure('Login cancelled.');
 				}}
 			/>
 		);
 	}
 
+	const retryHint = failed && canRelogin && (
+		<Box marginTop={1} flexDirection="column">
+			<Text color="yellow">
+				This can happen when your session or token has expired.
+			</Text>
+			<Text dimColor>
+				Press r to log in again with fresh credentials, q to quit
+			</Text>
+		</Box>
+	);
+
+	if (task) {
+		return (
+			<TaskScreen task={task} stay={canRelogin}>
+				{retryHint}
+			</TaskScreen>
+		);
+	}
+
 	return (
 		<Box flexDirection="column" padding={1}>
-			<Box marginBottom={1}>
-				<StatusIndicator
-					status={state.status === 'deploying' ? 'running' : state.status}
-					label={
-						state.status === 'deploying'
-							? 'Deploying'
-							: state.status === 'success'
-								? 'Deployed'
-								: 'Failed'
-					}
-					message={state.message}
-				/>
-			</Box>
-
-			{/* Deployment info on success */}
-			{state.status === 'success' && (
-				<Box flexDirection="column" marginLeft={2}>
-					<Text color="green">
-						{production ? 'Production deployment' : 'Dev deployment'} complete
-					</Text>
-					{state.executableId && (
-						<Text dimColor>Executable ID: {state.executableId}</Text>
-					)}
-					{force && <Text dimColor>(Force mode - overwrote existing)</Text>}
-					{activate && production && <Text dimColor>(Activated)</Text>}
-				</Box>
-			)}
-
-			{/* Error display */}
-			{state.status === 'error' && state.error && (
-				<Box flexDirection="column" marginTop={1}>
-					<Text color="red">{state.error}</Text>
-					{canRelogin && (
-						<Text color="yellow">
-							This can happen when your session or token has expired — log in
-							again to get fresh credentials.
-						</Text>
-					)}
-				</Box>
-			)}
-
-			{state.status === 'error' && canRelogin && (
-				<Box marginTop={1}>
-					<Text dimColor>
-						Press r to log in again with fresh credentials, q to quit
-					</Text>
-				</Box>
-			)}
+			<StatusIndicator
+				status={failure ? 'error' : 'running'}
+				label={failure ? 'Failed' : 'Preparing'}
+				message={failure}
+			/>
+			{retryHint}
 		</Box>
 	);
 }
@@ -372,56 +183,24 @@ export const deployCommand: Command = {
 	description: 'Deploy the application',
 	requiresProject: true,
 	async execute({project, flags}) {
-		// Check if dev properties are configured
-		if (!project.hasDevProperties || !project.devProperties) {
-			console.log('\n\x1b[33mDeployment credentials not configured.\x1b[0m');
-			console.log(
-				'Create a .dev_properties.json file with domain, siteName, addonName, and username, then run setup.\n',
-			);
+		const complete = toDeployConfig(project.devProperties);
+		if ('error' in complete) {
+			console.log(`\n\x1b[33m${complete.error}\x1b[0m\n`);
 			process.exitCode = 1;
 			return;
 		}
 
-		// Basic auth prompts for a password here; OAuth2 and cookie resolve or log
-		// in inside DeployScreen (Ink-native), so both the TUI and this command
-		// share one login path. env/--flag token/cookie are already loaded.
-		const authMethod = project.devProperties.authMethod ?? 'basic';
-		if (authMethod === 'basic' && !project.devProperties.password) {
-			const {domain, username} = project.devProperties;
-			console.log('');
-			const password = await promptPassword(
-				`Deploy password for ${username}@${domain}: `,
-			);
-			if (!password) {
-				console.log('\x1b[31mError: Password is required\x1b[0m');
-				process.exitCode = 1;
-				return;
-			}
-			const remember = await promptYesNo(
-				'Save password to OS keychain? (y/N): ',
-			);
-			if (remember && domain && username) {
-				setDeployPassword(domain, username, password);
-			}
-			project.devProperties.password = password;
-		}
-
-		const production = Boolean(flags['production']);
-		const force = Boolean(flags['force']);
-		const activate = Boolean(flags['activate']);
+		// OAuth2 and cookie log in inside DeployScreen; basic asks here.
+		if (!(await resolveDeployPasswordForCli(project.devProperties!))) return;
 
 		// Production deploys use the already-signed zip; `sign` is run separately.
-		const {waitUntilExit} = render(
+		await render(
 			<DeployScreen
-				projectRoot={project.root}
-				manifest={project.manifest}
-				devProperties={project.devProperties}
-				force={force}
-				production={production}
-				activate={activate}
+				project={project}
+				force={Boolean(flags['force'])}
+				production={Boolean(flags['production'])}
+				activate={Boolean(flags['activate'])}
 			/>,
-		);
-
-		await waitUntilExit();
+		).waitUntilExit();
 	},
 };

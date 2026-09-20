@@ -3,7 +3,12 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import zlib from 'zlib';
-import {createBuildZip, createZip} from '../source/utils/zip.js';
+import {
+	copySrcToBuild,
+	copyStaticToBuild,
+	createBuildZip,
+	createZip,
+} from '../source/utils/zip.js';
 
 interface ParsedEntry {
 	name: string;
@@ -141,4 +146,37 @@ test('createZip marks file names as UTF-8 so å, ä and ö survive', async t => 
 	t.is(data.readUInt16LE(6), 0x08_00);
 	const central = data.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
 	t.is(data.readUInt16LE(central + 8), 0x08_00);
+});
+
+test('a root manifest.json ships only when src/ and static/ bring none', t => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-zip-'));
+	fs.writeFileSync(path.join(root, 'manifest.json'), '{"from":"root"}');
+	fs.mkdirSync(path.join(root, 'static'));
+	fs.writeFileSync(path.join(root, 'static', 'style.css'), '');
+	const built = () =>
+		fs.readFileSync(path.join(root, 'build', 'manifest.json'), 'utf8');
+
+	// The bundled build only ever calls copyStaticToBuild.
+	copyStaticToBuild(root);
+	t.is(built(), '{"from":"root"}');
+
+	// Edited while a dev loop keeps build/ around: the new one replaces it.
+	fs.writeFileSync(path.join(root, 'manifest.json'), '{"from":"root, edited"}');
+	copyStaticToBuild(root);
+	t.is(built(), '{"from":"root, edited"}');
+
+	fs.writeFileSync(
+		path.join(root, 'static', 'manifest.json'),
+		'{"from":"static"}',
+	);
+	copyStaticToBuild(root);
+	t.is(built(), '{"from":"static"}');
+
+	fs.rmSync(path.join(root, 'build'), {recursive: true});
+	fs.rmSync(path.join(root, 'static', 'manifest.json'));
+	fs.mkdirSync(path.join(root, 'src'));
+	fs.writeFileSync(path.join(root, 'src', 'manifest.json'), '{"from":"src"}');
+	copySrcToBuild(root);
+	copyStaticToBuild(root);
+	t.is(built(), '{"from":"src"}');
 });

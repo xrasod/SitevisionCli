@@ -267,3 +267,13 @@ test('sitevision-scripts hoisted to the workspace root is found', t => {
 	t.true(hasSitevisionScripts(app));
 	t.is(getSitevisionScriptsBin(app), path.join(root, BIN_REL));
 });
+
+test("the app's own version is never mistaken for sitevision-scripts'", t => {
+	const dir = makeProject();
+	fs.writeFileSync(
+		path.join(dir, 'package.json'),
+		JSON.stringify({name: 'my-app', version: '1.2.3'}),
+	);
+	t.is(getSitevisionScriptsVersion(dir), null);
+	t.is(checkSitevisionScriptsCompatibility(dir).warning, undefined);
+});

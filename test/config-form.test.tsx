@@ -451,3 +451,114 @@ test('switching auth method keeps the oauth2 block and keys the form does not kn
 	t.is(saved['sessionLoginUrl'], 'https://site.example/login');
 	t.is(saved['teamNote'], 'hand-written');
 });
+
+test('saving one environment writes only that environment to the shared file', t => {
+	const one = workspaceApp();
+	const root = path.resolve(one, '..', '..');
+	const rootFile = path.join(root, '.dev_properties.json');
+	fs.writeFileSync(
+		rootFile,
+		JSON.stringify({
+			domain: 'site.example',
+			siteName: 'Site',
+			username: 'me@example.com',
+			authMethod: 'basic',
+			environments: {prod: {domain: 'prod.example'}},
+		}),
+	);
+	// An environment only this app has, from its own package.json.
+	fs.writeFileSync(
+		path.join(one, 'package.json'),
+		JSON.stringify({
+			addonName: 'One',
+			svc: {environments: {test: {domain: 'one-test.example'}}},
+		}),
+	);
+
+	const raw = detectProject(one)!;
+	saveConfig(
+		{
+			root: one,
+			devProperties: resolveEnvironment(raw.devProperties!, 'prod'),
+			base: raw.devProperties,
+			environment: 'prod',
+			workspaceRoot: root,
+		},
+		formValues({
+			domain: 'prod.example',
+			siteName: 'Prod Site',
+			addonName: 'One',
+		}),
+		new Set(['siteName']),
+	);
+
+	t.deepEqual(readJson(rootFile)['environments'], {
+		prod: {
+			domain: 'prod.example',
+			siteName: 'Prod Site',
+			useHTTPForDevDeploy: false,
+		},
+	});
+	t.deepEqual(readJson(path.join(one, 'package.json'))['svc'], {
+		environments: {test: {domain: 'one-test.example'}},
+	});
+});
+
+test('the form says when the addon name and the manifest name have drifted apart', async t => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-drift-'));
+	fs.mkdirSync(path.join(dir, '.git'));
+	fs.writeFileSync(
+		path.join(dir, 'manifest.json'),
+		JSON.stringify({
+			id: 'region-picker',
+			name: {sv: 'Länsväljare', en: 'County picker'},
+			version: '1.0.0',
+			type: 'WebApp',
+		}),
+	);
+	fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+	const devFile = path.join(dir, '.dev_properties.json');
+	const write = (addonName: string) => {
+		fs.writeFileSync(
+			devFile,
+			JSON.stringify({
+				domain: 'site.example',
+				siteName: 'Site',
+				addonName,
+				username: 'me@example.com',
+			}),
+		);
+	};
+
+	const frame = async (addonName: string) => {
+		write(addonName);
+		const project = detectProject(dir)!;
+		const {lastFrame, unmount} = render(
+			<ConfigForm
+				project={{
+					root: dir,
+					devProperties: project.devProperties,
+					manifest: project.manifest,
+					manifestPath: project.paths.manifest,
+				}}
+				active={false}
+				width={120}
+				height={60}
+				pickAddon={async () => null}
+				onSaved={() => {}}
+				onEditingChange={() => {}}
+			/>,
+		);
+		await delay(20);
+		const text = lastFrame() ?? '';
+		unmount();
+		return text;
+	};
+
+	const drifted = await frame('Regionsväljare');
+	t.regex(drifted, /≠ manifest/);
+	t.regex(drifted, /Regionsväljare.*Länsväljare/);
+
+	const matching = await frame('County picker');
+	t.notRegex(matching, /≠ manifest/);
+});

@@ -5,7 +5,7 @@ import {
 	readWorkspaceDevProperties,
 	type ProjectInfo,
 } from './project-detection.js';
-import type {DevProperties} from '../types/index.js';
+import type {DeployConfig, DevProperties} from '../types/index.js';
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build']);
 const MAX_DEPTH = 3;
@@ -14,7 +14,11 @@ const MAX_DEPTH = 3;
  * Find every Sitevision app below `root` (e.g. root/webapps/x, root/restapps/y).
  * Depth-limited walk that skips dependency and output folders.
  */
-export function discoverApps(root: string): ProjectInfo[] {
+export function discoverApps(
+	root: string,
+	// Filled with why each app that was left out is broken.
+	skipped: string[] = [],
+): ProjectInfo[] {
 	const found: ProjectInfo[] = [];
 	const walk = (dir: string, depth: number) => {
 		let entries: fs.Dirent[];
@@ -31,8 +35,10 @@ export function discoverApps(root: string): ProjectInfo[] {
 			let project: ProjectInfo | null = null;
 			try {
 				project = detectProject(full);
-			} catch {
-				// Unparseable manifest: skip it; the app can still be opened directly.
+			} catch (error) {
+				// A broken app is left out, said out loud, and not searched for more.
+				skipped.push(error instanceof Error ? error.message : String(error));
+				continue;
 			}
 
 			if (project) {
@@ -63,6 +69,44 @@ export function appGroup(root: string, appRoot: string): string {
 export function configIncomplete(dev?: Partial<DevProperties>): boolean {
 	if (!dev?.domain || !dev.siteName) return true;
 	return (dev.authMethod ?? 'basic') === 'basic' && !dev.username;
+}
+
+/**
+ * What a deploy is sent with, or which required value is missing. The one place
+ * dev properties become a DeployConfig, so nothing ever posts to "undefined".
+ */
+export function toDeployConfig(
+	dev?: Partial<DevProperties>,
+	// False for what talks to the site rather than an addon: listing its addons
+	// (how an empty addon name gets picked) and logging in.
+	{addon = true}: {addon?: boolean} = {},
+): {config: DeployConfig} | {error: string} {
+	const required = {
+		domain: dev?.domain,
+		siteName: dev?.siteName,
+		...(addon && {addonName: dev?.addonName}),
+		// A token or cookie login has no use for a username.
+		...((dev?.authMethod ?? 'basic') === 'basic' && {username: dev?.username}),
+	};
+	const missing = Object.entries(required).find(([, value]) => !value)?.[0];
+	if (!dev || missing) {
+		return {
+			error: `Deploy config is missing "${missing ?? 'domain'}". Run svc and press e to set it, or add it to .dev_properties.json.`,
+		};
+	}
+
+	return {
+		config: {
+			domain: dev.domain!,
+			siteName: dev.siteName!,
+			addonName: dev.addonName ?? '',
+			username: dev.username ?? '',
+			password: dev.password,
+			accessToken: dev.accessToken,
+			sessionCookie: dev.sessionCookie,
+			useHTTP: dev.useHTTPForDevDeploy,
+		},
+	};
 }
 
 /**

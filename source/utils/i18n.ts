@@ -81,8 +81,8 @@ const sv: Record<string, string> = {
 	RECENT: 'SENASTE',
 	'⚠ Configure dev properties first (e).':
 		'⚠ Konfigurera dev-egenskaper först (e).',
-	'Press R to fetch versions from {domain}.':
-		'Tryck R för att hämta versioner från {domain}.',
+	'Press r to fetch versions from {domain}.':
+		'Tryck r för att hämta versioner från {domain}.',
 	'APP IDENTIFIER': 'APP-ID',
 	VERSION: 'VERSION',
 	ACTIVE: 'AKTIV',
@@ -181,6 +181,9 @@ const sv: Record<string, string> = {
 	'Stop running task': 'Stoppa pågående uppgift',
 	'Edit config': 'Redigera konfig',
 	'New app': 'Ny app',
+	'Skipped: {reason}': 'Hoppade över: {reason}',
+	'Skipped {n} apps. First: {reason}':
+		'Hoppade över {n} appar. Första: {reason}',
 	'A new app is still being created. Stop it and quit?':
 		'En ny app håller på att skapas. Avbryta den och avsluta?',
 	'An app is already being created.': 'En app håller redan på att skapas.',
@@ -393,8 +396,11 @@ const sv: Record<string, string> = {
 		'Domän för den här miljöns webbplats (USE eller TSE) utan https://, t.ex. myorg-use.sitevision-cloud.se. Driftsättningar och versionslistor går hit.',
 	"Name of the site's root node in Sitevision, exactly as shown in the site tree. It becomes part of the REST API path.":
 		'Namnet på webbplatsens rotnod i Sitevision, exakt som i webbplatsträdet. Det blir en del av REST API-sökvägen.',
-	"Name of the addon (custom module) in the site's Addon Repository that this app is uploaded into. Ctrl+O lists the existing ones.":
-		'Namnet på tillägget (custom module) i webbplatsens tilläggsförråd som appen laddas upp till. Ctrl+O listar befintliga.',
+	"Name of the addon (custom module) in the site's Addon Repository that this app is uploaded into. Ctrl+O lists the existing ones. It is separate from the manifest name: to make them match, rename the addon in Sitevision (Addons, General, Settings) and pick it again with Ctrl+O. For a RESTApp the addon name is part of its endpoint URL.":
+		'Namnet på tillägget (custom module) i webbplatsens tilläggsförråd som appen laddas upp till. Ctrl+O listar befintliga. Det är skilt från manifestets namn: för att få dem att stämma, byt namn på tillägget i Sitevision (Tillägg, Allmänt, Inställningar) och välj det igen med Ctrl+O. För en RESTApp ingår tilläggets namn i dess endpoint-URL.',
+	'≠ manifest': '≠ manifest',
+	'addon name {addon} · manifest name {names}':
+		'tilläggsnamn {addon} · manifestnamn {names}',
 	'Sitevision account used for deploys, usually your Sitevision Cloud e-mail. It needs DEVELOPER or MANAGE_ADDONS permission on the site. Required for basic auth; with oauth2 or cookie it only labels the stored credential.':
 		'Sitevision-konto som används för driftsättning, oftast din Sitevision Cloud-e-post. Behöver DEVELOPER eller MANAGE_ADDONS på webbplatsen. Krävs för basic; med oauth2 eller cookie används det bara för att märka den sparade inloggningen.',
 	"How deploys authenticate: basic = username and password; oauth2 = bearer token from the site's OAuth2 provider (PKCE, opens a browser); cookie = reuse a browser SSO/SAML session.":

@@ -205,6 +205,7 @@ async function runShell(
 	apps: ProjectInfo[],
 	workspaceRoot?: string,
 	updatedFrom?: string,
+	skipped: string[] = [],
 ) {
 	process.stdout.write('\x1b[?1049h\x1b[H');
 	// Also leave the alternate screen when a signal exits past the finally.
@@ -240,6 +241,7 @@ async function runShell(
 					version={pkg.version}
 					minimal={cli.flags.minimal}
 					updatedFrom={updatedFrom}
+					skipped={skipped}
 					handover={next => {
 						job = next;
 						app.unmount();
@@ -252,7 +254,11 @@ async function runShell(
 			process.stdout.write('\x1b[?1049l');
 			// eslint-disable-next-line no-await-in-loop
 			await job();
-			if (workspaceRoot) apps = discoverApps(workspaceRoot);
+			if (workspaceRoot) {
+				skipped = [];
+				apps = discoverApps(workspaceRoot, skipped);
+			}
+
 			updatedFrom = undefined;
 			process.stdout.write('\x1b[?1049h\x1b[2J\x1b[H');
 		}
@@ -318,15 +324,22 @@ async function main() {
 		}
 
 		if (!project) {
-			const apps = discoverApps(process.cwd());
+			const skipped: string[] = [];
+			const apps = discoverApps(process.cwd(), skipped);
 			if (apps.length === 0) {
 				fail(
 					'No Sitevision apps found here.',
-					'Run svc inside an app directory (manifest.json) or at the root of a repo that contains apps.',
+					skipped[0] ??
+						'Run svc inside an app directory (manifest.json) or at the root of a repo that contains apps.',
 				);
 			}
 
-			await runShell(apps, process.cwd(), isUpdate ? lastSeen : undefined);
+			await runShell(
+				apps,
+				process.cwd(),
+				isUpdate ? lastSeen : undefined,
+				skipped,
+			);
 			shutdown();
 			return;
 		}

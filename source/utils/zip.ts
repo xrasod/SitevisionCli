@@ -285,7 +285,7 @@ export async function createBuildZip(
 
 	if (!fs.existsSync(path.join(buildDir, 'manifest.json'))) {
 		throw new Error(
-			`${buildDir} has no manifest.json, so the zip would not be an app. Keep manifest.json in src/ or static/.`,
+			`${buildDir} has no manifest.json, so the zip would not be an app. manifest.json belongs in static/ (or src/ for an app that is not bundled).`,
 		);
 	}
 
@@ -336,18 +336,20 @@ export function copyChunksToResources(buildDir: string): void {
 export function copyStaticToBuild(projectRoot: string): void {
 	const staticDir = path.join(projectRoot, 'static');
 	const buildDir = path.join(projectRoot, 'build');
+	fs.mkdirSync(buildDir, {recursive: true});
+	if (fs.existsSync(staticDir)) copyDirRecursive(staticDir, buildDir);
 
-	if (!fs.existsSync(staticDir)) {
-		return;
+	// Every build ends here. A manifest kept at the project root is detected,
+	// so it ships when neither src/ nor static/ brought one.
+	const manifestIn = (dir: string) =>
+		path.join(projectRoot, dir, 'manifest.json');
+	if (
+		fs.existsSync(manifestIn('.')) &&
+		!fs.existsSync(manifestIn('src')) &&
+		!fs.existsSync(manifestIn('static'))
+	) {
+		fs.copyFileSync(manifestIn('.'), path.join(buildDir, 'manifest.json'));
 	}
-
-	// Ensure build directory exists
-	if (!fs.existsSync(buildDir)) {
-		fs.mkdirSync(buildDir, {recursive: true});
-	}
-
-	// Copy static directory contents to build
-	copyDirRecursive(staticDir, buildDir);
 }
 
 /**
@@ -359,13 +361,6 @@ export function copySrcToBuild(projectRoot: string): void {
 	const srcDir = path.join(projectRoot, 'src');
 	const buildDir = path.join(projectRoot, 'build');
 	fs.mkdirSync(buildDir, {recursive: true});
-
-	// A manifest kept at the project root is detected, so it has to ship too;
-	// one in src/ or static/ is copied over it.
-	const rootManifest = path.join(projectRoot, 'manifest.json');
-	if (fs.existsSync(rootManifest)) {
-		fs.copyFileSync(rootManifest, path.join(buildDir, 'manifest.json'));
-	}
 
 	if (fs.existsSync(srcDir)) copyDirRecursive(srcDir, buildDir);
 }

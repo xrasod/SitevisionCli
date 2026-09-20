@@ -2,6 +2,8 @@ import test from 'ava';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
+import {type AddressInfo} from 'node:net';
 import {detectProject} from '../source/utils/project-detection.js';
 import {
 	logLines,
@@ -10,10 +12,12 @@ import {
 	stoppableTasks,
 	scaffoldRunning,
 	startBuild,
+	startDeploy,
 	startDev,
 	getTasks,
 	type Task,
 } from '../source/utils/tasks.js';
+import {getSessionCookie, setSessionCookie} from '../source/utils/keychain.js';
 
 async function settled(task: Task): Promise<Task> {
 	while (task.status === 'running') {
@@ -173,4 +177,46 @@ test('a running scaffold can be stopped from whichever app is selected', t => {
 	build.finish('stopped');
 	t.deepEqual(stoppableTasks(other.root), []);
 	t.false(scaffoldRunning());
+});
+
+test('a deploy that finds the session expired drops the stored cookie', async t => {
+	const server = http.createServer((req, res) => {
+		req.resume();
+		req.on('end', () => {
+			res.writeHead(401);
+			res.end();
+		});
+	});
+	await new Promise<void>(resolve => {
+		server.listen(0, '127.0.0.1', resolve);
+	});
+	t.teardown(() => server.close());
+	const domain = `127.0.0.1:${(server.address() as AddressInfo).port}`;
+
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-task-'));
+	fs.mkdirSync(path.join(root, 'dist'));
+	fs.writeFileSync(
+		path.join(root, 'manifest.json'),
+		JSON.stringify({id: 'x', name: 'X', version: '1.0.0', type: 'WebApp'}),
+	);
+	fs.writeFileSync(path.join(root, 'package.json'), '{}');
+	fs.writeFileSync(path.join(root, 'dist', 'x.zip'), 'PK fake zip');
+
+	setSessionCookie(domain, 'me', 'JSESSIONID=stale');
+	const task = await settled(
+		startDeploy(
+			detectProject(root)!,
+			{
+				domain,
+				siteName: 'Site',
+				addonName: 'Addon',
+				username: 'me',
+				sessionCookie: 'JSESSIONID=stale',
+				useHTTP: true,
+			},
+			{},
+		),
+	);
+	t.is(task.status, 'error');
+	t.is(getSessionCookie(domain, 'me'), null);
 });

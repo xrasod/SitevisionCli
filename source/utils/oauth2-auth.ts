@@ -58,6 +58,8 @@ export function oauth2ConfigProblem(dev: DevProperties): string | undefined {
 		return 'OAuth2 is not fully configured (authorization/token endpoint or client ID missing).';
 	}
 
+	if (!dev.domain) return 'OAuth2 needs the site domain to be set.';
+
 	const schemes = dev.useHTTPForDevDeploy ? ['https:', 'http:'] : ['https:'];
 	for (const endpoint of [config.authorizationEndpoint, config.tokenEndpoint]) {
 		const url = URL.canParse(endpoint) ? new URL(endpoint) : undefined;

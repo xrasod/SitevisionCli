@@ -9,13 +9,19 @@ import {detectProject} from '../source/utils/project-detection.js';
 import {
 	Confirm,
 	overlayStack,
+	withoutOverlays,
 	Shell,
 	type Overlay,
 } from '../source/shell/Shell.js';
 import {CommandPalette} from '../source/shell/CommandPalette.js';
-import {Log, Overview} from '../source/shell/Tabs.js';
+import {Log, Overview, Versions} from '../source/shell/Tabs.js';
 import type {Task} from '../source/utils/tasks.js';
-import {fuzzyMatch, type Action} from '../source/shell/actions.js';
+import {
+	fuzzyMatch,
+	resolveDeployConfig,
+	type Action,
+	type ActionContext,
+} from '../source/shell/actions.js';
 import {stripVTControlCharacters} from 'node:util';
 import {
 	navMatches,
@@ -439,4 +445,59 @@ test('the environment badge survives a narrow terminal and the bar never overflo
 		t.true(lines[0]!.includes(' PROD '), `width ${width}`);
 		t.true(stringWidth(lines[0]!) <= width, `width ${width}: ${lines[0]!}`);
 	}
+});
+
+test('a finished scaffold closes its own questions and nobody else’s', t => {
+	const resolve = () => {};
+	const question: Overlay = {kind: 'prompt', label: 'Addon name', resolve};
+	const deployPassword: Overlay = {kind: 'password', label: 'pw', resolve};
+	t.deepEqual(
+		withoutOverlays([question, deployPassword], new Set([question])),
+		[deployPassword],
+	);
+	t.deepEqual(withoutOverlays([deployPassword], new Set([question])), [
+		deployPassword,
+	]);
+});
+
+test('the addon picker and login get a config before any addon is chosen', async t => {
+	const app = project();
+	app.devProperties = {
+		domain: 'site.example',
+		siteName: 'Site',
+		addonName: '',
+		username: 'me',
+		authMethod: 'basic',
+		password: 'pw',
+	};
+	const notices: string[] = [];
+	const ctx = {
+		project: app,
+		notify(text: string) {
+			notices.push(text);
+		},
+		setTab() {},
+	} as unknown as ActionContext;
+
+	const site = await resolveDeployConfig(ctx, false, {addon: false});
+	t.is(site?.domain, 'site.example');
+	t.is(site?.password, 'pw');
+	t.deepEqual(notices, []);
+
+	// A deploy still needs the addon, and says which setting is missing.
+	t.is(await resolveDeployConfig(ctx), null);
+	t.regex(notices[0] ?? '', /addonName/);
+});
+
+test('the empty Versions tab names the key that actually fetches', t => {
+	const app = project();
+	app.devProperties = {
+		domain: 'site.example',
+		siteName: 'Site',
+		addonName: 'Addon',
+		username: 'me',
+	};
+	const {lastFrame} = render(<Versions project={app} selected={0} />);
+	// The shell listens for a plain r; R (shift) is not bound.
+	t.regex(lastFrame() ?? '', /Press r to fetch versions from site\.example/);
 });

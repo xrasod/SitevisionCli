@@ -142,6 +142,8 @@ interface Props {
 	updatedFrom?: string;
 	// Leave the shell, give `job` the real terminal, then start the shell again.
 	handover?: (job: () => Promise<void>) => void;
+	// Apps left out of the workspace, each with the reason.
+	skipped?: string[];
 }
 
 function useSize() {
@@ -166,6 +168,7 @@ export function Shell({
 	minimal = false,
 	updatedFrom,
 	handover,
+	skipped,
 }: Props) {
 	const {exit} = useApp();
 	const {columns, rows} = useSize();
@@ -201,7 +204,20 @@ export function Shell({
 	const [notice, setNotice] = useState<{
 		text: string;
 		level: 'info' | 'ok' | 'warn' | 'error';
-	} | null>(null);
+	} | null>(
+		skipped?.length
+			? {
+					text:
+						skipped.length === 1
+							? t('Skipped: {reason}', {reason: skipped[0]!})
+							: t('Skipped {n} apps. First: {reason}', {
+									n: skipped.length,
+									reason: skipped[0]!,
+								}),
+					level: 'warn',
+				}
+			: null,
+	);
 	const [, tick] = useReducer((n: number) => n + 1, 0);
 
 	// In workspace mode the row after the last app is "Workspace settings".
@@ -374,6 +390,13 @@ export function Shell({
 				notify(t('environment {env} added', {env: clean}), 'ok');
 			},
 			async createApp() {
+				// Only what this flow opened is closed when the scaffolder ends.
+				const asked = new Set<Overlay>();
+				const openOwn = (next: Overlay) => {
+					asked.add(next);
+					setOverlay(next);
+				};
+
 				if (scaffoldRunning()) {
 					notify(t('An app is already being created.'), 'warn');
 					return;
@@ -387,7 +410,7 @@ export function Shell({
 					advise?: (value: string) => string | undefined,
 				) =>
 					new Promise<string | null>(resolve => {
-						setOverlay({
+						openOwn({
 							kind: 'prompt',
 							label,
 							initial,
@@ -431,7 +454,7 @@ export function Shell({
 					].toSorted((a, b) => a.localeCompare(b));
 					// eslint-disable-next-line no-await-in-loop
 					const folderPick = await new Promise<number[] | null>(resolve => {
-						setOverlay({
+						openOwn({
 							kind: 'choice',
 							label: t('Create it in folder'),
 							choices: [...folders, t('Other folder…')],
@@ -488,7 +511,7 @@ export function Shell({
 						: question.message;
 					if (question.type === 'confirm') {
 						const value = await new Promise<boolean>(resolve => {
-							setOverlay({kind: 'confirm', message: label, resolve});
+							openOwn({kind: 'confirm', message: label, resolve});
 						});
 						return {value};
 					}
@@ -496,7 +519,7 @@ export function Shell({
 					if (question.type === 'password') {
 						const secret = await new Promise<{password: string} | null>(
 							resolve => {
-								setOverlay({kind: 'password', label, resolve});
+								openOwn({kind: 'password', label, resolve});
 							},
 						);
 						return secret && {value: secret.password};
@@ -505,7 +528,7 @@ export function Shell({
 					if (question.choices.length > 0) {
 						const multi = question.type === 'checkbox';
 						const picked = await new Promise<number[] | null>(resolve => {
-							setOverlay({
+							openOwn({
 								kind: 'choice',
 								label,
 								choices: question.choices,
@@ -530,7 +553,7 @@ export function Shell({
 				setTab('log');
 				const {done} = startCreateApp({name, parentDir, ask});
 				let outcome = await done;
-				setOverlay(null);
+				setOverlays(stack => withoutOverlays(stack, asked));
 				if (outcome === 'unmanaged') {
 					if (!handover) {
 						notify(t('The scaffolder could not be run from here'), 'error');
@@ -574,7 +597,9 @@ export function Shell({
 					return;
 				}
 
-				const found = discoverApps(workspaceRoot);
+				const left: string[] = [];
+				const found = discoverApps(workspaceRoot, left);
+				if (left[0]) notify(t('Skipped: {reason}', {reason: left[0]}), 'warn');
 				setApps(found);
 				setFilter('');
 				setSelected(
@@ -728,7 +753,7 @@ export function Shell({
 	}, [offerAddon, project, overlay, context, run]);
 
 	const loadAddons = useCallback(async () => {
-		const config = await resolveDeployConfig(context);
+		const config = await resolveDeployConfig(context, false, {addon: false});
 		return config ? listAddons(config) : {error: t('No credentials.')};
 	}, [context]);
 
@@ -1382,6 +1407,13 @@ export function overlayStack(
 ): Overlay[] {
 	if (next === null) return stack.slice(0, -1);
 	return next.kind === 'confirm' ? [next, ...stack] : [...stack, next];
+}
+
+export function withoutOverlays(
+	stack: Overlay[],
+	gone: Set<Overlay>,
+): Overlay[] {
+	return stack.filter(overlay => !gone.has(overlay));
 }
 
 export function Confirm({

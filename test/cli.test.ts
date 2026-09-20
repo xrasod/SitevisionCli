@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
+import {type AddressInfo} from 'node:net';
 import {spawn} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {fileURLToPath, pathToFileURL} from 'node:url';
@@ -34,18 +36,28 @@ const plainApp = {
 function svc(
 	cwd: string,
 	args: string[],
+	input = '',
+	env: Record<string, string> = {},
 ): Promise<{code: number | null; output: string}> {
+	// A developer's own credentials must never reach a test run.
+	const inherited = Object.fromEntries(
+		Object.entries(process.env).filter(
+			([name]) => !name.startsWith('SITEVISION_'),
+		),
+	);
 	return new Promise(resolve => {
 		const child = spawn(process.execPath, ['--import', tsx, cliPath, ...args], {
 			cwd,
 			env: {
-				...process.env,
+				...inherited,
 				XDG_CONFIG_HOME: path.join(cwd, '.xdg'),
 				SVC_NO_KEYCHAIN: '1',
 				TSX_TSCONFIG_PATH: tsconfig,
+				...env,
 			},
 			stdio: ['pipe', 'pipe', 'pipe'],
 		});
+		child.stdin.end(input);
 		let output = '';
 		child.stdout.on('data', chunk => {
 			output += String(chunk);
@@ -145,4 +157,125 @@ test('credentials are not accepted on the command line', async t => {
 		t.not(code, 0, `output: ${output}`);
 		t.regex(output, /unknown flag/i);
 	}
+});
+
+test('setup-signing adds the signing user and leaves everything else alone', async t => {
+	const root = makeApp(plainApp);
+	const file = path.join(root, '.dev_properties.json');
+	fs.writeFileSync(
+		file,
+		JSON.stringify({
+			domain: 'site.example',
+			siteName: 'Site',
+			addonName: 'Addon',
+			username: 'me',
+			password: 'hunter2',
+		}),
+	);
+	const {code, output} = await svc(
+		root,
+		['setup-signing'],
+		'signer@example.com\nMy Cert\n',
+	);
+	t.is(code, 0, `output: ${output}`);
+	t.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), {
+		domain: 'site.example',
+		siteName: 'Site',
+		addonName: 'Addon',
+		username: 'me',
+		password: 'hunter2',
+		signingUsername: 'signer@example.com',
+		certificateName: 'My Cert',
+	});
+});
+
+test('setup-signing without a username exits 1', async t => {
+	const root = makeApp(plainApp);
+	const {code, output} = await svc(root, ['setup-signing'], '\n');
+	t.is(code, 1, `output: ${output}`);
+	t.regex(output, /username is required/i);
+});
+
+test('dev and deploy name the missing setting instead of posting to "undefined"', async t => {
+	for (const command of ['dev', 'deploy']) {
+		const root = makeApp(plainApp);
+		fs.writeFileSync(
+			path.join(root, 'package.json'),
+			JSON.stringify({name: 'fixture', addonName: 'Only the addon'}),
+		);
+		// eslint-disable-next-line no-await-in-loop
+		const {code, output} = await svc(root, [command]);
+		t.is(code, 1, `${command}: ${output}`);
+		t.regex(output, /missing "domain"/, `command: ${command}`);
+		t.notRegex(output, /undefined/, `command: ${command}`);
+	}
+});
+
+test('build --no-zip leaves no zip behind for a sitevision-scripts build either', async t => {
+	const root = makeApp({...plainApp, bundled: true});
+	const bin = path.join(
+		root,
+		'node_modules',
+		'@sitevision',
+		'sitevision-scripts',
+		'bin',
+	);
+	fs.mkdirSync(bin, {recursive: true});
+	// Stands in for sitevision-scripts, which always writes the zip itself.
+	fs.writeFileSync(
+		path.join(bin, 'sitevision-scripts.js'),
+		"const fs = require('node:fs'); fs.mkdirSync('dist', {recursive: true}); fs.writeFileSync('dist/fixture.zip', 'PK'); console.log('built by the fake');",
+	);
+
+	const zip = path.join(root, 'dist', 'fixture.zip');
+	const kept = await svc(root, ['build']);
+	t.is(kept.code, 0, `output: ${kept.output}`);
+	t.regex(kept.output, /built by the fake/);
+	t.true(fs.existsSync(zip));
+
+	const skipped = await svc(root, ['build', '--no-zip']);
+	t.is(skipped.code, 0, `output: ${skipped.output}`);
+	t.false(fs.existsSync(zip));
+});
+
+test('build then deploy runs unattended with the password from the environment', async t => {
+	const requests: string[] = [];
+	const server = http.createServer((req, res) => {
+		requests.push(`${req.method} ${req.url}`);
+		req.resume();
+		req.on('end', () => {
+			res.writeHead(200, {'content-type': 'application/json'});
+			res.end(JSON.stringify({id: '360.1'}));
+		});
+	});
+	await new Promise<void>(resolve => {
+		server.listen(0, '127.0.0.1', resolve);
+	});
+	t.teardown(() => server.close());
+	const {port} = server.address() as AddressInfo;
+
+	const root = makeApp(plainApp);
+	fs.writeFileSync(
+		path.join(root, '.dev_properties.json'),
+		JSON.stringify({
+			domain: `127.0.0.1:${port}`,
+			siteName: 'Site',
+			addonName: 'Addon',
+			username: 'me',
+			useHTTPForDevDeploy: true,
+		}),
+	);
+	const built = await svc(root, ['build']);
+	t.is(built.code, 0, `output: ${built.output}`);
+
+	const deployed = await svc(root, ['deploy'], '', {
+		SITEVISION_DEPLOY_PASSWORD: 'pw',
+	});
+	t.is(deployed.code, 0, `output: ${deployed.output}`);
+	t.notRegex(deployed.output, /Raw mode|TypeError/);
+	// Every log line is printed once, not once per render.
+	t.is(deployed.output.split('POST multipart').length - 1, 1);
+	t.is(deployed.output.split('Deployment successful').length - 1, 1);
+	t.is(requests.length, 1);
+	t.regex(requests[0]!, /^POST .*Addon/);
 });

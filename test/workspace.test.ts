@@ -15,6 +15,7 @@ import {
 	appGroup,
 	needsOnboarding,
 	configIncomplete,
+	toDeployConfig,
 } from '../source/utils/workspace.js';
 
 function app(root: string, id: string, extra: Record<string, unknown> = {}) {
@@ -187,4 +188,76 @@ test('a nested folder does not split its parent group', t => {
 	// Every label forms one run, so each heading is rendered once.
 	const headings = groups.filter((g, i) => g !== groups[i - 1]);
 	t.is(headings.length, new Set(headings).size);
+});
+
+test('an app with a broken manifest is reported, not silently dropped', t => {
+	const root = workspace();
+	const broken = path.join(root, 'webapps', 'broken');
+	fs.mkdirSync(path.join(broken, 'nested'), {recursive: true});
+	fs.writeFileSync(
+		path.join(broken, 'manifest.json'),
+		JSON.stringify({id: 'broken', type: 'WebApp'}),
+	);
+	app(path.join(broken, 'nested'), 'inside-broken');
+
+	const skipped: string[] = [];
+	const ids = new Set(
+		discoverApps(root, skipped).map(found => found.manifest.id),
+	);
+	t.false(ids.has('broken'));
+	// What sits inside a broken app is part of it, not an app of its own.
+	t.false(ids.has('inside-broken'));
+	t.is(skipped.length, 1);
+	t.regex(skipped[0]!, /broken.*manifest\.json is missing "version"/);
+});
+
+test('toDeployConfig names the field a deploy cannot do without', t => {
+	const dev = {
+		domain: 'site.example',
+		siteName: 'Site',
+		addonName: 'Addon',
+		username: 'me',
+		useHTTPForDevDeploy: true,
+		password: 'pw',
+	};
+	t.deepEqual(toDeployConfig(dev), {
+		config: {
+			domain: 'site.example',
+			siteName: 'Site',
+			addonName: 'Addon',
+			username: 'me',
+			password: 'pw',
+			accessToken: undefined,
+			sessionCookie: undefined,
+			useHTTP: true,
+		},
+	});
+
+	for (const key of ['domain', 'siteName', 'addonName', 'username'] as const) {
+		const result = toDeployConfig({...dev, [key]: ''});
+		t.true('error' in result && result.error.includes(key), `key: ${key}`);
+	}
+
+	// A token or cookie login has no use for a username.
+	t.true(
+		'config' in toDeployConfig({...dev, username: '', authMethod: 'oauth2'}),
+	);
+	t.true('error' in toDeployConfig(undefined));
+	t.true(
+		'error' in toDeployConfig({addonName: 'Only this, from package.json'}),
+	);
+});
+
+test('listing a site’s addons needs no addon name, a deploy does', t => {
+	const dev = {
+		domain: 'site.example',
+		siteName: 'Site',
+		addonName: '',
+		username: 'me',
+		password: 'pw',
+	};
+	t.true('error' in toDeployConfig(dev));
+	const site = toDeployConfig(dev, {addon: false});
+	t.true('config' in site && site.config.domain === 'site.example');
+	t.true('error' in toDeployConfig({...dev, domain: ''}, {addon: false}));
 });

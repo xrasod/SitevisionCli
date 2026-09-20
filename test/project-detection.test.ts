@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
 	detectProject,
 	requireProject,
+	addonNameDrift,
 	ManifestParseError,
 	getPackageJsonSyncChanges,
 	syncDevPropertiesToPackageJson,
@@ -222,4 +223,20 @@ test('a manifest missing id, version or type is rejected by name', t => {
 		});
 		t.true(error.message.includes(missing), error.message);
 	}
+});
+
+test('addonNameDrift lists the manifest names an addon name matches none of', t => {
+	const names = {sv: 'Länsväljare', en: 'County picker'};
+	t.deepEqual(addonNameDrift('Regionsväljare', {name: names}), [
+		'Länsväljare',
+		'County picker',
+	]);
+	// Any language's name counts, however it is cased or padded.
+	t.is(addonNameDrift('county picker ', {name: names}), undefined);
+	t.is(addonNameDrift('Länsväljare', {name: 'Länsväljare'}), undefined);
+	t.deepEqual(addonNameDrift('Old', {name: 'New'}), ['New']);
+	// Nothing to compare is not a difference.
+	t.is(addonNameDrift('', {name: names}), undefined);
+	t.is(addonNameDrift('Addon', undefined), undefined);
+	t.is(addonNameDrift('Addon', {name: ''}), undefined);
 });

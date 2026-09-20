@@ -232,7 +232,12 @@ export async function createAppInTerminal(
 		child.on('close', () => resolve());
 		child.on('error', () => resolve());
 	});
-	return Boolean(readManifest(path.join(parentDir, name)));
+	try {
+		return Boolean(readManifest(path.join(parentDir, name)));
+	} catch {
+		// A half-written manifest is a failed scaffold, not a crash.
+		return false;
+	}
 }
 
 /**

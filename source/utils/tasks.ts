@@ -21,8 +21,11 @@ import {
 	copySrcToBuild,
 	cleanBuild,
 	createBuildZip,
+	formatFileSize,
+	getZipSize,
 	zipExists,
 } from './zip.js';
+import {deleteSessionCookie} from './keychain.js';
 import {
 	isBundledApp,
 	getAppType,
@@ -198,7 +201,9 @@ async function buildOnce(
 	log: Log,
 	mode: 'development' | 'production',
 	signal?: AbortSignal,
-): Promise<string> {
+	// False (`svc build --no-zip`): leave build/ and no zip.
+	zip = true,
+): Promise<string | undefined> {
 	const {root, manifest} = project;
 	cleanBuild(root);
 
@@ -226,7 +231,9 @@ async function buildOnce(
 			);
 		}
 
-		return zipPath;
+		// sitevision-scripts always zips; without a zip means taking it away.
+		if (!zip) fs.rmSync(zipPath);
+		return zip ? zipPath : undefined;
 	}
 
 	if (isBundledApp(manifest)) {
@@ -255,6 +262,7 @@ async function buildOnce(
 		copyStaticToBuild(root);
 	}
 
+	if (!zip) return undefined;
 	setPhase(task, 'zipping');
 	return createBuildZip(root, getFullAppId(manifest.id));
 }
@@ -343,6 +351,17 @@ async function deployOnce(
 		}
 	}
 
+	// A stale session must not be replayed by the next run. Not when it came
+	// from SITEVISION_SESSION_COOKIE: that one would just be read again.
+	if (
+		!result.success &&
+		result.authExpired &&
+		config.sessionCookie &&
+		!process.env['SITEVISION_SESSION_COOKIE']
+	) {
+		deleteSessionCookie(config.domain, config.username);
+	}
+
 	if (!result.success) throw new Error(result.error ?? 'Deployment failed');
 	if (options.production && options.activate && !result.activated) {
 		throw new Error(result.message ?? 'Deployed, but not activated');
@@ -360,7 +379,10 @@ async function deployOnce(
 // Tasks
 // ---------------------------------------------------------------------------
 
-export function startBuild(project: ProjectInfo): Task {
+export function startBuild(
+	project: ProjectInfo,
+	{zip = true}: {zip?: boolean} = {},
+): Task {
 	const controller = new AbortController();
 	const {task, log, finish} = createTask('build', project, 'build', () => {
 		controller.abort();
@@ -368,14 +390,21 @@ export function startBuild(project: ProjectInfo): Task {
 	});
 	void (async () => {
 		try {
-			const zip = await buildOnce(
+			const built = await buildOnce(
 				project,
 				task,
 				log,
 				'production',
 				controller.signal,
+				zip,
 			);
-			log('bld', `created ${zip}`, 'ok');
+			log(
+				'bld',
+				built
+					? `created ${built} · ${formatFileSize(getZipSize(built))}`
+					: 'built, zip skipped',
+				'ok',
+			);
 			finish('success');
 		} catch (error) {
 			finish('error', errorText(error));
@@ -581,7 +610,7 @@ export function startDev(project: ProjectInfo, options: DevOptions): Task {
 				'development',
 				controller.signal,
 			);
-			await afterBuild(zip);
+			if (zip) await afterBuild(zip);
 		} catch (error) {
 			fail(error);
 		}
