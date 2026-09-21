@@ -1,5 +1,55 @@
 # Changelog
 
+## 1.0.0-beta.33
+
+- **Breaking:** `--token` and `--cookie` are removed, since credentials on the
+  command line end up in shell history. Use `SITEVISION_ACCESS_TOKEN` or
+  `SITEVISION_SESSION_COOKIE` instead.
+- **Breaking:** an unknown flag is now an error (exit code 2), so a misspelt
+  `--production` never turns into a dev deploy.
+- `svc build`, `svc sign` and `svc deploy` work without a terminal. They print
+  their log line by line and exit on their own with a proper exit code: 0 on
+  success, 1 on failure, 130 when a prompt is cancelled. `svc dev` and
+  `svc watch` no longer crash when stdin is a pipe.
+- New flags: `--no-zip` for `build`, and the short forms `-s`, `-f`, `-p` and
+  `-a`.
+- Global settings in `~/.config/sitevision-cli/config.json`: a default signing
+  user and certificate for every project that does not set its own, and
+  switches for the update check and the addon name warning. Edit them with `,`
+  in the shell, which now shows a description of each setting and opens from
+  anywhere, or run `svc setup-signing --global`. A file that does not parse is
+  reported and left alone.
+- The Config tab marks the addon name with `≠ manifest` when it matches none
+  of the manifest's names. Nothing is changed for you; the two are different
+  things and `svc` only points the difference out.
+- The manifest's name and description always have a Swedish row in the Config
+  tab. Filling it in on a plain name keeps the old text as the English one.
+- In a workspace, an environment's addon name is stored per app. Setting it
+  for one app no longer leaks into the others.
+- `svc` names the missing setting when the deploy config is incomplete,
+  instead of posting to "undefined".
+- A production deploy with `--activate` fails if the activation did not
+  happen, and the confirmation names the addon it deploys to.
+- OAuth2 requires https and a token endpoint on the site's own domain. A
+  refresh token is only thrown away when the site rejects it, not on a network
+  error. An expired session cookie is removed so the next deploy asks for a
+  new login.
+- A plaintext password in `.dev_properties.json` is moved to the keychain when
+  the file is saved, and `svc` says so when the keychain cannot store a secret.
+  `SVC_NO_KEYCHAIN=1` turns the keychain off for CI.
+- `svc dev` with a project's own webpack config no longer deploys a half-built
+  zip when several files change at once.
+- Builds work when dependencies are hoisted to the workspace root, a
+  `manifest.json` in the project root is picked up, file names with å, ä and ö
+  survive in the zip, and `SITEVISION_APP_ID_PREFIX`/`_SUFFIX` apply to build,
+  sign and deploy alike.
+- A broken app in a workspace is skipped with a message instead of stopping
+  the shell. The shell asks before quitting during app creation, the PROD
+  badge survives a narrow terminal, Esc cancels a confirm, and Ctrl-modified
+  keys never fire a shortcut.
+- The update check is skipped without a terminal and when `CI` is set.
+- Updated user guides in English and Swedish.
+
 ## 1.0.0-beta.32
 
 - Sitevision CLI can now create new apps. **New app** in the command palette
