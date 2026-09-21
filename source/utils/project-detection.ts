@@ -486,6 +486,12 @@ export function writeManifestField(
 ): void {
 	const raw = fs.readFileSync(manifestPath, 'utf-8');
 	const wanted = parseJsonc<Record<string, unknown>>(raw);
+	const existing = wanted[key];
+	if (lang && typeof existing !== 'object') {
+		// A plain string becomes the English text of a multilingual value.
+		wanted[key] = existing ? {en: existing} : {};
+	}
+
 	const holder = lang ? (wanted[key] as Record<string, unknown>) : wanted;
 	const leaf = lang ?? key;
 	// JSON.stringify drops an undefined key.

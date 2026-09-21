@@ -221,22 +221,28 @@ const MANIFEST_FIELDS: Field[] = [
 ];
 
 /** Rows for manifest.json: one per text field, one per language of a localized one. */
+const LOCALIZABLE = new Set(['name', 'description']);
+
 export function manifestFields(manifest?: SitevisionManifest): Field[] {
 	if (!manifest) return [];
 	const raw = manifest as unknown as Record<string, unknown>;
 	return MANIFEST_FIELDS.flatMap(f => {
 		const value = raw[f.key];
 		const base = {...f, section: 'MANIFEST', manifestKey: f.key};
+		const localized = (lang: string) => ({
+			...base,
+			key: `manifest.${f.key}.${lang}`,
+			lang,
+			required: f.required && lang === 'en',
+		});
 		if (value && typeof value === 'object') {
-			return Object.keys(value).map(lang => ({
-				...base,
-				key: `manifest.${f.key}.${lang}`,
-				lang,
-				required: f.required && lang === 'en',
-			}));
+			const langs = Object.keys(value);
+			if (!langs.includes('sv')) langs.push('sv');
+			return langs.map(lang => localized(lang));
 		}
 
-		return [{...base, key: `manifest.${f.key}`}];
+		const plain = {...base, key: `manifest.${f.key}`};
+		return LOCALIZABLE.has(f.key) ? [plain, localized('sv')] : [plain];
 	});
 }
 
@@ -304,9 +310,12 @@ function fromProject(project: ConfigTarget): Values {
 				const value = (project.manifest as unknown as Record<string, unknown>)[
 					f.manifestKey!
 				];
-				const text = f.lang
-					? (value as Record<string, unknown>)[f.lang]
-					: value;
+				const text =
+					f.lang && value && typeof value === 'object'
+						? (value as Record<string, unknown>)[f.lang]
+						: f.lang
+							? undefined
+							: value;
 				return [f.key, typeof text === 'string' ? text : ''];
 			}),
 		),

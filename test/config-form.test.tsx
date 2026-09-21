@@ -359,9 +359,54 @@ test('manifestFields gives a localized field one row per language', t => {
 		'manifest.name.sv',
 		'manifest.name.en',
 		'manifest.description',
+		'manifest.description.sv',
 		'manifest.author',
 		'manifest.helpUrl',
 	]);
+});
+
+test('manifest name and description always offer a Swedish row', t => {
+	const plain = manifestFields({
+		id: 'one',
+		version: '1.0.0',
+		type: 'WebApp',
+		name: 'One',
+	}).map(f => f.key);
+	t.deepEqual(plain, [
+		'manifest.id',
+		'manifest.version',
+		'manifest.name',
+		'manifest.name.sv',
+		'manifest.description',
+		'manifest.description.sv',
+		'manifest.author',
+		'manifest.helpUrl',
+	]);
+
+	const english = manifestFields({
+		id: 'one',
+		version: '1.0.0',
+		type: 'WebApp',
+		name: {en: 'One'},
+	}).map(f => f.key);
+	t.deepEqual(english.slice(2, 4), ['manifest.name.en', 'manifest.name.sv']);
+});
+
+test('a Swedish name on a plain manifest keeps the old name as English', t => {
+	const app = workspaceApp();
+	const file = path.join(app, 'manifest.json');
+	const before = detectProject(app)!.manifest.name as string;
+	writeManifestField(file, 'name', 'Svenskt namn', 'sv');
+	t.deepEqual(detectProject(app)!.manifest.name, {
+		en: before,
+		sv: 'Svenskt namn',
+	});
+
+	writeManifestField(file, 'description', 'Beskrivning', 'sv');
+	t.deepEqual(detectProject(app)!.manifest.description, {sv: 'Beskrivning'});
+
+	writeManifestField(file, 'name', '', 'sv');
+	t.deepEqual(detectProject(app)!.manifest.name, {en: before});
 });
 
 test('an environment addon name set for one workspace app never reaches another', t => {

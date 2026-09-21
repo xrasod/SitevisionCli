@@ -1,3 +1,4 @@
+import React from 'react';
 import test from 'ava';
 import fs from 'node:fs';
 import os from 'node:os';

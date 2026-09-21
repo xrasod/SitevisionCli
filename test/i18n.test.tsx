@@ -1,3 +1,4 @@
+import React from 'react';
 import test from 'ava';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -109,7 +110,14 @@ test.serial(
 test.serial('every action label has a Swedish translation', t => {
 	setLanguage('sv');
 	// Command names stay as they are typed: svc dev, svc build, ...
-	const commands = new Set(['Dev', 'Watch', 'Build', 'Sign']);
+	const commands = new Set([
+		'Dev',
+		'Watch',
+		'Build',
+		'Sign',
+		'Deploy',
+		'Deploy (force)',
+	]);
 	const untranslated = [...actions.map(action => action.label), 'Navigator']
 		.filter(label => !commands.has(label))
 		.filter(label => tr(label) === label);
