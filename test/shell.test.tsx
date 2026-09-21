@@ -1,4 +1,3 @@
-import React from 'react';
 import test from 'ava';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -151,6 +150,31 @@ test('typing in the navigator filters instead of firing shortcuts', async t => {
 	stdin.write('\r');
 	await delay(20);
 	t.true(lastFrame()?.includes('Alpha'));
+});
+
+test('the settings key works from the navigator and the workspace config pane', async t => {
+	const {root, apps} = workspace(['Alpha', 'Beta']);
+	const {stdin, lastFrame} = render(
+		<Shell apps={apps} workspaceRoot={root} version="9.9.9" />,
+	);
+	await delay(20);
+
+	stdin.write(',');
+	await delay(20);
+	t.regex(lastFrame() ?? '', /Intro animation/);
+	t.notRegex(lastFrame() ?? '', /0 match/);
+	stdin.write('\u001B');
+	await delay(20);
+	t.notRegex(lastFrame() ?? '', /Intro animation/);
+
+	// Up from the first app wraps to the workspace config row.
+	stdin.write('\u001B[A');
+	await delay(20);
+	stdin.write('\r');
+	await delay(20);
+	stdin.write(',');
+	await delay(20);
+	t.regex(lastFrame() ?? '', /Intro animation/);
 });
 
 test('Tab moves between config fields without leaving the content pane', async t => {

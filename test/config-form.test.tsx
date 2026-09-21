@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {render} from 'ink-testing-library';
+import {setGlobalSigning, setSettings} from '../source/utils/config.js';
 import {resolveEnvironment} from '../source/utils/environments.js';
 import {
 	detectProject,
@@ -504,61 +505,79 @@ test('saving one environment writes only that environment to the shared file', t
 	});
 });
 
-test('the form says when the addon name and the manifest name have drifted apart', async t => {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-drift-'));
-	fs.mkdirSync(path.join(dir, '.git'));
-	fs.writeFileSync(
-		path.join(dir, 'manifest.json'),
-		JSON.stringify({
-			id: 'region-picker',
-			name: {sv: 'Länsväljare', en: 'County picker'},
-			version: '1.0.0',
-			type: 'WebApp',
-		}),
-	);
-	fs.writeFileSync(path.join(dir, 'package.json'), '{}');
-	const devFile = path.join(dir, '.dev_properties.json');
-	const write = (addonName: string) => {
+test.serial(
+	'the form says when the addon name and the manifest name have drifted apart',
+	async t => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-drift-'));
+		fs.mkdirSync(path.join(dir, '.git'));
 		fs.writeFileSync(
-			devFile,
+			path.join(dir, 'manifest.json'),
 			JSON.stringify({
-				domain: 'site.example',
-				siteName: 'Site',
-				addonName,
-				username: 'me@example.com',
+				id: 'region-picker',
+				name: {sv: 'Länsväljare', en: 'County picker'},
+				version: '1.0.0',
+				type: 'WebApp',
 			}),
 		);
-	};
+		fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+		const devFile = path.join(dir, '.dev_properties.json');
+		const write = (addonName: string) => {
+			fs.writeFileSync(
+				devFile,
+				JSON.stringify({
+					domain: 'site.example',
+					siteName: 'Site',
+					addonName,
+					username: 'me@example.com',
+				}),
+			);
+		};
 
-	const frame = async (addonName: string) => {
-		write(addonName);
-		const project = detectProject(dir)!;
-		const {lastFrame, unmount} = render(
-			<ConfigForm
-				project={{
-					root: dir,
-					devProperties: project.devProperties,
-					manifest: project.manifest,
-					manifestPath: project.paths.manifest,
-				}}
-				active={false}
-				width={120}
-				height={60}
-				pickAddon={async () => null}
-				onSaved={() => {}}
-				onEditingChange={() => {}}
-			/>,
+		const frame = async (addonName: string) => {
+			write(addonName);
+			const project = detectProject(dir)!;
+			const {lastFrame, unmount} = render(
+				<ConfigForm
+					project={{
+						root: dir,
+						devProperties: project.devProperties,
+						manifest: project.manifest,
+						manifestPath: project.paths.manifest,
+					}}
+					active={false}
+					width={120}
+					height={60}
+					pickAddon={async () => null}
+					onSaved={() => {}}
+					onEditingChange={() => {}}
+				/>,
+			);
+			await delay(20);
+			const text = lastFrame() ?? '';
+			unmount();
+			return text;
+		};
+
+		const drifted = await frame('Regionsväljare');
+		t.regex(drifted, /≠ manifest/);
+		t.regex(drifted, /Regionsväljare.*Länsväljare/);
+
+		const matching = await frame('County picker');
+		t.notRegex(matching, /≠ manifest/);
+		t.notRegex(matching, /global/);
+
+		const before = process.env['XDG_CONFIG_HOME'];
+		process.env['XDG_CONFIG_HOME'] = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'svc-drift-xdg-'),
 		);
-		await delay(20);
-		const text = lastFrame() ?? '';
-		unmount();
-		return text;
-	};
-
-	const drifted = await frame('Regionsväljare');
-	t.regex(drifted, /≠ manifest/);
-	t.regex(drifted, /Regionsväljare.*Länsväljare/);
-
-	const matching = await frame('County picker');
-	t.notRegex(matching, /≠ manifest/);
-});
+		try {
+			setSettings({addonNameDriftWarning: false});
+			setGlobalSigning({signingUsername: 'signer@example.com'});
+			const quiet = await frame('Regionsväljare');
+			t.notRegex(quiet, /≠ manifest/);
+			t.regex(quiet, /signer@example\.com\s+global/);
+		} finally {
+			process.env['XDG_CONFIG_HOME'] = before;
+		}
+	},
+);

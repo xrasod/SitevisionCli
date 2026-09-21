@@ -279,3 +279,36 @@ test('build then deploy runs unattended with the password from the environment',
 	t.is(requests.length, 1);
 	t.regex(requests[0]!, /^POST .*Addon/);
 });
+
+test('setup-signing --global saves to the settings file, not the project', async t => {
+	const root = makeApp(plainApp);
+	const {code, output} = await svc(
+		root,
+		['setup-signing', '--global'],
+		'signer@example.com\n\n',
+	);
+	t.is(code, 0, `output: ${output}`);
+	t.false(fs.existsSync(path.join(root, '.dev_properties.json')));
+	const saved = JSON.parse(
+		fs.readFileSync(
+			path.join(root, '.xdg', 'sitevision-cli', 'config.json'),
+			'utf8',
+		),
+	) as Record<string, unknown>;
+	t.is(saved['signingUsername'], 'signer@example.com');
+});
+
+test('a settings file that does not parse is reported and left alone', async t => {
+	const root = makeApp(plainApp);
+	const file = path.join(root, '.xdg', 'sitevision-cli', 'config.json');
+	fs.mkdirSync(path.dirname(file), {recursive: true});
+	fs.writeFileSync(file, '{"language": "sv",,}');
+	const {code, output} = await svc(
+		root,
+		['setup-signing', '--global'],
+		'me\n\n',
+	);
+	t.is(code, 1, `output: ${output}`);
+	t.regex(output, /does not parse/);
+	t.is(fs.readFileSync(file, 'utf8'), '{"language": "sv",,}');
+});

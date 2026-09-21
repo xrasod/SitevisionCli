@@ -802,6 +802,12 @@ export function Shell({
 				return;
 			}
 
+			// Reachable from the navigator's search and the workspace form too.
+			if (input === ',') {
+				setOverlay({kind: 'settings'});
+				return;
+			}
+
 			// The config form uses Tab/Shift+Tab to move between fields.
 			if (key.tab && !formActive) {
 				setFilter('');

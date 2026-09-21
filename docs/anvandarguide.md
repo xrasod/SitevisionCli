@@ -116,7 +116,7 @@ Globala (innehållspanelen):
 | `y`       | Kopiera gemensamma värden från `.dev_properties.json` till `package.json`       |
 | `i`       | `npm install`                                                                   |
 | `l`       | Logga in igen (glömmer inloggningen som hålls för sessionen)                    |
-| `,`       | Inställningar: språk (engelska/svenska) och introanimation                      |
+| `,`       | Inställningar: språk, uppdateringskoll, tips, förvald signeringsanvändare       |
 | `/`       | Kommandopalett: alla åtgärder, sökbara                                          |
 | `?`       | Hjälp: alla tangenter, och de som fungerar där du är                            |
 | `Tab`     | Växla mellan navigator och innehåll                                             |
@@ -344,8 +344,32 @@ hemligheter.
 
 ### Globala inställningar
 
-Språk och introanimation ligger i `~/.config/sitevision-cli/config.json` (eller
-`$XDG_CONFIG_HOME/sitevision-cli/`). Ändra dem med `,` i skalet.
+Inställningar som hör till dig och inte till ett projekt ligger i
+`~/.config/sitevision-cli/config.json` (eller `$XDG_CONFIG_HOME/sitevision-cli/`):
+
+```json
+{
+	"language": "sv",
+	"introAnimation": false,
+	"updateCheck": false,
+	"warnings": {"addonNameDrift": false},
+	"signingUsername": "jag@example.com",
+	"certificateName": "Mitt certifikat"
+}
+```
+
+- `language`, `introAnimation` – som tidigare
+- `updateCheck` – `false` stänger av kollen efter en nyare `svc` vid start
+- `warnings.addonNameDrift` – `false` döljer tipset `≠ manifest`
+- `signingUsername`, `certificateName` – signeringsidentiteten för alla projekt
+  som inte anger en egen. Projektets `.dev_properties.json` vinner, och fliken
+  Konfig visar `global` som källa. Sätt dem med `svc setup-signing --global`.
+  Ett projekt helt utan driftsättningskonfiguration får dem inte.
+
+Ändra alla med `,` i skalet, eller redigera filen för hand;
+kommentarer är tillåtna, men `svc` tar bort dem nästa gång den sparar. Om filen
+inte går att tolka säger `svc` det, använder standardvärdena och låter filen
+vara tills den är lagad.
 
 ## 5. Autentisering
 
@@ -692,14 +716,15 @@ svc info
 svc setup-signing
 ```
 
-| Flagga         | Kort | Kommando       | Effekt                                                     |
-| -------------- | ---- | -------------- | ---------------------------------------------------------- |
-| `--no-zip`     |      | `build`        | Bygg till `build/` och lämna ingen zip                     |
-| `--force`      | `-f` | `deploy`       | Skriv över en befintlig version med samma nummer           |
-| `--production` | `-p` | `deploy`       | Ladda upp den signerade zip-filen i stället för dev-zippen |
-| `--activate`   | `-a` | `deploy`       | Med `--production`: aktivera den uppladdade versionen      |
-| `--signed`     | `-s` | `dev`, `watch` | Signera efter varje bygge                                  |
-| `--minimal`    |      | (skalet)       | Kompakt layout, se [3](#3-skalet)                          |
+| Flagga         | Kort | Kommando        | Effekt                                                                     |
+| -------------- | ---- | --------------- | -------------------------------------------------------------------------- |
+| `--no-zip`     |      | `build`         | Bygg till `build/` och lämna ingen zip                                     |
+| `--force`      | `-f` | `deploy`        | Skriv över en befintlig version med samma nummer                           |
+| `--production` | `-p` | `deploy`        | Ladda upp den signerade zip-filen i stället för dev-zippen                 |
+| `--activate`   | `-a` | `deploy`        | Med `--production`: aktivera den uppladdade versionen                      |
+| `--signed`     | `-s` | `dev`, `watch`  | Signera efter varje bygge                                                  |
+| `--minimal`    |      | (skalet)        | Kompakt layout, se [3](#3-skalet)                                          |
+| `--global`     |      | `setup-signing` | Spara för alla projekt, se [Globala inställningar](#globala-inställningar) |
 
 En okänd flagga är ett fel, så ett felstavat `--production` blir aldrig en
 dev-driftsättning.
@@ -710,7 +735,8 @@ dev-driftsättning.
   uppladdningen gick igenom.
 - `svc sign` frågar om signeringslösenordet i nyckelringen ska användas.
 - `svc setup-signing` frågar efter signeringsanvändare och certifikatnamn och
-  sparar dem i `.dev_properties.json`. Inget annat i filen rörs.
+  sparar dem i `.dev_properties.json`. Inget annat i filen rörs. Med `--global`
+  hamnar de i den globala inställningsfilen i stället.
 - Build, sign och deploy skriver ut sin logg rad för rad och avslutar sedan
   själva. De kör samma steg som skalets `b`, `s` och `p`.
 
@@ -796,6 +822,6 @@ gränssnittet är på svenska.
 | `.dev_properties.json`                  | Din konfiguration, med användarspecifika värden      | Nej        |
 | `package.json`                          | Gemensamma standardvärden (toppnivåfält och `"svc"`) | Ja         |
 | `.svcconfig`                            | Aktiv miljö                                          | Nej        |
-| `~/.config/sitevision-cli/config.json`  | Språk, introanimation                                | –          |
+| `~/.config/sitevision-cli/config.json`  | Globala inställningar, förvald signeringsidentitet   | –          |
 | `dist/<id>.zip`, `dist/<id>-signed.zip` | Byggresultat                                         | Nej        |
 | Nyckelringen, tjänst `sitevision-cli`   | Alla hemligheter                                     | –          |

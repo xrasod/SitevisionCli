@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {type Language} from './i18n.js';
+import {parseJsonc} from './jsonc.js';
 
 /**
  * Global (machine-wide) CLI configuration, stored outside any project so the
@@ -12,12 +13,24 @@ interface CliConfig {
 	lastSeenVersion?: string;
 	language?: Language;
 	introAnimation?: boolean;
+	updateCheck?: boolean;
+	warnings?: {addonNameDrift?: boolean};
+	signingUsername?: string;
+	certificateName?: string;
 }
 
 /** User-facing preferences editable from the shell's Settings screen. */
 export interface Settings {
 	language: Language;
 	introAnimation: boolean;
+	updateCheck: boolean;
+	addonNameDriftWarning: boolean;
+}
+
+/** The signing identity used by projects that do not set their own. */
+export interface GlobalSigning {
+	signingUsername?: string;
+	certificateName?: string;
 }
 
 function configDir(): string {
@@ -32,13 +45,32 @@ function configFile(): string {
 
 function readConfig(): CliConfig {
 	try {
-		return JSON.parse(fs.readFileSync(configFile(), 'utf8')) as CliConfig;
+		return parseJsonc<CliConfig>(fs.readFileSync(configFile(), 'utf8'));
 	} catch {
 		return {};
 	}
 }
 
+/** Set when the file exists but does not parse; it is then left untouched. */
+export function configProblem(): string | undefined {
+	let text: string;
+	try {
+		text = fs.readFileSync(configFile(), 'utf8');
+	} catch {
+		return undefined;
+	}
+
+	try {
+		parseJsonc(text);
+		return undefined;
+	} catch (error) {
+		return error instanceof Error ? error.message : String(error);
+	}
+}
+
 function writeConfig(config: CliConfig): void {
+	// A hand-edited file with a typo must not be replaced by defaults.
+	if (configProblem()) return;
 	try {
 		fs.mkdirSync(configDir(), {recursive: true});
 		fs.writeFileSync(configFile(), JSON.stringify(config, null, 2));
@@ -53,11 +85,34 @@ export function getSettings(): Settings {
 	return {
 		language: config.language ?? 'en',
 		introAnimation: config.introAnimation ?? true,
+		updateCheck: config.updateCheck ?? true,
+		addonNameDriftWarning: config.warnings?.addonNameDrift ?? true,
 	};
 }
 
 export function setSettings(patch: Partial<Settings>): void {
-	writeConfig({...readConfig(), ...patch});
+	const {addonNameDriftWarning, ...rest} = patch;
+	const config = {...readConfig(), ...rest};
+	if (addonNameDriftWarning !== undefined) {
+		config.warnings = {
+			...config.warnings,
+			addonNameDrift: addonNameDriftWarning,
+		};
+	}
+
+	writeConfig(config);
+}
+
+export function getGlobalSigning(): GlobalSigning {
+	const {signingUsername, certificateName} = readConfig();
+	return {
+		...(signingUsername && {signingUsername}),
+		...(certificateName && {certificateName}),
+	};
+}
+
+export function setGlobalSigning(signing: GlobalSigning): void {
+	writeConfig({...readConfig(), ...signing});
 }
 
 /** Path of the config file, for display. */
@@ -69,7 +124,7 @@ export function settingsFile(): string {
  * True until the user has completed the first-run welcome at least once.
  */
 export function isFirstRun(): boolean {
-	return !readConfig().firstRunCompleted;
+	return !configProblem() && !readConfig().firstRunCompleted;
 }
 
 /**
@@ -94,6 +149,7 @@ export function getLastSeenVersion(): string | undefined {
  */
 export function setLastSeenVersion(version: string): void {
 	const config = readConfig();
+	if (config.lastSeenVersion === version) return;
 	config.lastSeenVersion = version;
 	writeConfig(config);
 }

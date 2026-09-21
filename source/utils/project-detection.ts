@@ -17,6 +17,7 @@ import {
 } from './keychain.js';
 import {parseJsonc, stripJsonComments} from './jsonc.js';
 import {getLanguage} from './i18n.js';
+import {getGlobalSigning} from './config.js';
 
 // Re-export types for backward compatibility
 export type {
@@ -566,7 +567,13 @@ export function detectProject(cwd: string = process.cwd()): ProjectInfo | null {
 
 		if (hasDevProperties) {
 			try {
-				const parsed = mergeDevLayers(inherited, own) as DevProperties & {
+				// ponytail: the global signing identity only reaches a project that
+				// has some config of its own, so "configured?" checks stay truthful.
+				const parsed = mergeDevLayers(
+					getGlobalSigning(),
+					inherited,
+					own,
+				) as DevProperties & {
 					password?: string;
 				};
 				hasLegacyPassword =
@@ -729,7 +736,10 @@ export function writeDevProperties(
 	// that would shadow the inherited value.
 	const inherited: Record<string, unknown> = complete
 		? {}
-		: readInheritedDevProperties(projectRoot);
+		: mergeDevLayers(
+				getGlobalSigning(),
+				readInheritedDevProperties(projectRoot),
+			);
 	const own = Object.fromEntries(
 		Object.entries(persisted).filter(
 			([key, value]) =>

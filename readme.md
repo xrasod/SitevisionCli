@@ -60,7 +60,7 @@ and `p` to deploy and activate.
 | `1`–`4`         | Overview · Config · Versions · Log                  |
 | `/`             | Command palette                                     |
 | `?`             | Help: every key in one place                        |
-| `,`             | Settings (language, intro animation)                |
+| `,`             | Settings (language, update check, hints)            |
 | `Tab` / `Esc`   | Switch pane / back                                  |
 | `q`             | Quit                                                |
 
@@ -79,7 +79,7 @@ svc deploy --production [--activate]  # deploy the signed zip
 svc dev [--signed]                    # build + deploy on change
 svc watch [--signed]                  # build on change, no deploy
 svc info                              # project information
-svc setup-signing                     # save the signing username and certificate
+svc setup-signing [--global]          # save the signing username and certificate
 ```
 
 Short flags: `-f` force, `-p` production, `-a` activate, `-s` signed. An unknown

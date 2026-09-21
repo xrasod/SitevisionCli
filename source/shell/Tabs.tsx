@@ -13,6 +13,7 @@ import {type Executable} from '../utils/sitevision-api.js';
 import {ACCENT, elapsed} from './Frame.js';
 import {type Tab} from './actions.js';
 import {t} from '../utils/i18n.js';
+import {getGlobalSigning} from '../utils/config.js';
 
 export const TABS: {id: Tab; label: string; short: string}[] = [
 	{id: 'overview', label: 'Overview', short: 'Ovw'},
@@ -107,12 +108,17 @@ export function Overview({
 	const dev = project.devProperties;
 	const inherited = new Set(project.inheritedKeys);
 	const ancestors = readAncestorDevProperties(project.root);
+	const globalSigning = getGlobalSigning() as Record<string, unknown>;
 	const src = (key: string) =>
 		inherited.has(key)
 			? Object.hasOwn(ancestors, key)
 				? t('↑ root')
 				: 'package.json'
-			: undefined;
+			: globalSigning[key] !== undefined &&
+				  globalSigning[key] ===
+						(dev as Record<string, unknown> | undefined)?.[key]
+				? t('global')
+				: undefined;
 	const notSet = t('not set');
 	const sync = getPackageJsonSyncChanges(project.root).length;
 	const scripts = checkSitevisionScriptsCompatibility(project.root);

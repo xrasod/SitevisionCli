@@ -23,6 +23,8 @@ import {
 	getLastSeenVersion,
 	setLastSeenVersion,
 	getSettings,
+	configProblem,
+	settingsFile,
 } from './utils/config.js';
 import {setLanguage} from './utils/i18n.js';
 import {WelcomeScreen} from './components/WelcomeScreen.js';
@@ -60,6 +62,7 @@ const cli = meow(
 	  --production, -p  deploy: upload the signed zip to production
 	  --activate, -a    deploy: activate after a production deploy
 	  --no-zip          build: skip the zip archive
+	  --global          setup-signing: save for every project on this machine
 	  --minimal         Shell: compact layout for small terminals
 	  --help            Show this help message
 	  --version         Show version number
@@ -108,6 +111,10 @@ const cli = meow(
 				default: false,
 			},
 			minimal: {
+				type: 'boolean',
+				default: false,
+			},
+			global: {
 				type: 'boolean',
 				default: false,
 			},
@@ -301,9 +308,15 @@ async function main() {
 		// Record the current version so the banner shows once per upgrade.
 		setLastSeenVersion(pkg.version);
 
+		if (configProblem()) {
+			console.log(
+				`\x1b[33m  ${settingsFile()} does not parse and is ignored: ${configProblem()}\x1b[0m`,
+			);
+		}
+
 		// Check npm for a newer published release.
 		const latestVersion =
-			process.stdout.isTTY && !process.env['CI']
+			settings.updateCheck && process.stdout.isTTY && !process.env['CI']
 				? await checkForUpdate(pkg.name, pkg.version)
 				: null;
 		if (latestVersion) {

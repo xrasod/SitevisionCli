@@ -36,6 +36,7 @@ import {
 	withEnvironmentOverride,
 } from '../utils/environments.js';
 import {t} from '../utils/i18n.js';
+import {getGlobalSigning, getSettings} from '../utils/config.js';
 
 type Method = 'basic' | 'oauth2' | 'cookie';
 const METHODS: Method[] = ['basic', 'oauth2', 'cookie'];
@@ -600,6 +601,7 @@ export function ConfigForm({
 		unknown
 	>;
 	const ancestors = readAncestorDevProperties(project.root);
+	const globalSigning = getGlobalSigning() as Record<string, unknown>;
 	const changes = getPackageJsonSyncChanges(project.root);
 	const packageJsonExists = hasPackageJson(project.root);
 
@@ -757,9 +759,10 @@ export function ConfigForm({
 	);
 
 	// An environment's addon name differs from the app's name on purpose.
-	const drift = envMode
-		? undefined
-		: addonNameDrift(values['addonName'], project.manifest);
+	const drift =
+		envMode || !getSettings().addonNameDriftWarning
+			? undefined
+			: addonNameDrift(values['addonName'], project.manifest);
 
 	const source = (f: Field): {text: string; color?: string} => {
 		const required = f.required === true || f.required === method;
@@ -812,6 +815,8 @@ export function ConfigForm({
 					: 'package.json',
 			};
 		}
+
+		if (value && globalSigning[f.key] === value) return {text: t('global')};
 
 		return {text: (values[f.key] ?? '') ? t('local') : ''};
 	};

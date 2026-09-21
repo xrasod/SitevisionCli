@@ -115,7 +115,7 @@ Global (content pane):
 | `y`       | Copy shared values from `.dev_properties.json` into `package.json` |
 | `i`       | `npm install`                                                      |
 | `l`       | Log in again (discards the credential held for this session)       |
-| `,`       | Settings: language (English/Swedish) and intro animation           |
+| `,`       | Settings: language, update check, hints, default signing user      |
 | `/`       | Command palette: every action, searchable                          |
 | `?`       | Help: every key, plus the ones that work where you are             |
 | `Tab`     | Switch between navigator and content                               |
@@ -341,9 +341,33 @@ A small file of CLI preferences, in the app root or workspace root. No secrets.
 
 ### Global settings
 
-Language and intro animation live in
-`~/.config/sitevision-cli/config.json` (or `$XDG_CONFIG_HOME/sitevision-cli/`).
-Edit them with `,` in the shell.
+Settings that belong to you rather than to a project live in
+`~/.config/sitevision-cli/config.json` (or `$XDG_CONFIG_HOME/sitevision-cli/`):
+
+```json
+{
+	"language": "sv",
+	"introAnimation": false,
+	"updateCheck": false,
+	"warnings": {"addonNameDrift": false},
+	"signingUsername": "me@example.com",
+	"certificateName": "My certificate"
+}
+```
+
+- `language`, `introAnimation` – as before
+- `updateCheck` – `false` stops the check for a newer `svc` at start
+- `warnings.addonNameDrift` – `false` hides the `≠ manifest` hint
+- `signingUsername`, `certificateName` – the signing identity for every project
+  that does not set its own. A project's `.dev_properties.json` wins, and the
+  Config tab shows `global` as the source. Set them with
+  `svc setup-signing --global`. A project with no deploy config at all does not
+  pick them up.
+
+Edit all of them with `,` in the shell, or edit the file by hand; comments
+are allowed, but `svc` drops them the next time it saves. If the file does not
+parse, `svc` says so, uses the defaults and leaves the file alone until it is
+fixed.
 
 ## 5. Authentication
 
@@ -687,14 +711,15 @@ svc info
 svc setup-signing
 ```
 
-| Flag           | Short | Command        | Effect                                             |
-| -------------- | ----- | -------------- | -------------------------------------------------- |
-| `--no-zip`     |       | `build`        | Build into `build/` and leave no zip               |
-| `--force`      | `-f`  | `deploy`       | Overwrite an existing version with the same number |
-| `--production` | `-p`  | `deploy`       | Upload the signed zip instead of the dev zip       |
-| `--activate`   | `-a`  | `deploy`       | With `--production`: activate the uploaded version |
-| `--signed`     | `-s`  | `dev`, `watch` | Sign after each build                              |
-| `--minimal`    |       | (shell)        | Compact layout, see [3](#3-the-shell)              |
+| Flag           | Short | Command         | Effect                                                          |
+| -------------- | ----- | --------------- | --------------------------------------------------------------- |
+| `--no-zip`     |       | `build`         | Build into `build/` and leave no zip                            |
+| `--force`      | `-f`  | `deploy`        | Overwrite an existing version with the same number              |
+| `--production` | `-p`  | `deploy`        | Upload the signed zip instead of the dev zip                    |
+| `--activate`   | `-a`  | `deploy`        | With `--production`: activate the uploaded version              |
+| `--signed`     | `-s`  | `dev`, `watch`  | Sign after each build                                           |
+| `--minimal`    |       | (shell)         | Compact layout, see [3](#3-the-shell)                           |
+| `--global`     |       | `setup-signing` | Save for every project, see [Global settings](#global-settings) |
 
 An unknown flag is an error, so a misspelt `--production` never turns into a
 dev deploy.
@@ -706,6 +731,7 @@ dev deploy.
 - `svc sign` asks whether to use the signing password saved in the keychain.
 - `svc setup-signing` asks for the signing username and certificate name and
   saves them in `.dev_properties.json`. Nothing else in the file is touched.
+  With `--global` they go to the global settings file instead.
 - Build, sign and deploy print their log line by line and then exit by
   themselves. They run the same steps as the shell's `b`, `s` and `p`.
 
@@ -787,6 +813,6 @@ with `basic` is usually the simplest choice for CI.
 | `.dev_properties.json`                  | Your config, including user-specific values    | No      |
 | `package.json`                          | Shared defaults (top-level fields and `"svc"`) | Yes     |
 | `.svcconfig`                            | Active environment                             | No      |
-| `~/.config/sitevision-cli/config.json`  | Language, intro animation                      | –       |
+| `~/.config/sitevision-cli/config.json`  | Global settings, default signing identity      | –       |
 | `dist/<id>.zip`, `dist/<id>-signed.zip` | Build output                                   | No      |
 | OS keychain, service `sitevision-cli`   | All secrets                                    | –       |

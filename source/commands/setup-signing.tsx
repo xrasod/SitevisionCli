@@ -3,6 +3,12 @@ import path from 'path';
 import readline from 'readline';
 import {type Command} from './types.js';
 import {findDevPropertiesPath} from '../utils/project-detection.js';
+import {
+	configProblem,
+	getGlobalSigning,
+	setGlobalSigning,
+	settingsFile,
+} from '../utils/config.js';
 
 // rl.question drops lines that arrive before it is called, which is every line
 // but the first when stdin is piped. The iterator buffers them.
@@ -19,7 +25,8 @@ export const setupSigningCommand: Command = {
 	name: 'setup-signing',
 	description: 'Configure signing credentials for developer.sitevision.se',
 	requiresProject: true,
-	async execute({project}) {
+	async execute({project, flags}) {
+		const global = Boolean(flags['global']);
 		const rl = readline.createInterface({
 			input: process.stdin,
 			output: process.stdout,
@@ -37,12 +44,16 @@ export const setupSigningCommand: Command = {
 			findDevPropertiesPath(project.root) ??
 			path.join(project.root, '.dev_properties.json');
 		let existingProperties: Record<string, unknown> = {};
-		try {
-			existingProperties = JSON.parse(
-				fs.readFileSync(devPropertiesPath, 'utf8'),
-			) as Record<string, unknown>;
-		} catch {
-			// Missing or invalid file, start fresh
+		if (global) {
+			existingProperties = {...getGlobalSigning()};
+		} else {
+			try {
+				existingProperties = JSON.parse(
+					fs.readFileSync(devPropertiesPath, 'utf8'),
+				) as Record<string, unknown>;
+			} catch {
+				// Missing or invalid file, start fresh
+			}
 		}
 
 		try {
@@ -76,6 +87,25 @@ export const setupSigningCommand: Command = {
 			}
 
 			rl.close();
+
+			if (global) {
+				if (configProblem()) {
+					console.log(
+						`\x1b[31mError: ${settingsFile()} does not parse; fix it first\x1b[0m`,
+					);
+					process.exitCode = 1;
+					return;
+				}
+
+				setGlobalSigning({
+					signingUsername,
+					...(certificateName && {certificateName}),
+				});
+				console.log(
+					`\n\x1b[32mSigning credentials saved to ${settingsFile()}\x1b[0m\n`,
+				);
+				return;
+			}
 
 			const updatedProperties = {
 				...existingProperties,

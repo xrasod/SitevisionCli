@@ -1,11 +1,10 @@
-import React from 'react';
 import test from 'ava';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {render} from 'ink-testing-library';
 import {t as tr, setLanguage, getLanguage} from '../source/utils/i18n.js';
-import {getSettings} from '../source/utils/config.js';
+import {getGlobalSigning, getSettings} from '../source/utils/config.js';
 import {localizedText} from '../source/utils/project-detection.js';
 import {SettingsScreen} from '../source/shell/Settings.js';
 import {actions} from '../source/shell/actions.js';
@@ -57,6 +56,53 @@ test.serial(
 		t.is(getSettings().language, 'sv');
 		t.true(lastFrame()?.includes('Språk'));
 		setLanguage('en');
+	},
+);
+
+test.serial(
+	'the settings screen edits the default signing user as text',
+	async t => {
+		process.env['XDG_CONFIG_HOME'] = fs.mkdtempSync(
+			path.join(os.tmpdir(), 'svc-settings-'),
+		);
+		setLanguage('en');
+		const {stdin, lastFrame, unmount} = render(
+			<SettingsScreen onChanged={() => {}} onClose={() => {}} />,
+		);
+		await delay(20);
+		t.regex(lastFrame() ?? '', /Default signing user/);
+		t.regex(lastFrame() ?? '', /language svc itself speaks/);
+		for (let i = 0; i < 4; i++) {
+			stdin.write('\u001B[B');
+			// eslint-disable-next-line no-await-in-loop
+			await delay(10);
+		}
+
+		stdin.write('\r');
+		await delay(10);
+		stdin.write('qme@example.com');
+		await delay(10);
+		stdin.write('\u007F');
+		await delay(10);
+		stdin.write('m');
+		await delay(10);
+		stdin.write('\r');
+		await delay(20);
+		t.is(getGlobalSigning().signingUsername, 'qme@example.com');
+		t.regex(lastFrame() ?? '', /qme@example\.com/);
+
+		stdin.write('\r');
+		await delay(10);
+		for (const _ of 'qme@example.com') {
+			stdin.write('\u007F');
+			// eslint-disable-next-line no-await-in-loop
+			await delay(5);
+		}
+
+		stdin.write('\r');
+		await delay(20);
+		t.is(getGlobalSigning().signingUsername, undefined);
+		unmount();
 	},
 );
 
