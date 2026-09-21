@@ -70,6 +70,7 @@
 			"--import=tsx"
 		],
 		"environmentVariables": {
+			"FORCE_COLOR": "0",
 			"SVC_NO_KEYCHAIN": "memory",
 			"XDG_CONFIG_HOME": "test/.xdg"
 		}
