@@ -1,5 +1,8 @@
 # Sitevision CLI
 
+[![Test](https://github.com/xrasod/SitevisionCli/actions/workflows/test.yml/badge.svg)](https://github.com/xrasod/SitevisionCli/actions/workflows/test.yml)
+[![npm](https://img.shields.io/npm/v/sitevision-cli)](https://www.npmjs.com/package/sitevision-cli)
+
 `svc` builds, signs and deploys Sitevision apps (WebApp, Widget, RESTApp,
 MCPServer) from a full-screen terminal shell or as plain commands.
 
@@ -147,7 +150,8 @@ To run your local build as `svc`, link it once with `npm link`, then keep
 any Sitevision app reflects your changes. `npm unlink -g sitevision-cli` and
 `npm install -g sitevision-cli` restore the published version.
 
-Releasing: see [RELEASING.md](RELEASING.md).
+Contributing: see [CONTRIBUTING.md](CONTRIBUTING.md). Releasing: see
+[RELEASING.md](RELEASING.md).
 
 ## License
 
