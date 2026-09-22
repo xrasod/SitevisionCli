@@ -62,6 +62,7 @@
 		"xo": "^3.0.2"
 	},
 	"ava": {
+		"workerThreads": false,
 		"extensions": [
 			"ts",
 			"tsx"
