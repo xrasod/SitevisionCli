@@ -9,6 +9,7 @@ import {
 	deleteOAuth2RefreshToken,
 	getOAuth2ClientSecret,
 } from './keychain.js';
+import {debug} from './debug.js';
 
 /** Default loopback port. Fixed so a single redirect URI can be whitelisted. */
 export const DEFAULT_REDIRECT_PORT = 8137;
@@ -310,9 +311,17 @@ export function beginOAuth2Login(dev: DevProperties): {
 	url.searchParams.set('scope', (config.scopes ?? DEFAULT_SCOPES).join(' '));
 
 	const loopback = startLoopback(port, state);
+	debug(
+		'auth',
+		`oauth2 login ${domain} client ${config.clientId} port ${port}`,
+	);
 
 	const complete = async (): Promise<{token?: string; error?: string}> => {
 		const redirect = await loopback.result;
+		debug(
+			'auth',
+			`oauth2 redirect ${redirect.error ?? (redirect.code ? 'code received' : 'no code')}`,
+		);
 		if (redirect.error || !redirect.code) {
 			return {error: redirect.error ?? 'Login failed.'};
 		}
@@ -327,6 +336,10 @@ export function beginOAuth2Login(dev: DevProperties): {
 				code_verifier: verifier,
 			},
 			secret,
+		);
+		debug(
+			'auth',
+			`oauth2 token ${error ?? (tokens?.access_token ? 'ok' : 'missing')}${tokens?.refresh_token ? ' + refresh' : ''}`,
 		);
 		if (error) return {error};
 		if (!tokens?.access_token) {
@@ -369,6 +382,10 @@ export async function resolveOAuth2AccessToken(
 			client_id: config.clientId,
 		},
 		secret,
+	);
+	debug(
+		'auth',
+		`oauth2 refresh ${domain}: ${tokens?.access_token ? 'ok' : `failed (${status})`}`,
 	);
 	if (tokens?.access_token) {
 		if (tokens.refresh_token) {

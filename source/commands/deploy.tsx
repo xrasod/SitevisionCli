@@ -14,6 +14,7 @@ import {resolveOAuth2AccessToken} from '../utils/oauth2-auth.js';
 import {startDeploy, useTasks, type Task} from '../utils/tasks.js';
 import {toDeployConfig} from '../utils/workspace.js';
 import type {ProjectInfo} from '../types/index.js';
+import {say} from '../utils/debug.js';
 
 interface DeployScreenProps {
 	project: ProjectInfo;
@@ -185,7 +186,7 @@ export const deployCommand: Command = {
 	async execute({project, flags}) {
 		const complete = toDeployConfig(project.devProperties);
 		if ('error' in complete) {
-			console.log(`\n\x1b[33m${complete.error}\x1b[0m\n`);
+			say(`\n\x1b[33m${complete.error}\x1b[0m\n`);
 			process.exitCode = 1;
 			return;
 		}

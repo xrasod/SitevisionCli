@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import {type Language} from './i18n.js';
 import {parseJsonc} from './jsonc.js';
+import {debug} from './debug.js';
 
 /**
  * Global (machine-wide) CLI configuration, stored outside any project so the
@@ -91,6 +92,7 @@ export function getSettings(): Settings {
 }
 
 export function setSettings(patch: Partial<Settings>): void {
+	debug('config', `settings ${JSON.stringify(patch)}`);
 	const {addonNameDriftWarning, ...rest} = patch;
 	const config = {...readConfig(), ...rest};
 	if (addonNameDriftWarning !== undefined) {
@@ -112,6 +114,7 @@ export function getGlobalSigning(): GlobalSigning {
 }
 
 export function setGlobalSigning(signing: GlobalSigning): void {
+	debug('config', `global signing ${Object.keys(signing).join(', ')}`);
 	writeConfig({...readConfig(), ...signing});
 }
 

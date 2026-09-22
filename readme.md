@@ -67,6 +67,7 @@ and `p` to deploy and activate.
 In the navigator, typing filters the app list; action keys work once `Enter` or
 `Tab` has moved focus to the content pane. The bottom bar always shows the keys
 that apply. `svc --minimal` gives a compact layout for small panes.
+`svc --debug` writes a log of everything svc does, for bug reports.
 
 ## Commands
 

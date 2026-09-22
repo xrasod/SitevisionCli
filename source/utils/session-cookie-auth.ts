@@ -1,5 +1,6 @@
 import type {DevProperties} from '../types/index.js';
 import {setSessionCookie} from './keychain.js';
+import {debug} from './debug.js';
 
 interface RawCookie {
 	name: string;
@@ -106,6 +107,7 @@ export async function beginCookieLogin(
 		browser = await puppeteer.launch({headless: false, channel: 'chrome'});
 		const page = await browser.newPage();
 		const loginUrl = dev.sessionLoginUrl || `https://${domain}/`;
+		debug('auth', `cookie login ${loginUrl}`);
 		await page.goto(loginUrl, {waitUntil: 'domcontentloaded'}).catch(() => {
 			// A SAML redirect may abort the initial navigation — that's fine.
 		});
@@ -113,6 +115,10 @@ export async function beginCookieLogin(
 		const capture = async (): Promise<CaptureResult> => {
 			const all = await readAllCookies(browser, page);
 			const result = selectSessionCookie(all, domain);
+			debug(
+				'auth',
+				`cookie capture ${domain}: ${result.cookie ? 'session found' : 'no session'} (${all.length} cookies)`,
+			);
 			if (result.cookie) {
 				setSessionCookie(domain, username, result.cookie);
 			}

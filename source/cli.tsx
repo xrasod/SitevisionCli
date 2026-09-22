@@ -3,6 +3,7 @@ import {render} from 'ink';
 import {Text, Box} from 'ink';
 import meow from 'meow';
 import {readFileSync} from 'node:fs';
+import path from 'node:path';
 import os from 'node:os';
 import {runningTasks} from './utils/tasks.js';
 import {killAllChildren} from './utils/process-runner.js';
@@ -27,6 +28,7 @@ import {
 	settingsFile,
 } from './utils/config.js';
 import {setLanguage} from './utils/i18n.js';
+import {debug, enableDebug, errorText, say} from './utils/debug.js';
 import {WelcomeScreen} from './components/WelcomeScreen.js';
 import {AnimatedLogo} from './components/AnimatedLogo.js';
 import {
@@ -64,6 +66,7 @@ const cli = meow(
 	  --no-zip          build: skip the zip archive
 	  --global          setup-signing: save for every project on this machine
 	  --minimal         Shell: compact layout for small terminals
+	  --debug           Write a log of every action to debug.log (or SVC_DEBUG=1)
 	  --help            Show this help message
 	  --version         Show version number
 
@@ -118,12 +121,31 @@ const cli = meow(
 				type: 'boolean',
 				default: false,
 			},
+			debug: {
+				type: 'boolean',
+				default: false,
+			},
 		},
 	},
 );
 
 const [commandName, ...args] = cli.input;
 const settings = getSettings();
+if (cli.flags.debug || process.env['SVC_DEBUG']) {
+	const file = enableDebug(path.dirname(settingsFile()));
+	process.on('exit', code => {
+		debug('exit', `code ${code}`);
+		process.stderr.write(`\x1b[2mDebug log: ${file}\x1b[0m\n`);
+	});
+	const on = Object.entries(cli.flags)
+		.filter(([, v]) => v === true)
+		.map(([k]) => `--${k}`);
+	debug(
+		'start',
+		`svc ${pkg.version} node ${process.version} ${process.platform} ${process.arch} ${[commandName ?? '(shell)', ...args, ...on].join(' ')}`,
+	);
+}
+
 setLanguage(settings.language);
 
 const CYAN = '\x1b[36m';
@@ -177,6 +199,7 @@ function shutdown(code?: number): void {
 }
 
 function fail(message: string, hint: string): never {
+	debug('out', `Error: ${message}`);
 	render(
 		<Box flexDirection="column" padding={1}>
 			<Text color="red">Error: {message}</Text>
@@ -216,11 +239,14 @@ async function runShell(
 ) {
 	process.stdout.write('\x1b[?1049h\x1b[H');
 	// Also leave the alternate screen when a signal exits past the finally.
-	process.once('exit', () => process.stdout.write('\x1b[?1049l'));
+	process.prependOnceListener('exit', () =>
+		process.stdout.write('\x1b[?1049l'),
+	);
 	// A crash outside React would print into the alternate screen and vanish
 	// with it: leave it first, then report.
 	const crash = (error: unknown) => {
 		process.stdout.write('\x1b[?1049l');
+		debug('crash', errorText(error));
 		console.error('svc crashed:', error);
 		shutdown(1);
 	};
@@ -298,7 +324,7 @@ async function main() {
 		// The shell shows the changelog itself; only direct commands get a banner.
 		if (isUpdate && commandName) {
 			printBranding();
-			console.log(
+			say(
 				`\x1b[32m\n  ✨ Updated to v${pkg.version}\x1b[0m \x1b[2m(from v${lastSeen})\x1b[0m\n`,
 			);
 		} else if (commandName) {
@@ -309,7 +335,7 @@ async function main() {
 		setLastSeenVersion(pkg.version);
 
 		if (configProblem()) {
-			console.log(
+			say(
 				`\x1b[33m  ${settingsFile()} does not parse and is ignored: ${configProblem()}\x1b[0m`,
 			);
 		}
@@ -320,7 +346,7 @@ async function main() {
 				? await checkForUpdate(pkg.name, pkg.version)
 				: null;
 		if (latestVersion) {
-			console.log(
+			say(
 				`\x1b[33m  ↑ update available: ${pkg.version} → ${latestVersion}  (run: npm i -g ${pkg.name})\x1b[0m`,
 			);
 		}
@@ -397,6 +423,7 @@ async function main() {
 	const command = getCommand(commandName);
 
 	if (!command) {
+		debug('out', `Unknown command: ${commandName}`);
 		render(
 			<Box flexDirection="column" padding={1}>
 				<Text color="red">Unknown command: {commandName}</Text>
@@ -412,24 +439,22 @@ async function main() {
 	// Skip on non-TTY stdin (e.g. CI) where prompting would fail — the
 	// plaintext password is still used for this run.
 	if (project.hasLegacyPassword && process.stdin.isTTY) {
-		console.log(
-			'\n\x1b[33m⚠ Plaintext password found in .dev_properties.json\x1b[0m',
-		);
+		say('\n\x1b[33m⚠ Plaintext password found in .dev_properties.json\x1b[0m');
 		const move = await promptYesNo(
 			'Move it to the OS keychain and remove it from the file? (y/N): ',
 		);
 		if (move) {
 			if (migrateLegacyPassword(project)) {
-				console.log('\x1b[32m✓ Password moved to keychain.\x1b[0m\n');
+				say('\x1b[32m✓ Password moved to keychain.\x1b[0m\n');
 			} else {
-				console.log(
+				say(
 					'\x1b[31mCould not move the password; the file still holds it.\x1b[0m\n',
 				);
 			}
 		}
 	}
 
-	// Execute the command
+	debug('command', commandName);
 	await command.execute({
 		project,
 		flags: cli.flags,
@@ -439,6 +464,7 @@ async function main() {
 }
 
 main().catch(error => {
+	debug('crash', errorText(error));
 	console.error('Fatal error:', error);
 	process.exit(1);
 });

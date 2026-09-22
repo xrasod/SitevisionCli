@@ -720,6 +720,7 @@ svc setup-signing
 | `--signed`     | `-s`  | `dev`, `watch`  | Sign after each build                                           |
 | `--minimal`    |       | (shell)         | Compact layout, see [3](#3-the-shell)                           |
 | `--global`     |       | `setup-signing` | Save for every project, see [Global settings](#global-settings) |
+| `--debug`      |       | (any)           | Write a debug log, see [Debug log](#debug-log)                  |
 
 An unknown flag is an error, so a misspelt `--production` never turns into a
 dev deploy.
@@ -763,6 +764,7 @@ version is skipped when output is not a terminal or `CI` is set.
 | `SITEVISION_SESSION_COOKIE`            | Cookie header (when `authMethod` is `cookie`)                                   |
 | `SITEVISION_APP_ID_PREFIX` / `_SUFFIX` | Added around the manifest id in zip names; `APP_ID_PREFIX` / `_SUFFIX` work too |
 | `SVC_NO_KEYCHAIN`                      | `1` turns the OS keychain off: nothing is read from it or saved to it           |
+| `SVC_DEBUG`                            | `1` writes a debug log, same as `--debug`                                       |
 | `CI`                                   | When set, the check for a newer `svc` version is skipped                        |
 | `XDG_CONFIG_HOME`                      | Location of the global settings                                                 |
 
@@ -803,6 +805,17 @@ with `basic` is usually the simplest choice for CI.
 | "OAuth2 token endpoint is on …, not on …"                      | The token endpoint must be on the site's own domain. See [oauth2](#method-oauth2).                                                            |
 | "Deployed successfully but activation failed"                  | The new version is uploaded but the old one is still active. Activate it from the Versions tab (`a`), or fix the permission and deploy again. |
 | `≠ manifest` on Addon name                                     | The addon name is none of the manifest's names. See [Editing in the Config tab](#editing-in-the-config-tab).                                  |
+
+### Debug log
+
+`svc --debug` (or `SVC_DEBUG=1`) writes everything svc does during the run to
+`debug.log` next to the global settings, and prints the path on exit. The log
+holds every action you run in the shell or as a command, every task and its
+output, every request to Sitevision (method, host, path, status and time),
+every child process, every config write and every keychain lookup. It never
+holds passwords, tokens or cookies, but it does name your site, username and
+file paths, so read through it before attaching it to a bug report. The file
+is replaced on every run.
 
 ## Reference
 

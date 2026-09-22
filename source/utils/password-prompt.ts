@@ -1,9 +1,14 @@
+import {debug} from './debug.js';
+
 // Without a terminal nobody can answer: prompts resolve to their "no answer"
 // value (default, nothing, empty password) and the caller reports what is missing.
 const interactive = () => Boolean(process.stdin.isTTY);
 
 // 130 = 128 + SIGINT, so `svc sign && svc deploy` stops at a cancelled prompt.
-const cancelled = () => process.exit(130);
+const cancelled = () => {
+	debug('prompt', 'cancelled');
+	process.exit(130);
+};
 
 /**
  * Prompt for a yes/no answer. Returns true for y/Y.
@@ -15,10 +20,15 @@ export function promptYesNo(
 ): Promise<boolean> {
 	return new Promise(resolve => {
 		if (!interactive()) {
+			debug(
+				'prompt',
+				`${prompt.trim()} (no terminal, ${defaultYes ? 'yes' : 'no'})`,
+			);
 			resolve(defaultYes);
 			return;
 		}
 
+		debug('prompt', prompt.trim());
 		process.stdout.write(prompt);
 		const stdin = process.stdin;
 		stdin.setRawMode(true);
@@ -37,9 +47,15 @@ export function promptYesNo(
 			}
 			// Enter (CR/LF) or empty input → use the default
 			if (char === '' || charCode === 13 || charCode === 10) {
+				debug('prompt', `answered default (${defaultYes ? 'yes' : 'no'})`);
 				resolve(defaultYes);
 				return;
 			}
+
+			debug(
+				'prompt',
+				`answered ${char === 'y' || char === 'Y' ? 'yes' : 'no'}`,
+			);
 			resolve(char === 'y' || char === 'Y');
 		};
 
@@ -54,10 +70,12 @@ export function promptYesNo(
 export function promptEnter(prompt: string): Promise<void> {
 	return new Promise(resolve => {
 		if (!interactive()) {
+			debug('prompt', `${prompt.trim()} (no terminal, continuing)`);
 			resolve();
 			return;
 		}
 
+		debug('prompt', prompt.trim());
 		process.stdout.write(prompt);
 		const stdin = process.stdin;
 		stdin.setRawMode(true);
@@ -76,6 +94,7 @@ export function promptEnter(prompt: string): Promise<void> {
 				stdin.removeListener('data', onData);
 				stdin.pause();
 				process.stdout.write('\n');
+				debug('prompt', 'continued');
 				resolve();
 			}
 		};
@@ -90,10 +109,12 @@ export function promptEnter(prompt: string): Promise<void> {
 export function promptPassword(prompt: string): Promise<string> {
 	return new Promise(resolve => {
 		if (!interactive()) {
+			debug('prompt', `${prompt.trim()} (no terminal, empty)`);
 			resolve('');
 			return;
 		}
 
+		debug('prompt', prompt.trim());
 		process.stdout.write(prompt);
 		const stdin = process.stdin;
 		stdin.setRawMode(true);
@@ -114,6 +135,7 @@ export function promptPassword(prompt: string): Promise<string> {
 					stdin.removeListener('data', onData);
 					stdin.pause();
 					process.stdout.write('\n');
+					debug('prompt', password ? 'password entered' : 'left empty');
 					resolve(password);
 					return;
 				} else if (charCode === 127 || charCode === 8) {

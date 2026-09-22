@@ -92,6 +92,17 @@ import {
 	type Credential,
 	type Tab,
 } from './actions.js';
+import {debug} from '../utils/debug.js';
+
+// Opening a view is not an action worth a debug line.
+const NAVIGATION = new Set([
+	'versions',
+	'help',
+	'changelog',
+	'settings',
+	'config',
+	'workspace-settings',
+]);
 
 export type Overlay =
 	| {kind: 'palette'}
@@ -296,6 +307,7 @@ export function Shell({
 
 	const notify = useCallback(
 		(text: string, level: 'info' | 'ok' | 'warn' | 'error' = 'info') => {
+			debug('notice', `${level} ${text}`);
 			setNotice({text, level});
 		},
 		[],
@@ -654,6 +666,7 @@ export function Shell({
 				return;
 			}
 
+			if (!NAVIGATION.has(action.id)) debug('action', action.id);
 			action.run(context).catch((error: unknown) => {
 				notify(error instanceof Error ? error.message : String(error), 'error');
 			});

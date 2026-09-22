@@ -1,5 +1,6 @@
 import {createRequire} from 'node:module';
 import type {Entry as KeyringEntry} from '@napi-rs/keyring';
+import {debug} from './debug.js';
 
 const SERVICE = 'sitevision-cli';
 
@@ -64,13 +65,17 @@ function sessionCookieAccount(domain: string, username: string): string {
 
 function safeGet(account: string): string | null {
 	try {
-		return entry(account).getPassword();
-	} catch {
+		const value = entry(account).getPassword();
+		debug('keychain', `get ${account}: ${value ? 'found' : 'none'}`);
+		return value;
+	} catch (error) {
+		debug('keychain', `get ${account}: ${(error as Error).message}`);
 		return null;
 	}
 }
 
 let saveFailed = () => {
+	debug('out', 'Could not save to the OS keychain');
 	console.warn(
 		'\u001B[33mCould not save to the OS keychain; you will be asked again next time.\u001B[0m',
 	);
@@ -84,8 +89,10 @@ export function onKeychainSaveFailed(listener: () => void): void {
 function safeSet(account: string, password: string): boolean {
 	try {
 		entry(account).setPassword(password);
+		debug('keychain', `set ${account}`);
 		return true;
-	} catch {
+	} catch (error) {
+		debug('keychain', `set ${account}: ${(error as Error).message}`);
 		// Callers mostly ignore the result, so the user hears it from here.
 		saveFailed();
 		return false;
@@ -95,6 +102,7 @@ function safeSet(account: string, password: string): boolean {
 function safeDelete(account: string): void {
 	try {
 		entry(account).deletePassword();
+		debug('keychain', `delete ${account}`);
 	} catch {
 		// ignore
 	}

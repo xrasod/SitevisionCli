@@ -1,0 +1,44 @@
+name: Bug report
+description: Something in svc is broken or behaves wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what happened instead. Include the exact error text if there was any.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. svc deploy --env test
+        2. ...
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Shell (full-screen UI)
+        - Build / dev / watch
+        - Deploy
+        - Auth (basic / OAuth2 / cookie)
+        - Signing
+        - Config
+        - Other
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Filled in automatically when reporting from inside svc. Otherwise paste the output of `svc --version`, `node --version` and your OS.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: trace
+    attributes:
+      label: Crash report or logs
+      description: Paste a stack trace or relevant output. Remove site URLs, usernames and anything else you don't want public.
+      render: text

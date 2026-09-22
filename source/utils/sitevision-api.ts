@@ -29,6 +29,7 @@ import {
 	buildApiBaseUrl,
 } from './project-detection.js';
 
+import {debug} from './debug.js';
 // =============================================================================
 // CONSTANTS
 // =============================================================================
@@ -155,6 +156,9 @@ export function makeRequest(
 }> {
 	return new Promise((resolve, reject) => {
 		const parsedUrl = new URL(url);
+		const startedAt = Date.now();
+		const describe = `${options.method} ${parsedUrl.host}${parsedUrl.pathname}`;
+		debug('http', describe);
 		const isHttps = parsedUrl.protocol === 'https:';
 		const transport = isHttps ? https : http;
 
@@ -194,6 +198,10 @@ export function makeRequest(
 			});
 
 			res.on('end', () => {
+				debug(
+					'http',
+					`${describe} -> ${res.statusCode} ${res.headers['content-type'] ?? ''} ${Date.now() - startedAt}ms`,
+				);
 				resolve({
 					statusCode: res.statusCode || 0,
 					body: Buffer.concat(chunks),
@@ -216,7 +224,10 @@ export function makeRequest(
 			);
 		});
 
-		req.on('error', reject);
+		req.on('error', error => {
+			debug('http', `${describe} failed: ${error.message}`);
+			reject(error);
+		});
 
 		if (options.body) {
 			req.write(options.body);

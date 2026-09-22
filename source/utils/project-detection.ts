@@ -18,6 +18,7 @@ import {
 import {parseJsonc, stripJsonComments} from './jsonc.js';
 import {getLanguage} from './i18n.js';
 import {getGlobalSigning} from './config.js';
+import {debug} from './debug.js';
 
 // Re-export types for backward compatibility
 export type {
@@ -484,6 +485,7 @@ export function writeManifestField(
 	value: string,
 	lang?: string,
 ): void {
+	debug('config', `write ${manifestPath} ${key}`);
 	const raw = fs.readFileSync(manifestPath, 'utf-8');
 	const wanted = parseJsonc<Record<string, unknown>>(raw);
 	const existing = wanted[key];
@@ -728,6 +730,10 @@ export function writeDevProperties(
 	const devPropertiesPath =
 		findDevPropertiesPath(projectRoot) ||
 		getDefaultDevPropertiesPath(projectRoot);
+	debug(
+		'config',
+		`write ${devPropertiesPath} (${Object.keys(properties).join(', ')})`,
+	);
 	const {
 		password: _password,
 		accessToken: _accessToken,
@@ -792,6 +798,7 @@ export function readSvcConfig(projectRoot: string): SvcConfig {
 }
 
 export function writeSvcConfig(projectRoot: string, updates: SvcConfig): void {
+	debug('config', `write .svcconfig ${JSON.stringify(updates)}`);
 	const merged = {...readSvcConfig(projectRoot), ...updates};
 	fs.writeFileSync(
 		path.join(projectRoot, '.svcconfig'),

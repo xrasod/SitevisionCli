@@ -24,6 +24,7 @@ import {
 	updatePackageJson,
 	writeManifestField,
 } from './project-detection.js';
+import {debug} from './debug.js';
 
 export const CREATE_COMMAND = [
 	'npx',
@@ -224,12 +225,16 @@ export async function createAppInTerminal(
 ): Promise<boolean> {
 	await new Promise<void>(resolve => {
 		// `name` is validated by the caller; joined to avoid DEP0190.
+		debug('spawn', `${CREATE_COMMAND.join(' ')} ${name} (cwd ${parentDir})`);
 		const child = spawn([...CREATE_COMMAND, name].join(' '), {
 			cwd: parentDir,
 			stdio: 'inherit',
 			shell: true,
 		});
-		child.on('close', () => resolve());
+		child.on('close', code => {
+			debug('spawn', `create-sitevision-app exited ${code}`);
+			resolve();
+		});
 		child.on('error', () => resolve());
 	});
 	try {

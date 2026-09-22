@@ -12,6 +12,7 @@ import {pathToFileURL} from 'url';
 import type {BuildOptions, BuildResult} from '../types/index.js';
 import {copyChunksToResources} from './zip.js';
 import {findInstalledPackage} from './sitevision-scripts-runner.js';
+import {debug, errorText} from './debug.js';
 
 // =============================================================================
 // TYPES
@@ -252,6 +253,7 @@ export class WebpackRunner {
 						copyChunksToResources(this.config.output.path);
 					} catch (chunkError) {
 						// Non-fatal, just log
+						debug('bld', `Failed to copy chunks: ${errorText(chunkError)}`);
 						console.warn('Warning: Failed to copy chunks:', chunkError);
 					}
 				}
@@ -301,6 +303,7 @@ export class WebpackRunner {
 						try {
 							copyChunksToResources(this.config.output.path);
 						} catch (chunkError) {
+							debug('bld', `Failed to copy chunks: ${errorText(chunkError)}`);
 							console.warn('Warning: Failed to copy chunks:', chunkError);
 						}
 					}

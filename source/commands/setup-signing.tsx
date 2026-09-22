@@ -9,6 +9,7 @@ import {
 	setGlobalSigning,
 	settingsFile,
 } from '../utils/config.js';
+import {debug, errorText, say} from '../utils/debug.js';
 
 // rl.question drops lines that arrive before it is called, which is every line
 // but the first when stdin is piped. The iterator buffers them.
@@ -34,11 +35,9 @@ export const setupSigningCommand: Command = {
 
 		const question = lineReader(rl);
 
-		console.log('\n\x1b[36m\x1b[1mSetup Signing Credentials\x1b[0m\n');
-		console.log(
-			'Configure credentials for signing apps on developer.sitevision.se',
-		);
-		console.log('(Password will be prompted when running signing commands)\n');
+		say('\n\x1b[36m\x1b[1mSetup Signing Credentials\x1b[0m\n');
+		say('Configure credentials for signing apps on developer.sitevision.se');
+		say('(Password will be prompted when running signing commands)\n');
 
 		const devPropertiesPath =
 			findDevPropertiesPath(project.root) ??
@@ -69,7 +68,7 @@ export const setupSigningCommand: Command = {
 			}
 
 			if (!signingUsername) {
-				console.log('\x1b[31mError: Signing username is required\x1b[0m');
+				say('\x1b[31mError: Signing username is required\x1b[0m');
 				rl.close();
 				process.exitCode = 1;
 				return;
@@ -90,7 +89,7 @@ export const setupSigningCommand: Command = {
 
 			if (global) {
 				if (configProblem()) {
-					console.log(
+					say(
 						`\x1b[31mError: ${settingsFile()} does not parse; fix it first\x1b[0m`,
 					);
 					process.exitCode = 1;
@@ -101,7 +100,7 @@ export const setupSigningCommand: Command = {
 					signingUsername,
 					...(certificateName && {certificateName}),
 				});
-				console.log(
+				say(
 					`\n\x1b[32mSigning credentials saved to ${settingsFile()}\x1b[0m\n`,
 				);
 				return;
@@ -118,11 +117,12 @@ export const setupSigningCommand: Command = {
 				JSON.stringify(updatedProperties, null, 2),
 			);
 
-			console.log(
+			say(
 				`\n\x1b[32mSigning credentials saved to ${path.basename(devPropertiesPath)}\x1b[0m\n`,
 			);
 		} catch (error) {
 			rl.close();
+			debug('out', `Error setting up signing credentials: ${errorText(error)}`);
 			console.error(
 				'\x1b[31mError setting up signing credentials:\x1b[0m',
 				error,

@@ -1,0 +1,21 @@
+name: Feature request
+description: Suggest something svc should do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: The task or workflow, not the solution. What is slow, manual or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like svc to do
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Filled in automatically when reporting from inside svc.
+      render: text

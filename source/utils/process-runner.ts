@@ -5,6 +5,7 @@ import {
 	type SpawnOptions,
 } from 'child_process';
 import {EventEmitter} from 'events';
+import {debug} from './debug.js';
 
 export interface ProcessOutput {
 	type: 'stdout' | 'stderr';
@@ -33,9 +34,19 @@ export function spawnChild(
 		detached: process.platform !== 'win32',
 	});
 	children.add(child);
+	debug(
+		'spawn',
+		`${command} ${args.join(' ')} (cwd ${String(options.cwd ?? process.cwd())})`,
+	);
 	const forget = () => children.delete(child);
-	child.on('close', forget);
-	child.on('error', forget);
+	child.on('close', (code, signal) => {
+		debug('spawn', `${command} exited ${signal ?? code}`);
+		forget();
+	});
+	child.on('error', error => {
+		debug('spawn', `${command} failed: ${error.message}`);
+		forget();
+	});
 	return child;
 }
 

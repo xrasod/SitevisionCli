@@ -45,6 +45,7 @@ import {
 	classifyAddon,
 } from './sitevision-api.js';
 import {ProcessRunner} from './process-runner.js';
+import {debug} from './debug.js';
 
 export type TaskKind =
 	| 'dev'
@@ -155,11 +156,16 @@ export function createTask(
 		stop,
 	};
 	tasks.push(task);
+	debug('task', `#${task.id} ${kind} ${label} (${task.appName})`);
 	notify();
 
 	const log: Log = (tag, text, level = 'info') => {
 		for (const line of logLines(text)) {
 			task.lines.push({time: Date.now(), tag, level, text: line});
+			debug(
+				'task',
+				`#${task.id} ${tag} ${level === 'info' ? '' : level + ' '}${line}`,
+			);
 		}
 
 		if (task.lines.length > MAX_LINES) {
@@ -175,6 +181,10 @@ export function createTask(
 		task.error = error;
 		task.endedAt = Date.now();
 		task.phase = status;
+		debug(
+			'task',
+			`#${task.id} ${status} after ${task.endedAt - task.startedAt}ms`,
+		);
 		if (error) log('svc', error, 'error');
 		notify();
 	};
@@ -184,6 +194,7 @@ export function createTask(
 
 export function setPhase(task: Task, phase: string) {
 	task.phase = phase;
+	debug('task', `#${task.id} phase ${phase}`);
 	notify();
 }
 

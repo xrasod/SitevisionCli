@@ -725,6 +725,7 @@ svc setup-signing
 | `--signed`     | `-s` | `dev`, `watch`  | Signera efter varje bygge                                                  |
 | `--minimal`    |      | (skalet)        | Kompakt layout, se [3](#3-skalet)                                          |
 | `--global`     |      | `setup-signing` | Spara för alla projekt, se [Globala inställningar](#globala-inställningar) |
+| `--debug`      |      | (alla)          | Skriv en felsökningslogg, se [Felsökningslogg](#felsökningslogg)           |
 
 En okänd flagga är ett fel, så ett felstavat `--production` blir aldrig en
 dev-driftsättning.
@@ -770,6 +771,7 @@ en terminal eller när `CI` är satt.
 | `SITEVISION_SESSION_COOKIE`            | Cookie-header (när `authMethod` är `cookie`)                                    |
 | `SITEVISION_APP_ID_PREFIX` / `_SUFFIX` | Läggs runt manifest-id i zip-namnet; `APP_ID_PREFIX` / `_SUFFIX` fungerar också |
 | `SVC_NO_KEYCHAIN`                      | `1` stänger av nyckelringen: inget läses därifrån och inget sparas dit          |
+| `SVC_DEBUG`                            | `1` skriver en felsökningslogg, samma som `--debug`                             |
 | `CI`                                   | När den är satt hoppas kontrollen efter en nyare version av `svc` över          |
 | `XDG_CONFIG_HOME`                      | Plats för de globala inställningarna                                            |
 
@@ -812,6 +814,18 @@ med `basic` är oftast det enklaste för CI.
 
 Felmeddelanden från servern och direktkommandona är på engelska även när
 gränssnittet är på svenska.
+
+### Felsökningslogg
+
+`svc --debug` (eller `SVC_DEBUG=1`) skriver allt svc gör under körningen till
+`debug.log` bredvid de globala inställningarna och visar sökvägen när svc
+avslutas. Loggen innehåller varje åtgärd du kör i skalet eller som kommando,
+varje uppgift och dess utskrift, varje anrop till Sitevision (metod, värd,
+sökväg, status och tid), varje underprocess, varje konfigurationsändring och
+varje uppslag i nyckelringen. Den innehåller aldrig lösenord, tokens eller
+kakor, men den nämner din sajt, ditt användarnamn och filsökvägar, så läs
+igenom den innan du bifogar den i en felrapport. Filen ersätts vid varje
+körning.
 
 ## Referens
 
