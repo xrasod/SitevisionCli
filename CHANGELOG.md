@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.0
+
+First stable release. Everything from the betas is in, see the entries below.
+
+- `svc --debug` (or `SVC_DEBUG=1`) writes a log of everything svc does during
+  the run: each action, task and its output, request to Sitevision, child
+  process, config change, prompt and keychain lookup. The path is printed on
+  exit. Passwords, tokens and cookies are never written; the site, username
+  and file paths are, so read it before attaching it to a bug report.
+- Bug reports and feature requests have forms on GitHub.
+
 ## 1.0.0-beta.33
 
 - **Breaking:** `--token` and `--cookie` are removed, since credentials on the
