@@ -5,10 +5,13 @@ import {t} from '../utils/i18n.js';
 import {ACCENT} from './Frame.js';
 
 /**
- * CHANGELOG.md without its title, or undefined when it isn't shipped. With
- * `since`, only the releases above that version's heading.
+ * CHANGELOG.md without its title, or undefined when it isn't shipped. `cutoff`
+ * is the line where `since` (the version the user had) begins: everything
+ * before it is new to them, everything from it on is shown dimmed for context.
  */
-export function readChangelog(since?: string): string[] | undefined {
+export function readChangelog(
+	since?: string,
+): {lines: string[]; cutoff: number} | undefined {
 	try {
 		const lines = readFileSync(
 			new URL('../../CHANGELOG.md', import.meta.url),
@@ -18,7 +21,7 @@ export function readChangelog(since?: string): string[] | undefined {
 			.trim()
 			.split('\n');
 		const end = since ? lines.indexOf(`## ${since}`) : -1;
-		return end > 0 ? lines.slice(0, end) : lines;
+		return {lines, cutoff: end > 0 ? end : lines.length};
 	} catch {
 		return undefined;
 	}
@@ -33,7 +36,9 @@ export function ChangelogPanel({
 	height: number;
 	onClose: () => void;
 }) {
-	const lines = useMemo(() => readChangelog(since), [since]);
+	const changelog = useMemo(() => readChangelog(since), [since]);
+	const lines = changelog?.lines;
+	const cutoff = changelog?.cutoff ?? 0;
 	const [top, setTop] = useState(0);
 	const visible = Math.max(1, height - 1);
 	const max = Math.max(0, (lines?.length ?? 0) - visible);
@@ -57,17 +62,23 @@ export function ChangelogPanel({
 				<Text dimColor> · {t('↑↓ scroll · Esc close')}</Text>
 			</Text>
 			{lines ? (
-				lines.slice(top, top + visible).map((line, i) =>
-					line.startsWith('## ') ? (
-						<Text key={top + i} bold color={ACCENT}>
+				lines.slice(top, top + visible).map((line, i) => {
+					const old = top + i >= cutoff;
+					return line.startsWith('## ') ? (
+						<Text
+							key={top + i}
+							bold
+							color={old ? undefined : ACCENT}
+							dimColor={old}
+						>
 							{line.slice(3)}
 						</Text>
 					) : (
-						<Text key={top + i} wrap="truncate">
+						<Text key={top + i} wrap="truncate" dimColor={old}>
 							{line || ' '}
 						</Text>
-					),
-				)
+					);
+				})
 			) : (
 				<Text dimColor>{t('No changelog found.')}</Text>
 			)}

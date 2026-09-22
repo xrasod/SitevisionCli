@@ -309,13 +309,16 @@ test('after an upgrade the shell opens the changelog since the old version', asy
 	const [newest, since, older] = headings as [string, string, string];
 
 	const panel = render(
-		<ChangelogPanel since={since} height={60} onClose={() => {}} />,
+		<ChangelogPanel since={since} height={200} onClose={() => {}} />,
 	);
 	await delay(20);
 	const frame = panel.lastFrame() ?? '';
 	panel.unmount();
-	t.true(frame.includes(newest));
-	t.false(frame.includes(older));
+	// The new release first, then the version the user had and what came
+	// before it, so a note like "see the entries below" holds.
+	const body = frame.slice(frame.indexOf('\n'));
+	t.true(body.indexOf(newest) < body.indexOf(since));
+	t.true(body.indexOf(since) < body.indexOf(older));
 
 	const shell = render(
 		<Shell apps={[project()]} version="9.9.9" updatedFrom={since} />,

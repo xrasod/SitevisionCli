@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1
+
+- The "what's new" panel shown after an update now lists the earlier releases
+  below the new ones, dimmed, instead of stopping at the version you had.
+
 ## 1.0.0
 
 First stable release. Everything from the betas is in, see the entries below.
