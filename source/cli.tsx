@@ -56,6 +56,7 @@ const cli = meow(
 	  sign          Sign the app for production deployment
 	  deploy        Deploy the application
 	  info          Show project information
+	  logs          Tail the server log (--app for the app log)
 	  setup-signing Store the signing username and certificate
 
 	Options
@@ -65,6 +66,7 @@ const cli = meow(
 	  --activate, -a    deploy: activate the uploaded version
 	  --no-zip          build: skip the zip archive
 	  --global          setup-signing: save for every project on this machine
+	  --app             logs: tail the app log instead of the server log
 	  --minimal         Shell: compact layout for small terminals
 	  --debug           Write a log of every action to debug.log (or SVC_DEBUG=1)
 	  --help            Show this help message
@@ -84,6 +86,8 @@ const cli = meow(
 	  $ svc deploy --force
 	  $ svc deploy --production
 	  $ svc info
+	  $ svc logs
+	  $ svc logs --app
 `,
 	{
 		importMeta: import.meta,
@@ -114,6 +118,10 @@ const cli = meow(
 				default: false,
 			},
 			minimal: {
+				type: 'boolean',
+				default: false,
+			},
+			app: {
 				type: 'boolean',
 				default: false,
 			},
