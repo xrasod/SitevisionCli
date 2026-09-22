@@ -142,6 +142,11 @@ npm run build   # tsc → dist/
 npm test        # prettier, xo, ava
 ```
 
+To run your local build as `svc`, link it once with `npm link`, then keep
+`npm run dev` running in the repo: every save recompiles `dist/`, so `svc` in
+any Sitevision app reflects your changes. `npm unlink -g sitevision-cli` and
+`npm install -g sitevision-cli` restore the published version.
+
 Releasing: see [RELEASING.md](RELEASING.md).
 
 ## License
