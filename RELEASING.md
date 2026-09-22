@@ -26,6 +26,7 @@ tags only after a successful publish, and reverts the bump if anything fails.
 - Stable releases are published **from `main`**; betas from any branch.
 - `npm publish` runs the tests and a clean build first (`prepublishOnly`).
 - After publishing, push the version commit and tag: `git push --follow-tags`.
+  Pushing the tag creates the GitHub release from the changelog entry.
 
 ## Stable releases
 
