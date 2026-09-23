@@ -200,6 +200,49 @@ test('v switches environment from the workspace settings pane', async t => {
 	t.regex(frame, /Site-test/);
 });
 
+test('the workspace settings pane only cycles the root environments', async t => {
+	const {root, apps: found} = workspace(['Alpha']);
+	const file = path.join(root, '.dev_properties.json');
+	const base = JSON.parse(fs.readFileSync(file, 'utf-8')) as object;
+	fs.writeFileSync(
+		file,
+		JSON.stringify({...base, environments: {test: {siteName: 'Site-test'}}}),
+	);
+	fs.writeFileSync(
+		path.join(found[0]!.root, 'package.json'),
+		JSON.stringify({svc: {environments: {local: {siteName: 'Site-local'}}}}),
+	);
+	const apps = found.map(app => detectProject(app.root)!);
+	const {stdin, lastFrame} = render(
+		<Shell apps={apps} workspaceRoot={root} version="9.9.9" />,
+	);
+	await delay(20);
+	const frame = () => stripVTControlCharacters(lastFrame() ?? '');
+
+	// On the app, v reaches the app-only environment.
+	stdin.write('\r');
+	await delay(20);
+	stdin.write('v');
+	await delay(20);
+	t.regex(frame(), / LOCAL /);
+
+	// In workspace settings it falls back to the base and never offers it.
+	stdin.write('\u001B');
+	await delay(20);
+	stdin.write('\u001B[A');
+	await delay(20);
+	stdin.write('\r');
+	await delay(20);
+	t.regex(frame(), / DEV /);
+	stdin.write('v');
+	await delay(20);
+	t.regex(frame(), / TEST /);
+	stdin.write('v');
+	await delay(20);
+	t.regex(frame(), / DEV /);
+	t.notRegex(frame(), / LOCAL /);
+});
+
 test('Tab moves between config fields without leaving the content pane', async t => {
 	const {root, apps} = workspace(['Alpha', 'Beta']);
 	const {stdin, lastFrame} = render(

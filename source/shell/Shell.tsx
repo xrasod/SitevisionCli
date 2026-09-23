@@ -239,35 +239,42 @@ export function Shell({
 	const [envChoice, setEnvChoice] = useState<string>(
 		() => readSvcConfig(configRoot).environment ?? '',
 	);
-	const envNames = environmentNames(rawProject.devProperties);
+	const rootDev = useMemo(
+		() =>
+			workspaceRoot
+				? (readWorkspaceDevProperties(workspaceRoot) as DevProperties)
+				: undefined,
+		// Re-read after any reload so saved values show up.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[workspaceRoot, apps],
+	);
+	// The settings pane edits the shared root file, so it only cycles the
+	// root's environments: an app-only one must never become a root override.
+	const envDev = settings ? rootDev : rawProject.devProperties;
+	const envNames = environmentNames(envDev);
 	const envList = envNames.join(',');
 	const env = envNames.includes(envChoice)
 		? envChoice
-		: baseEnvironment(rawProject.devProperties);
+		: baseEnvironment(envDev);
 	const project = useMemo(
 		() => environmentProject(rawProject, env),
 		[rawProject, env],
 	);
-	const isProduction = isProductionEnvironment(env, rawProject.devProperties);
+	const isProduction = isProductionEnvironment(env, envDev);
 	const versionsKey = `${project.root}|${env}`;
 	const single = !workspaceRoot;
 	const workspaceTarget = useMemo<ConfigTarget | undefined>(
 		() =>
-			workspaceRoot
+			workspaceRoot && rootDev
 				? {
 						root: workspaceRoot,
-						base: readWorkspaceDevProperties(workspaceRoot),
-						devProperties: resolveEnvironment(
-							readWorkspaceDevProperties(workspaceRoot) as DevProperties,
-							env,
-						),
+						base: rootDev,
+						devProperties: resolveEnvironment(rootDev, env),
 						environment: env,
 						workspace: true,
 					}
 				: undefined,
-		// Re-read after any reload so saved values show up.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[workspaceRoot, apps, env],
+		[workspaceRoot, rootDev, env],
 	);
 	const narrow = minimal || columns < NARROW_BELOW;
 	const sidebar = navWidth(columns);
