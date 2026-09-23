@@ -6,7 +6,11 @@ import {type AddressInfo} from 'node:net';
 import {spawn} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import test from 'ava';
+import ava from 'ava';
+
+// Each test spawns a fresh Node with tsx. Run them one at a time so 16 cold
+// starts do not race each other and the kill timer on a two-core CI runner.
+const test = ava.serial;
 
 const cliPath = fileURLToPath(new URL('../source/cli.tsx', import.meta.url));
 const tsconfig = fileURLToPath(new URL('../tsconfig.json', import.meta.url));
@@ -67,7 +71,7 @@ function svc(
 		});
 		const timer = setTimeout(() => {
 			child.kill('SIGKILL');
-		}, 15_000);
+		}, 60_000);
 		child.on('close', code => {
 			clearTimeout(timer);
 			resolve({code, output});
