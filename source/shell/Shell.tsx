@@ -389,15 +389,15 @@ export function Shell({
 					?.trim()
 					.toLowerCase()
 					.replaceAll(/[^\d\-a-z]/g, '');
-				if (!clean || clean === baseEnvironment(rawProject.devProperties))
-					return;
 				const targetRoot = workspaceRoot ?? rawProject.root;
 				const base = (
 					workspaceRoot
 						? readWorkspaceDevProperties(workspaceRoot)
 						: rawProject.devProperties
 				) as DevProperties | undefined;
-				if (!base) return;
+				// The base of the file being written: an app's package.json may
+				// name a different one, and a duplicate of the base is never listed.
+				if (!clean || !base || clean === baseEnvironment(base)) return;
 				writeDevProperties(
 					targetRoot,
 					{...base, environments: {...base.environments, [clean]: {}}},

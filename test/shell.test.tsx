@@ -243,6 +243,44 @@ test('the workspace settings pane only cycles the root environments', async t =>
 	t.notRegex(frame(), / LOCAL /);
 });
 
+test('Add environment refuses the base name of the file it writes', async t => {
+	const {root, apps: found} = workspace(['Alpha']);
+	// The app calls its base "utv"; the shared root file is still "dev".
+	fs.writeFileSync(
+		path.join(found[0]!.root, 'package.json'),
+		JSON.stringify({svc: {baseEnvironment: 'utv'}}),
+	);
+	const apps = found.map(app => detectProject(app.root)!);
+	const {stdin} = render(
+		<Shell apps={apps} workspaceRoot={root} version="9.9.9" />,
+	);
+	await delay(20);
+	const rootFile = path.join(root, '.dev_properties.json');
+	const environments = () =>
+		(JSON.parse(fs.readFileSync(rootFile, 'utf-8')) as DevProperties)
+			.environments;
+
+	const add = async (name: string) => {
+		stdin.write('/');
+		await delay(20);
+		stdin.write('add environment');
+		await delay(20);
+		stdin.write('\r');
+		await delay(30);
+		stdin.write(name);
+		await delay(20);
+		stdin.write('\r');
+		await delay(50);
+	};
+
+	stdin.write('\r');
+	await delay(20);
+	await add('dev');
+	t.is(environments(), undefined);
+	await add('test');
+	t.deepEqual(environments(), {test: {}});
+});
+
 test('Tab moves between config fields without leaving the content pane', async t => {
 	const {root, apps} = workspace(['Alpha', 'Beta']);
 	const {stdin, lastFrame} = render(
