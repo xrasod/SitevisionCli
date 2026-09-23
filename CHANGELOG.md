@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.2
+
+- Workspace settings can switch environment again. Press `v` in the settings
+  pane to cycle the workspace's environments; the pane now cycles the ones
+  defined in the workspace's root file, so an environment that only exists
+  in one app can no longer become a root override.
+- Adding an environment in a workspace checks the name against the file
+  being written, not the current app, so a name that clashes with the
+  workspace's base environment is rejected there too.
+
 ## 1.0.1
 
 - The "what's new" panel shown after an update now lists the earlier releases
