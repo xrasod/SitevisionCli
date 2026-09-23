@@ -177,6 +177,29 @@ test('the settings key works from the navigator and the workspace config pane', 
 	t.regex(lastFrame() ?? '', /Intro animation/);
 });
 
+test('v switches environment from the workspace settings pane', async t => {
+	const {root, apps: found} = workspace(['Alpha']);
+	const file = path.join(root, '.dev_properties.json');
+	const base = JSON.parse(fs.readFileSync(file, 'utf-8')) as object;
+	const environments = {test: {siteName: 'Site-test'}};
+	fs.writeFileSync(file, JSON.stringify({...base, environments}));
+	const apps = found.map(app => detectProject(app.root)!);
+	const {stdin, lastFrame} = render(
+		<Shell apps={apps} workspaceRoot={root} version="9.9.9" />,
+	);
+	await delay(20);
+
+	stdin.write('\u001B[A');
+	await delay(20);
+	stdin.write('\r');
+	await delay(20);
+	stdin.write('v');
+	await delay(20);
+	const frame = stripVTControlCharacters(lastFrame() ?? '');
+	t.regex(frame, / TEST /);
+	t.regex(frame, /Site-test/);
+});
+
 test('Tab moves between config fields without leaving the content pane', async t => {
 	const {root, apps} = workspace(['Alpha', 'Beta']);
 	const {stdin, lastFrame} = render(

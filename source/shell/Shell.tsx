@@ -860,8 +860,9 @@ export function Shell({
 			}
 
 			if (settings && focus === 'content') {
-				// Settings pane: the form owns everything but q, y and Tab/Esc above.
+				// Settings pane: the form owns everything but q, v, y and Tab/Esc above.
 				if (input === 'q') quit();
+				else if (input === 'v') context.cycleEnvironment();
 				else if (input === 'y') {
 					try {
 						if (syncDevPropertiesToPackageJson(workspaceRoot!)) {
@@ -951,6 +952,7 @@ export function Shell({
 			? h([
 					['↑↓', 'field'],
 					['Enter', 'edit'],
+					['v', 'env'],
 					['y', 'sync'],
 					['Esc', 'back'],
 					['q', 'quit'],
