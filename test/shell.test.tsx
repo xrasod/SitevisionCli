@@ -5,6 +5,7 @@ import path from 'node:path';
 import {render} from 'ink-testing-library';
 import {Box} from 'ink';
 import {detectProject} from '../source/utils/project-detection.js';
+import type {DevProperties} from '../source/types/index.js';
 import {
 	Confirm,
 	overlayStack,
@@ -175,6 +176,110 @@ test('the settings key works from the navigator and the workspace config pane', 
 	stdin.write(',');
 	await delay(20);
 	t.regex(lastFrame() ?? '', /Intro animation/);
+});
+
+test('v switches environment from the workspace settings pane', async t => {
+	const {root, apps: found} = workspace(['Alpha']);
+	const file = path.join(root, '.dev_properties.json');
+	const base = JSON.parse(fs.readFileSync(file, 'utf-8')) as object;
+	const environments = {test: {siteName: 'Site-test'}};
+	fs.writeFileSync(file, JSON.stringify({...base, environments}));
+	const apps = found.map(app => detectProject(app.root)!);
+	const {stdin, lastFrame} = render(
+		<Shell apps={apps} workspaceRoot={root} version="9.9.9" />,
+	);
+	await delay(20);
+
+	stdin.write('\u001B[A');
+	await delay(20);
+	stdin.write('\r');
+	await delay(20);
+	stdin.write('v');
+	await delay(20);
+	const frame = stripVTControlCharacters(lastFrame() ?? '');
+	t.regex(frame, / TEST /);
+	t.regex(frame, /Site-test/);
+});
+
+test('the workspace settings pane only cycles the root environments', async t => {
+	const {root, apps: found} = workspace(['Alpha']);
+	const file = path.join(root, '.dev_properties.json');
+	const base = JSON.parse(fs.readFileSync(file, 'utf-8')) as object;
+	fs.writeFileSync(
+		file,
+		JSON.stringify({...base, environments: {test: {siteName: 'Site-test'}}}),
+	);
+	fs.writeFileSync(
+		path.join(found[0]!.root, 'package.json'),
+		JSON.stringify({svc: {environments: {local: {siteName: 'Site-local'}}}}),
+	);
+	const apps = found.map(app => detectProject(app.root)!);
+	const {stdin, lastFrame} = render(
+		<Shell apps={apps} workspaceRoot={root} version="9.9.9" />,
+	);
+	await delay(20);
+	const frame = () => stripVTControlCharacters(lastFrame() ?? '');
+
+	// On the app, v reaches the app-only environment.
+	stdin.write('\r');
+	await delay(20);
+	stdin.write('v');
+	await delay(20);
+	t.regex(frame(), / LOCAL /);
+
+	// In workspace settings it falls back to the base and never offers it.
+	stdin.write('\u001B');
+	await delay(20);
+	stdin.write('\u001B[A');
+	await delay(20);
+	stdin.write('\r');
+	await delay(20);
+	t.regex(frame(), / DEV /);
+	stdin.write('v');
+	await delay(20);
+	t.regex(frame(), / TEST /);
+	stdin.write('v');
+	await delay(20);
+	t.regex(frame(), / DEV /);
+	t.notRegex(frame(), / LOCAL /);
+});
+
+test('Add environment refuses the base name of the file it writes', async t => {
+	const {root, apps: found} = workspace(['Alpha']);
+	// The app calls its base "utv"; the shared root file is still "dev".
+	fs.writeFileSync(
+		path.join(found[0]!.root, 'package.json'),
+		JSON.stringify({svc: {baseEnvironment: 'utv'}}),
+	);
+	const apps = found.map(app => detectProject(app.root)!);
+	const {stdin} = render(
+		<Shell apps={apps} workspaceRoot={root} version="9.9.9" />,
+	);
+	await delay(20);
+	const rootFile = path.join(root, '.dev_properties.json');
+	const environments = () =>
+		(JSON.parse(fs.readFileSync(rootFile, 'utf-8')) as DevProperties)
+			.environments;
+
+	const add = async (name: string) => {
+		stdin.write('/');
+		await delay(20);
+		stdin.write('add environment');
+		await delay(20);
+		stdin.write('\r');
+		await delay(30);
+		stdin.write(name);
+		await delay(20);
+		stdin.write('\r');
+		await delay(50);
+	};
+
+	stdin.write('\r');
+	await delay(20);
+	await add('dev');
+	t.is(environments(), undefined);
+	await add('test');
+	t.deepEqual(environments(), {test: {}});
 });
 
 test('Tab moves between config fields without leaving the content pane', async t => {

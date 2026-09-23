@@ -239,35 +239,42 @@ export function Shell({
 	const [envChoice, setEnvChoice] = useState<string>(
 		() => readSvcConfig(configRoot).environment ?? '',
 	);
-	const envNames = environmentNames(rawProject.devProperties);
+	const rootDev = useMemo(
+		() =>
+			workspaceRoot
+				? (readWorkspaceDevProperties(workspaceRoot) as DevProperties)
+				: undefined,
+		// Re-read after any reload so saved values show up.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[workspaceRoot, apps],
+	);
+	// The settings pane edits the shared root file, so it only cycles the
+	// root's environments: an app-only one must never become a root override.
+	const envDev = settings ? rootDev : rawProject.devProperties;
+	const envNames = environmentNames(envDev);
 	const envList = envNames.join(',');
 	const env = envNames.includes(envChoice)
 		? envChoice
-		: baseEnvironment(rawProject.devProperties);
+		: baseEnvironment(envDev);
 	const project = useMemo(
 		() => environmentProject(rawProject, env),
 		[rawProject, env],
 	);
-	const isProduction = isProductionEnvironment(env, rawProject.devProperties);
+	const isProduction = isProductionEnvironment(env, envDev);
 	const versionsKey = `${project.root}|${env}`;
 	const single = !workspaceRoot;
 	const workspaceTarget = useMemo<ConfigTarget | undefined>(
 		() =>
-			workspaceRoot
+			workspaceRoot && rootDev
 				? {
 						root: workspaceRoot,
-						base: readWorkspaceDevProperties(workspaceRoot),
-						devProperties: resolveEnvironment(
-							readWorkspaceDevProperties(workspaceRoot) as DevProperties,
-							env,
-						),
+						base: rootDev,
+						devProperties: resolveEnvironment(rootDev, env),
 						environment: env,
 						workspace: true,
 					}
 				: undefined,
-		// Re-read after any reload so saved values show up.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[workspaceRoot, apps, env],
+		[workspaceRoot, rootDev, env],
 	);
 	const narrow = minimal || columns < NARROW_BELOW;
 	const sidebar = navWidth(columns);
@@ -382,15 +389,15 @@ export function Shell({
 					?.trim()
 					.toLowerCase()
 					.replaceAll(/[^\d\-a-z]/g, '');
-				if (!clean || clean === baseEnvironment(rawProject.devProperties))
-					return;
 				const targetRoot = workspaceRoot ?? rawProject.root;
 				const base = (
 					workspaceRoot
 						? readWorkspaceDevProperties(workspaceRoot)
 						: rawProject.devProperties
 				) as DevProperties | undefined;
-				if (!base) return;
+				// The base of the file being written: an app's package.json may
+				// name a different one, and a duplicate of the base is never listed.
+				if (!clean || !base || clean === baseEnvironment(base)) return;
 				writeDevProperties(
 					targetRoot,
 					{...base, environments: {...base.environments, [clean]: {}}},
@@ -860,8 +867,9 @@ export function Shell({
 			}
 
 			if (settings && focus === 'content') {
-				// Settings pane: the form owns everything but q, y and Tab/Esc above.
+				// Settings pane: the form owns everything but q, v, y and Tab/Esc above.
 				if (input === 'q') quit();
+				else if (input === 'v') context.cycleEnvironment();
 				else if (input === 'y') {
 					try {
 						if (syncDevPropertiesToPackageJson(workspaceRoot!)) {
@@ -951,6 +959,7 @@ export function Shell({
 			? h([
 					['↑↓', 'field'],
 					['Enter', 'edit'],
+					['v', 'env'],
 					['y', 'sync'],
 					['Esc', 'back'],
 					['q', 'quit'],
