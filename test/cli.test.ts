@@ -6,10 +6,11 @@ import {type AddressInfo} from 'node:net';
 import {spawn} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import ava from 'ava';
-
 // Each test spawns a fresh Node with tsx. Run them one at a time so 16 cold
 // starts do not race each other and the kill timer on a two-core CI runner.
+// eslint-disable-next-line ava/use-test
+import ava from 'ava';
+
 const test = ava.serial;
 
 const cliPath = fileURLToPath(new URL('../source/cli.tsx', import.meta.url));
