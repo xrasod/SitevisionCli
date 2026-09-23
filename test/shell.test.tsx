@@ -5,6 +5,7 @@ import path from 'node:path';
 import {render} from 'ink-testing-library';
 import {Box} from 'ink';
 import {detectProject} from '../source/utils/project-detection.js';
+import type {DevProperties} from '../source/types/index.js';
 import {
 	Confirm,
 	overlayStack,
