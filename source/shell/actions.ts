@@ -276,7 +276,8 @@ async function deployTo(ctx: ActionContext, force: boolean): Promise<void> {
 	const config = await resolveDeployConfig(ctx);
 	if (!config) return;
 	startDeploy(ctx.project, config, {
-		...(ctx.isProduction ? {production: true, activate} : {force}),
+		force,
+		...(ctx.isProduction && {production: true, activate}),
 		onAddonMissing: askCreateAddon(ctx),
 	});
 	ctx.setTab('log');
