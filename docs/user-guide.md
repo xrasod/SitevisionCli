@@ -647,9 +647,11 @@ name, so a repository whose only site is production can set
 
 On a production environment:
 
-- `p` deploys the **signed** zip (`dist/<id>-signed.zip`), asks for
-  confirmation, and **activates** the new version.
-- `d` (dev) refuses to run.
+- `p` deploys the **signed** zip (`dist/<id>-signed.zip`) and asks whether to
+  **activate** the new version or only upload it. Esc cancels.
+- `d` (dev) needs signing credentials and asks for confirmation before it
+  starts, then signs and deploys every build. `svc dev` does the same with
+  `--signed`, and refuses without it.
 
 Direct commands (`svc deploy` etc.) always use the base environment; switching
 environments is only available in the shell.
@@ -704,7 +706,7 @@ Every command runs in the current app directory and uses the base environment.
 ```bash
 svc build [--no-zip]
 svc sign
-svc deploy [--force] [--production [--activate]]
+svc deploy [--force] [--production] [--activate]
 svc dev [--signed]
 svc watch [--signed]
 svc info
@@ -716,7 +718,7 @@ svc setup-signing
 | `--no-zip`     |       | `build`         | Build into `build/` and leave no zip                            |
 | `--force`      | `-f`  | `deploy`        | Overwrite an existing version with the same number              |
 | `--production` | `-p`  | `deploy`        | Upload the signed zip instead of the dev zip                    |
-| `--activate`   | `-a`  | `deploy`        | With `--production`: activate the uploaded version              |
+| `--activate`   | `-a`  | `deploy`        | Activate the uploaded version                                   |
 | `--signed`     | `-s`  | `dev`, `watch`  | Sign after each build                                           |
 | `--minimal`    |       | (shell)         | Compact layout, see [3](#3-the-shell)                           |
 | `--global`     |       | `setup-signing` | Save for every project, see [Global settings](#global-settings) |
@@ -725,10 +727,12 @@ svc setup-signing
 An unknown flag is an error, so a misspelt `--production` never turns into a
 dev deploy.
 
-- `svc deploy --production` uploads the signed zip. It only activates with
-  `--activate` (the shell always activates on production). When `--activate`
-  was asked for and the activation fails, the command fails, even though the
-  upload went through.
+- `svc deploy --production` uploads the signed zip and fails if there is
+  none. It is the same import as a dev deploy otherwise, so `--force` is
+  needed there too to overwrite an existing version.
+- `--activate` activates the uploaded version (the shell asks on production).
+  When the activation fails, the command fails, even though the upload went
+  through.
 - `svc sign` asks whether to use the signing password saved in the keychain.
 - `svc setup-signing` asks for the signing username and certificate name and
   saves them in `.dev_properties.json`. Nothing else in the file is touched.
@@ -794,7 +798,6 @@ with `basic` is usually the simplest choice for CI.
 | "Unauthorized. The session cookie was rejected or has expired" | Press `l`; a new browser login runs.                                                                                                          |
 | "Zip not found … Run build first."                             | `b` first. For production: `b` then `s`.                                                                                                      |
 | "Conflict. Addon already exists."                              | Use force deploy (`P` / `--force`).                                                                                                           |
-| "Dev never deploys to a production environment"                | Switch environment with `v`, or use `w` (watch).                                                                                              |
 | Keys do nothing                                                | Focus is in the navigator, where typing filters. Press `Enter` or `Tab`.                                                                      |
 | Password prompt every time                                     | Tick **Save to OS keychain** at the prompt, or enter the password in the Config tab.                                                          |
 | "No token/cookie available" from `svc dev`                     | Run dev from the shell instead, or set `SITEVISION_ACCESS_TOKEN` / `SITEVISION_SESSION_COOKIE`. See the table in [5](#5-authentication).      |

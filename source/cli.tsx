@@ -62,7 +62,7 @@ const cli = meow(
 	  --signed, -s      dev/watch: sign after each build
 	  --force, -f       deploy: overwrite the existing addon version
 	  --production, -p  deploy: upload the signed zip to production
-	  --activate, -a    deploy: activate after a production deploy
+	  --activate, -a    deploy: activate the uploaded version
 	  --no-zip          build: skip the zip archive
 	  --global          setup-signing: save for every project on this machine
 	  --minimal         Shell: compact layout for small terminals

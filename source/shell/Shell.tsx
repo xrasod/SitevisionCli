@@ -654,6 +654,19 @@ export function Shell({
 				new Promise(resolve => {
 					setOverlay({kind: 'confirm', message, resolve});
 				}),
+			async choose(label, choices) {
+				const picked = await new Promise<number[] | null>(resolve => {
+					setOverlay({
+						kind: 'choice',
+						label,
+						choices,
+						multi: false,
+						initial: [0],
+						resolve,
+					});
+				});
+				return picked?.[0] ?? null;
+			},
 			openHelp() {
 				setOverlay({kind: 'help'});
 			},

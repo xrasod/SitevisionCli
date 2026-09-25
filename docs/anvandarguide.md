@@ -651,9 +651,12 @@ namnet. Ett repo vars enda webbplats är produktion kan alltså sätta
 
 I en produktionsmiljö:
 
-- `p` driftsätter den **signerade** zip-filen (`dist/<id>-signed.zip`), ber om
-  bekräftelse och **aktiverar** den nya versionen.
-- `d` (dev) vägrar köra.
+- `p` driftsätter den **signerade** zip-filen (`dist/<id>-signed.zip`) och
+  frågar om den nya versionen ska **aktiveras** eller bara laddas upp. Esc
+  avbryter.
+- `d` (dev) kräver signeringsuppgifter och ber om bekräftelse innan den
+  startar, sedan signerar och driftsätter den varje bygge. `svc dev` gör
+  samma sak med `--signed`, och vägrar utan.
 
 Direktkommandon (`svc deploy` m.fl.) använder alltid basmiljön; att byta miljö
 går bara i skalet.
@@ -709,7 +712,7 @@ Alla kommandon körs i aktuell appkatalog och använder basmiljön.
 ```bash
 svc build [--no-zip]
 svc sign
-svc deploy [--force] [--production [--activate]]
+svc deploy [--force] [--production] [--activate]
 svc dev [--signed]
 svc watch [--signed]
 svc info
@@ -721,7 +724,7 @@ svc setup-signing
 | `--no-zip`     |      | `build`         | Bygg till `build/` och lämna ingen zip                                     |
 | `--force`      | `-f` | `deploy`        | Skriv över en befintlig version med samma nummer                           |
 | `--production` | `-p` | `deploy`        | Ladda upp den signerade zip-filen i stället för dev-zippen                 |
-| `--activate`   | `-a` | `deploy`        | Med `--production`: aktivera den uppladdade versionen                      |
+| `--activate`   | `-a` | `deploy`        | Aktivera den uppladdade versionen                                          |
 | `--signed`     | `-s` | `dev`, `watch`  | Signera efter varje bygge                                                  |
 | `--minimal`    |      | (skalet)        | Kompakt layout, se [3](#3-skalet)                                          |
 | `--global`     |      | `setup-signing` | Spara för alla projekt, se [Globala inställningar](#globala-inställningar) |
@@ -730,9 +733,11 @@ svc setup-signing
 En okänd flagga är ett fel, så ett felstavat `--production` blir aldrig en
 dev-driftsättning.
 
-- `svc deploy --production` laddar upp den signerade zip-filen. Den aktiveras
-  bara med `--activate` (skalet aktiverar alltid i produktion). Om `--activate`
-  begärdes och aktiveringen misslyckas så misslyckas kommandot, även om
+- `svc deploy --production` laddar upp den signerade zip-filen och misslyckas
+  om den saknas. I övrigt är det samma import som en dev-driftsättning, så
+  `--force` behövs även där för att skriva över en befintlig version.
+- `--activate` aktiverar den uppladdade versionen (skalet frågar i
+  produktion). Om aktiveringen misslyckas så misslyckas kommandot, även om
   uppladdningen gick igenom.
 - `svc sign` frågar om signeringslösenordet i nyckelringen ska användas.
 - `svc setup-signing` frågar efter signeringsanvändare och certifikatnamn och
@@ -800,7 +805,6 @@ med `basic` är oftast det enklaste för CI.
 | "Unauthorized. The session cookie was rejected or has expired" | Tryck `l`; en ny inloggning i webbläsaren startar.                                                                                                        |
 | "Zip not found … Run build first."                             | `b` först. För produktion: `b` och sedan `s`.                                                                                                             |
 | "Conflict. Addon already exists."                              | Driftsätt med tvång (`P` / `--force`).                                                                                                                    |
-| "Dev driftsätter aldrig till en produktionsmiljö"              | Byt miljö med `v`, eller använd `w` (watch).                                                                                                              |
 | Tangenterna gör ingenting                                      | Fokus är i navigatorn, där det du skriver filtrerar. Tryck `Enter` eller `Tab`.                                                                           |
 | Lösenordsfråga varje gång                                      | Kryssa i **Spara i nyckelringen** vid frågan, eller ange lösenordet i fliken Konfig.                                                                      |
 | "No token/cookie available" från `svc dev`                     | Kör dev från skalet i stället, eller sätt `SITEVISION_ACCESS_TOKEN` / `SITEVISION_SESSION_COOKIE`. Se tabellen i [5](#5-autentisering).                   |

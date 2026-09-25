@@ -3,10 +3,9 @@
  *
  * Handles all API interactions with Sitevision servers:
  * - Signing apps via developer.sitevision.se
- * - Deploying to development environments
- * - Deploying to production environments
+ * - Deploying apps
  * - Creating addons
- * - Activating production apps
+ * - Activating uploaded versions
  */
 
 import fs from 'fs';
@@ -16,7 +15,6 @@ import http from 'http';
 import type {
 	SigningCredentials,
 	DeployConfig,
-	ProductionDeployConfig,
 	SigningResponse,
 	DeployResponse,
 	CreateAddonResponse,
@@ -584,51 +582,6 @@ export async function deployApp(
 	}
 }
 
-/**
- * Deploy an app to production
- *
- * @param signedZipPath - Path to the SIGNED zip file (required for production)
- * @param config - Production deployment configuration
- * @param appType - The app type (web, widget, rest)
- */
-export async function deployProduction(
-	signedZipPath: string,
-	config: ProductionDeployConfig,
-	appType: SimpleAppType,
-): Promise<DeployResponse> {
-	// Deploy the signed app
-	const deployResult = await deployApp(signedZipPath, config, appType, true);
-
-	if (!deployResult.success) {
-		return deployResult;
-	}
-
-	if (!config.activate) return deployResult;
-
-	if (!deployResult.executableId) {
-		return {
-			...deployResult,
-			activated: false,
-			message:
-				'Deployed, but not activated: the server did not return an executable id.',
-		};
-	}
-
-	const activationResult = await activateApp(
-		deployResult.executableId,
-		config,
-		appType,
-	);
-	return {
-		success: true,
-		executableId: deployResult.executableId,
-		activated: activationResult.success,
-		message: activationResult.success
-			? 'Deployed and activated successfully'
-			: `Deployed successfully but activation failed: ${activationResult.error}`,
-	};
-}
-
 // =============================================================================
 // ADDON MANAGEMENT API
 // =============================================================================
@@ -711,7 +664,7 @@ export async function createAddon(
 }
 
 /**
- * Activate a deployed production app
+ * Activate an uploaded version
  *
  * @param executableId - The executable ID returned from deployment
  * @param config - Deployment configuration
