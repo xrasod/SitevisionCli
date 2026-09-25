@@ -653,7 +653,8 @@ I en produktionsmiljö:
 
 - `p` driftsätter den **signerade** zip-filen (`dist/<id>-signed.zip`) och
   frågar om den nya versionen ska **aktiveras** eller bara laddas upp. Esc
-  avbryter.
+  avbryter. `P` gör samma sak med tvång, för ett versionsnummer som redan
+  är uppladdat.
 - `d` (dev) kräver signeringsuppgifter och ber om bekräftelse innan den
   startar, sedan signerar och driftsätter den varje bygge. `svc dev` gör
   samma sak med `--signed`, och vägrar utan.
@@ -813,7 +814,7 @@ med `basic` är oftast det enklaste för CI.
 | "… has no manifest.json, so the zip would not be an app"       | Lägg `manifest.json` i `static/` (eller `src/` för en app som inte är bundlad).                                                                           |
 | "Could not save to the OS keychain"                            | Ingen nyckelringstjänst går att nå, så du får frågan igen nästa gång. I CI: sätt lösenordsvariablerna och `SVC_NO_KEYCHAIN=1`.                            |
 | "OAuth2 token endpoint is on …, not on …"                      | Token-endpointen måste ligga på webbplatsens egen domän. Se [oauth2](#metod-oauth2).                                                                      |
-| "Deployed successfully but activation failed"                  | Den nya versionen är uppladdad men den gamla är fortfarande aktiv. Aktivera den från fliken Versioner (`a`), eller rätta behörigheten och driftsätt igen. |
+| "Activation failed with status …" efter lyckad uppladdning     | Den nya versionen är uppladdad men den gamla är fortfarande aktiv. Aktivera den från fliken Versioner (`a`), eller rätta behörigheten och driftsätt igen. |
 | `≠ manifest` på Tilläggsnamn                                   | Tilläggets namn är inget av manifestets namn. Se [Redigera i fliken Konfig](#redigera-i-fliken-konfig).                                                   |
 
 Felmeddelanden från servern och direktkommandona är på engelska även när

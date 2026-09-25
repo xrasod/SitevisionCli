@@ -648,7 +648,8 @@ name, so a repository whose only site is production can set
 On a production environment:
 
 - `p` deploys the **signed** zip (`dist/<id>-signed.zip`) and asks whether to
-  **activate** the new version or only upload it. Esc cancels.
+  **activate** the new version or only upload it. Esc cancels. `P` is the
+  same with force, for a version number that is already uploaded.
 - `d` (dev) needs signing credentials and asks for confirmation before it
   starts, then signs and deploys every build. `svc dev` does the same with
   `--signed`, and refuses without it.
@@ -806,7 +807,7 @@ with `basic` is usually the simplest choice for CI.
 | "… has no manifest.json, so the zip would not be an app"       | Put `manifest.json` in `static/` (or `src/` for an app that is not bundled).                                                                  |
 | "Could not save to the OS keychain"                            | No keychain service is reachable, so you will be asked again next time. On CI, set the password variables and `SVC_NO_KEYCHAIN=1`.            |
 | "OAuth2 token endpoint is on …, not on …"                      | The token endpoint must be on the site's own domain. See [oauth2](#method-oauth2).                                                            |
-| "Deployed successfully but activation failed"                  | The new version is uploaded but the old one is still active. Activate it from the Versions tab (`a`), or fix the permission and deploy again. |
+| "Activation failed with status …" after a successful upload    | The new version is uploaded but the old one is still active. Activate it from the Versions tab (`a`), or fix the permission and deploy again. |
 | `≠ manifest` on Addon name                                     | The addon name is none of the manifest's names. See [Editing in the Config tab](#editing-in-the-config-tab).                                  |
 
 ### Debug log
