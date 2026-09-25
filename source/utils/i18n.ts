@@ -147,8 +147,8 @@ const sv: Record<string, string> = {
 		'Lösenord och hemligheter sparas i nyckelringen, aldrig i en fil. Lämna dem tomma för att bli tillfrågad varje gång.',
 	"The versions uploaded to the addon on the active environment's site, the domain in the top bar. v switches environment.":
 		'Versionerna som laddats upp till tillägget på den aktiva miljöns webbplats, domänen i toppraden. v byter miljö.',
-	'↑↓ select, a activates the selected version, r refreshes. Production deploys activate on their own.':
-		'↑↓ väljer, a aktiverar vald version, r uppdaterar. Produktionsdriftsättningar aktiverar själva.',
+	'↑↓ select, a activates the selected version, r refreshes. A production deploy asks whether to activate.':
+		'↑↓ väljer, a aktiverar vald version, r uppdaterar. En produktionsdriftsättning frågar om den ska aktivera.',
 	'Output from build, sign, deploy, dev and watch for the selected app. Dev and watch keep running while you switch apps; K stops them.':
 		'Utdata från build, sign, deploy, dev och watch för vald app. Dev och watch fortsätter köra medan du byter app; K stoppar dem.',
 	'↑↓ scroll, PgUp/PgDn page, f jumps to the end, x toggles line wrap.':
@@ -167,10 +167,15 @@ const sv: Record<string, string> = {
 	'e.g. test or prod, overriding domain and auth':
 		't.ex. test eller prod, med egen domän och auth',
 	'Environment name (e.g. test, prod)': 'Miljönamn (t.ex. test, prod)',
-	'Deploy the signed {id} to {env} (addon {addon}) and activate it?':
-		'Driftsätt signerade {id} till {env} (addon {addon}) och aktivera?',
-	'Dev never deploys to a production environment ({env}). Switch with v.':
-		'Dev driftsätter aldrig till en produktionsmiljö ({env}). Byt med v.',
+	'Deploy the signed {id} to {env} (addon {addon})':
+		'Driftsätt signerade {id} till {env} (addon {addon})',
+	'Deploy and activate': 'Driftsätt och aktivera',
+	'Deploy only': 'Bara driftsätt',
+	'Dev on {env} needs signing credentials: production only takes the signed zip. / sets them up.':
+		'Dev mot {env} kräver signeringsuppgifter: produktion tar bara den signerade zip-filen. / ställer in dem.',
+	'{env} is PRODUCTION. Dev will sign and deploy every build of {id} there (addon {addon}). Start it?':
+		'{env} är PRODUKTION. Dev signerar och driftsätter varje bygge av {id} dit (addon {addon}). Starta?',
+	'confirms first': 'bekräftar först',
 	'switched to {env}': 'bytte till {env}',
 	'environment {env} added': 'miljön {env} tillagd',
 	environment: 'miljö',
@@ -316,8 +321,8 @@ const sv: Record<string, string> = {
 	Production: 'Produktion',
 	'What this base configuration is: dev, test, prod… Other environments are added on top of it with E or the palette and override only what differs.':
 		'Vad denna grundkonfiguration är: dev, test, prod… Andra miljöer läggs ovanpå med E eller paletten och skriver bara över det som skiljer.',
-	'Treat deploys to this base environment as production: signed zip, confirmation, activation, and no dev loop. Off by default even when the name says prod, so a repo with only a production site still gets a dev loop.':
-		'Behandla driftsättningar till grundmiljön som produktion: signerad zip, bekräftelse, aktivering och ingen dev-loop. Av som standard även om namnet säger prod, så att ett repo med bara en produktionssajt ändå får en dev-loop.',
+	'Treat this base environment as production: deploys use the signed zip, ask for confirmation and offer activation, and dev confirms before it starts. Off by default even when the name says prod.':
+		'Behandla grundmiljön som produktion: driftsättningar använder den signerade zip-filen, ber om bekräftelse och erbjuder aktivering, och dev bekräftar innan den startar. Av som standard även om namnet säger prod.',
 	'Saved {label}.': 'Sparade {label}.',
 	'Looking up OAuth2 endpoints…': 'Slår upp OAuth2-endpoints…',
 	'Endpoints filled from the site OpenID config.':

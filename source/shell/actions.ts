@@ -45,6 +45,8 @@ export interface ActionContext {
 	) => Promise<{password: string; remember: boolean} | null>;
 	login: (method: 'oauth2' | 'cookie') => Promise<Credential | null>;
 	confirm: (message: string) => Promise<boolean>;
+	// Index of the picked choice, null when cancelled.
+	choose: (label: string, choices: string[]) => Promise<number | null>;
 	setTab: (tab: Tab) => void;
 	// Workspace mode only: jump to the shared root config.
 	openWorkspaceSettings?: () => void;
@@ -255,25 +257,27 @@ const deployDetail = (p: ProjectInfo) => {
 		: env;
 };
 
-/** Deploy to the active environment; production means signed + activate. */
+/** Deploy to the active environment; production means signed, and asks whether to activate. */
 async function deployTo(ctx: ActionContext, force: boolean): Promise<void> {
-	if (
-		ctx.isProduction &&
-		!(await ctx.confirm(
-			t('Deploy the signed {id} to {env} (addon {addon}) and activate it?', {
+	let activate = false;
+	if (ctx.isProduction) {
+		const pick = await ctx.choose(
+			t('Deploy the signed {id} to {env} (addon {addon})', {
 				id: ctx.project.manifest.id,
 				env: ctx.environment,
 				addon: ctx.project.devProperties?.addonName ?? '?',
 			}),
-		))
-	) {
-		return;
+			[t('Deploy and activate'), t('Deploy only')],
+		);
+		if (pick === null) return;
+		activate = pick === 0;
 	}
 
 	const config = await resolveDeployConfig(ctx);
 	if (!config) return;
 	startDeploy(ctx.project, config, {
-		...(ctx.isProduction ? {production: true, activate: true} : {force}),
+		force,
+		...(ctx.isProduction && {production: true, activate}),
 		onAddonMissing: askCreateAddon(ctx),
 	});
 	ctx.setTab('log');
@@ -286,16 +290,28 @@ async function startDevOrWatch(
 	deploy: boolean,
 ): Promise<void> {
 	if (deploy && ctx.isProduction) {
-		ctx.notify(
+		if (!hasSigning(ctx.project)) {
+			ctx.notify(
+				t(
+					'Dev on {env} needs signing credentials: production only takes the signed zip. / sets them up.',
+					{env: ctx.environment},
+				),
+				'warn',
+			);
+			return;
+		}
+
+		const go = await ctx.confirm(
 			t(
-				'Dev never deploys to a production environment ({env}). Switch with v.',
+				'{env} is PRODUCTION. Dev will sign and deploy every build of {id} there (addon {addon}). Start it?',
 				{
 					env: ctx.environment,
+					id: ctx.project.manifest.id,
+					addon: ctx.project.devProperties?.addonName ?? '?',
 				},
 			),
-			'warn',
 		);
-		return;
+		if (!go) return;
 	}
 
 	if (
@@ -332,10 +348,14 @@ export const actions: Action[] = [
 		key: 'd',
 		group: 'app',
 		label: 'Dev',
-		detail: p =>
-			hasSigning(p)
+		detail(p) {
+			const base = hasSigning(p)
 				? t('build, sign and deploy on change')
-				: t('build and deploy on change'),
+				: t('build and deploy on change');
+			return p.devProperties?.productionEnvironment
+				? `${base} · ${t('confirms first')}`
+				: base;
+		},
 		enabled: hasDev,
 		async run(ctx) {
 			await startDevOrWatch(ctx, true);

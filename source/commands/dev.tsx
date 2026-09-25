@@ -147,6 +147,24 @@ export const devCommand: Command = {
 			return;
 		}
 
+		if (dev.production) {
+			if (!flags['signed']) {
+				say(
+					'\n\x1b[31mThe base environment is production, which only takes the signed zip. Run `svc dev --signed`.\x1b[0m\n',
+				);
+				process.exitCode = 1;
+				return;
+			}
+
+			const go = await promptYesNo(
+				`\x1b[31m${dev.domain} is PRODUCTION.\x1b[0m Dev will sign and deploy every build of ${project.manifest.id} there (addon ${dev.addonName}). Start it? (y/N): `,
+			);
+			if (!go) {
+				process.exitCode = 1;
+				return;
+			}
+		}
+
 		if (!(await resolveDeployPasswordForCli(dev))) return;
 
 		let signingCredentials: SigningCredentials | undefined;

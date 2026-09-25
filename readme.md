@@ -13,7 +13,7 @@ MCPServer) from a full-screen terminal shell or as plain commands.
   works with SSO), or a captured browser session for SAML-only sites.
 - **No secrets on disk.** Passwords, tokens and cookies live in the OS keychain.
 - **Environments.** dev, test and prod in one config; production deploys use
-  the signed zip, confirm and activate.
+  the signed zip, confirm, and activate only if you say so.
 - **Shared config in git.** Site and auth settings for the whole team live in
   `package.json`, once at the repo root; your username stays in a local
   `.dev_properties.json`. Compatible with plain sitevision-scripts.
@@ -46,7 +46,7 @@ svc
    every change and deploy. Output is in the **Log** tab (`4`).
 
 For production: switch environment with `v`, press `b` to build, `s` to sign
-and `p` to deploy and activate.
+and `p` to deploy. It asks whether to activate the new version or just upload it.
 
 ## The shell
 
@@ -79,7 +79,7 @@ svc                                   # interactive shell
 svc build [--no-zip]                  # build to dist/<id>.zip
 svc sign                              # sign to dist/<id>-signed.zip
 svc deploy [--force]                  # deploy the zip
-svc deploy --production [--activate]  # deploy the signed zip
+svc deploy [--production] [--activate]  # signed zip only / activate after
 svc dev [--signed]                    # build + deploy on change
 svc watch [--signed]                  # build on change, no deploy
 svc info                              # project information

@@ -143,13 +143,6 @@ export interface DeployConfig {
 }
 
 /**
- * Production deployment configuration
- */
-export interface ProductionDeployConfig extends DeployConfig {
-	activate?: boolean;
-}
-
-/**
  * Package.json sitevision_scripts_properties section
  */
 export interface SitevisionScriptsProperties {
@@ -238,8 +231,6 @@ export interface SigningResponse {
 export interface DeployResponse {
 	success: boolean;
 	executableId?: string;
-	// Production deploys that asked for activation: whether it happened.
-	activated?: boolean;
 	message?: string;
 	error?: string;
 	// Set when the failure looks like a stale/rejected session or token, so the

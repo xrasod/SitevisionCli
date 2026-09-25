@@ -159,7 +159,7 @@ const FIELDS: Field[] = [
 		label: 'Production',
 		kind: 'bool',
 		section: 'ENVIRONMENT',
-		help: 'Treat deploys to this base environment as production: signed zip, confirmation, activation, and no dev loop. Off by default even when the name says prod, so a repo with only a production site still gets a dev loop.',
+		help: 'Treat this base environment as production: deploys use the signed zip, ask for confirmation and offer activation, and dev confirms before it starts. Off by default even when the name says prod.',
 	},
 	{
 		key: 'signingUsername',

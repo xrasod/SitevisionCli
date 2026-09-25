@@ -154,6 +154,24 @@ test('deploy without a terminal or a password says so and exits 1', async t => {
 	t.notRegex(output, /TypeError/);
 });
 
+test('dev on a production base refuses without --signed', async t => {
+	const root = makeApp(plainApp);
+	fs.writeFileSync(
+		path.join(root, '.dev_properties.json'),
+		JSON.stringify({
+			domain: 'site.example',
+			siteName: 'Site',
+			addonName: 'Addon',
+			username: 'me',
+			password: 'pw',
+			production: true,
+		}),
+	);
+	const {code, output} = await svc(root, ['dev']);
+	t.is(code, 1, `output: ${output}`);
+	t.regex(output, /production.*--signed/);
+});
+
 test('credentials are not accepted on the command line', async t => {
 	const root = makeApp(plainApp);
 	for (const flag of ['--token', '--cookie']) {

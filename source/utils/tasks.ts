@@ -7,6 +7,7 @@ import type {
 	ProjectInfo,
 	SigningCredentials,
 	DeployConfig,
+	SimpleAppType,
 	BuildResult,
 } from '../types/index.js';
 import {WebpackRunner, hasLocalWebpackConfig} from './webpack-runner.js';
@@ -38,7 +39,6 @@ import {
 import {
 	signApp,
 	deployApp,
-	deployProduction,
 	activateApp,
 	createAddon,
 	listAddons,
@@ -311,7 +311,9 @@ async function signOnce(
 
 export interface DeployOptions {
 	force?: boolean;
+	// Upload the signed zip, and nothing else.
 	production?: boolean;
+	// PUT activateCustomModuleExecutable on the uploaded version.
 	activate?: boolean;
 	// Asked when the addon is confirmed missing; true creates it and redeploys.
 	onAddonMissing?: (addonName: string) => Promise<boolean>;
@@ -329,16 +331,9 @@ async function deployOnce(
 	const appType = getAppType(project.manifest);
 	log(
 		'dep',
-		`POST multipart → ${options.production ? 'production' : 'dev'} import · ${config.addonName} · ${path.basename(zipPath)}`,
+		`POST multipart → import · ${config.addonName} · ${path.basename(zipPath)}`,
 	);
-	const upload = async () =>
-		options.production
-			? deployProduction(
-					zipPath,
-					{...config, activate: options.activate},
-					appType,
-				)
-			: deployApp(zipPath, config, appType, options.force);
+	const upload = async () => deployApp(zipPath, config, appType, options.force);
 	let result = await upload();
 	if (!result.success && result.contextNodeMissing) {
 		const addon = classifyAddon(await listAddons(config), config.addonName);
@@ -374,16 +369,44 @@ async function deployOnce(
 	}
 
 	if (!result.success) throw new Error(result.error ?? 'Deployment failed');
-	if (options.production && options.activate && !result.activated) {
-		throw new Error(result.message ?? 'Deployed, but not activated');
-	}
-
 	log(
 		'dep',
 		`${result.message ?? 'deployed'}${result.executableId ? ` · exec ${result.executableId}` : ''}`,
 		'ok',
 	);
+	if (options.activate) {
+		if (!result.executableId) {
+			throw new Error(
+				'Deployed, but not activated: the server did not return an executable id.',
+			);
+		}
+
+		await activateOnce(
+			task,
+			log,
+			config,
+			appType,
+			result.executableId,
+			`exec ${result.executableId}`,
+		);
+	}
+
 	return result.executableId;
+}
+
+async function activateOnce(
+	task: Task,
+	log: Log,
+	config: DeployConfig,
+	appType: SimpleAppType,
+	executableId: string,
+	versionLabel: string,
+): Promise<void> {
+	setPhase(task, 'activating');
+	log('act', `PUT activateCustomModuleExecutable · ${versionLabel}`);
+	const result = await activateApp(executableId, config, appType);
+	if (!result.success) throw new Error(result.error ?? 'Activation failed');
+	log('act', `${versionLabel} is now active`, 'ok');
 }
 
 // ---------------------------------------------------------------------------
@@ -488,15 +511,14 @@ export function startActivate(
 	);
 	void (async () => {
 		try {
-			setPhase(task, 'activating');
-			log('act', `PUT activateCustomModuleExecutable · ${versionLabel}`);
-			const result = await activateApp(
-				executableId,
+			await activateOnce(
+				task,
+				log,
 				config,
 				getAppType(project.manifest),
+				executableId,
+				versionLabel,
 			);
-			if (!result.success) throw new Error(result.error ?? 'Activation failed');
-			log('act', `${versionLabel} is now active`, 'ok');
 			finish('success');
 		} catch (error) {
 			finish('error', errorText(error));

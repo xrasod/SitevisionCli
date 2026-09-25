@@ -43,7 +43,7 @@ const GUIDE: Record<Where, {title: string; text: string[]}> = {
 		title: 'Versions',
 		text: [
 			"The versions uploaded to the addon on the active environment's site, the domain in the top bar. v switches environment.",
-			'↑↓ select, a activates the selected version, r refreshes. Production deploys activate on their own.',
+			'↑↓ select, a activates the selected version, r refreshes. A production deploy asks whether to activate.',
 		],
 	},
 	log: {
