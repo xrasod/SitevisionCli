@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.0-beta.0
+
+- Production deploys ask whether to activate the new version or only upload
+  it. Press `p` or `P` on a production environment and pick; Esc cancels.
+- Production deploys no longer overwrite an existing version on their own.
+  `P` in the shell and `--force` on the command line do that, as on dev.
+- `svc deploy --activate` works with any deploy, not only `--production`.
+- Dev (`d`) runs on a production environment. It needs signing credentials
+  and asks for confirmation before it starts, then signs and deploys every
+  build. `svc dev` needs `--signed` on a production base and asks the same.
+- The Production help text in the Config tab and both user guides describe
+  the new behaviour.
+
 ## 1.0.2
 
 - Workspace settings can switch environment again. Press `v` in the settings
