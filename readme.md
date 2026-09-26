@@ -3,6 +3,15 @@
 [![Test](https://github.com/xrasod/SitevisionCli/actions/workflows/test.yml/badge.svg)](https://github.com/xrasod/SitevisionCli/actions/workflows/test.yml)
 [![npm](https://img.shields.io/npm/v/sitevision-cli)](https://www.npmjs.com/package/sitevision-cli)
 
+> **Unofficial.** `svc` is an independent, community-made tool. It is not
+> developed, endorsed or supported by Sitevision AB, and Sitevision is a
+> trademark of Sitevision AB. Report problems in this repository's issues,
+> not to Sitevision support.
+>
+> Built lovingly as an extension of the official
+> [`@sitevision/sitevision-scripts`](https://github.com/sitevision/sitevision-apps),
+> which does the actual building under the hood.
+
 `svc` builds, signs and deploys Sitevision apps (WebApp, Widget, RESTApp,
 MCPServer) from a full-screen terminal shell or as plain commands.
 

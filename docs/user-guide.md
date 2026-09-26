@@ -2,6 +2,12 @@
 
 > Svenska: [anvandarguide.md](anvandarguide.md)
 
+> **Unofficial.** `svc` is an independent, community-made tool. It is not
+> developed, endorsed or supported by Sitevision AB. Report problems in the
+> tool's GitHub repository, not to Sitevision support. Built lovingly as an
+> extension of the official
+> [`@sitevision/sitevision-scripts`](https://github.com/sitevision/sitevision-apps).
+
 This guide explains how `svc` works day to day: how it finds your apps, where
 configuration lives, how the interactive shell is driven, and in detail how
 authentication works.

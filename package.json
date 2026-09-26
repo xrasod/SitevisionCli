@@ -1,7 +1,7 @@
 {
 	"name": "sitevision-cli",
 	"version": "1.0.2",
-	"description": "Build, sign and deploy Sitevision apps from the terminal",
+	"description": "Unofficial CLI to build, sign and deploy Sitevision apps from the terminal. Not affiliated with Sitevision AB.",
 	"license": "MIT",
 	"author": "Rasmus Söderström",
 	"repository": {
