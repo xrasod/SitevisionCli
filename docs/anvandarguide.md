@@ -2,6 +2,12 @@
 
 > English: [user-guide.md](user-guide.md)
 
+> **Inofficiellt.** `svc` är ett fristående verktyg från communityn. Det är
+> inte utvecklat, godkänt eller supportat av Sitevision AB. Rapportera problem
+> i verktygets GitHub-repo, inte till Sitevisions support. Kärleksfullt byggt
+> som en utbyggnad av officiella
+> [`@sitevision/sitevision-scripts`](https://github.com/sitevision/sitevision-apps).
+
 Den här guiden beskriver hur `svc` fungerar i vardagen: hur den hittar dina
 appar, var konfigurationen ligger, hur det interaktiva skalet styrs och i detalj
 hur autentiseringen fungerar.
