@@ -16,12 +16,17 @@ const ENTITIES: Record<string, string> = {
 	nbsp: ' ',
 };
 
+const MAX_CODE_POINT = 0x10_ff_ff;
+
 function decodeEntity(match: string, code: string): string {
 	if (code.startsWith('#')) {
 		const n = /^#x/i.test(code)
 			? Number.parseInt(code.slice(2), 16)
 			: Number.parseInt(code.slice(1), 10);
-		return Number.isNaN(n) ? match : String.fromCodePoint(n);
+		// A log line is arbitrary text: an out-of-range escape must read
+		// literally, never throw and take the tail down with it.
+		if (!Number.isSafeInteger(n) || n < 0 || n > MAX_CODE_POINT) return match;
+		return String.fromCodePoint(n);
 	}
 
 	return ENTITIES[code.toLowerCase()] ?? match;
@@ -179,12 +184,17 @@ function connectOnce(
 }
 
 /**
- * Whether to give up on a stream that carried nothing. Only the first connect
- * proves anything about the credential; later on, a tail that has already
- * worked should reconnect rather than exit.
+ * Whether to give up on a stream that carried nothing. The first connect is
+ * the one that proves the credential. After that a single empty stream is a
+ * blip worth reconnecting through, but a second one in a row means the
+ * credential stopped working rather than the network hiccuping.
  */
-export function isFatalEnd(end: TailEnd, connects: number): boolean {
-	return end === 'empty' && connects <= 1;
+export function isFatalEnd(
+	end: TailEnd,
+	{connects, emptyStreak}: {connects: number; emptyStreak: number},
+): boolean {
+	if (end !== 'empty') return false;
+	return connects <= 1 || emptyStreak >= 2;
 }
 
 /** Stream one tail session; resolves when the server ends it. */

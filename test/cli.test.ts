@@ -408,3 +408,39 @@ test('--environment is refused for the shell, which switches with a key', async 
 	t.is(code, 1, `output: ${output}`);
 	t.regex(output, /shell does not take --environment/);
 });
+
+test('logs --app asks the server for the app log', async t => {
+	const root = makeApp(plainApp);
+	const paths: string[] = [];
+	const server = http.createServer((req, res) => {
+		paths.push(String(req.url));
+		res.writeHead(302, {Location: '/login.html'});
+		res.end();
+	});
+	await new Promise<void>(resolve => {
+		server.listen(0, '127.0.0.1', resolve);
+	});
+	const {port} = server.address() as AddressInfo;
+
+	fs.writeFileSync(
+		path.join(root, '.dev_properties.json'),
+		JSON.stringify({
+			domain: `127.0.0.1:${port}`,
+			siteName: 'Site',
+			addonName: 'Addon',
+			username: 'me',
+			useHTTPForDevDeploy: true,
+		}),
+	);
+
+	try {
+		const {code, output} = await svc(root, ['logs', '--app'], '', {
+			SITEVISION_DEPLOY_PASSWORD: 'pw',
+		});
+		t.is(code, 1, `output: ${output}`);
+		t.deepEqual(paths, ['/admin-log-app/tail']);
+		t.regex(output, /Tailing app log/);
+	} finally {
+		server.close();
+	}
+});

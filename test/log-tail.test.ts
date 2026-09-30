@@ -53,21 +53,44 @@ test('a stream cut part way through the page is a cut, not an empty one', t => {
 	t.is(parser.end(), 'closed');
 });
 
-test('only the first connect treats an empty stream as fatal', t => {
-	t.true(isFatalEnd('empty', 1));
-	t.false(isFatalEnd('empty', 2), 'a tail that already worked reconnects');
-	t.false(isFatalEnd('aborted', 1));
-	t.false(isFatalEnd('closed', 1));
+test('an empty first connect is fatal, a later single one is not', t => {
+	t.true(isFatalEnd('empty', {connects: 1, emptyStreak: 1}));
+	t.false(
+		isFatalEnd('empty', {connects: 2, emptyStreak: 1}),
+		'a tail that already worked reconnects through one empty stream',
+	);
+	t.false(isFatalEnd('aborted', {connects: 1, emptyStreak: 0}));
+	t.false(isFatalEnd('closed', {connects: 1, emptyStreak: 0}));
+});
+
+test('a credential that stops working does not reconnect forever', t => {
+	// Two empty streams in a row is a credential that died mid-tail, not a
+	// hiccup, so the loop has to give up instead of spinning.
+	t.true(isFatalEnd('empty', {connects: 3, emptyStreak: 2}));
+});
+
+test('an out-of-range character escape is left alone instead of throwing', t => {
+	const lines: string[] = [];
+	const parser = new LogTailParser(l => {
+		lines.push(l);
+	});
+	parser.push(preamble);
+	t.notThrows(() => {
+		parser.push('<div>bad &#x110000; and good &#x2713; here</div>\r\n');
+	});
+	t.deepEqual(lines, ['bad &#x110000; and good \u2713 here']);
 });
 
 /** A fake admin-log endpoint; `handlers` is one response per connect. */
 async function fakeLogServer(
 	handlers: Array<(req: IncomingMessage, res: ServerResponse) => void>,
 ) {
-	const seen: Array<{cookie?: string; authorization?: string}> = [];
+	const seen: Array<{url?: string; cookie?: string; authorization?: string}> =
+		[];
 	let connect = 0;
 	const server = http.createServer((req, res) => {
 		seen.push({
+			url: req.url,
 			cookie: req.headers.cookie,
 			authorization: req.headers.authorization,
 		});
@@ -202,6 +225,23 @@ test('log lines stream through to the caller', async t => {
 		t.deepEqual(lines, [
 			'2026-09-22 10:36:08.672 WARN [ScriptPortlet] Executing <b> & stuff',
 		]);
+	} finally {
+		server.close();
+	}
+});
+
+test('--app follows the app log endpoint', async t => {
+	const {server, seen, options} = await fakeLogServer([
+		(_req, res) => {
+			streamPage(res);
+		},
+	]);
+
+	try {
+		t.is(await tailLog({...options, app: true}, () => {}), 'aborted');
+		t.is(await tailLog(options, () => {}), 'aborted');
+		t.is(seen[0]?.url, '/admin-log-app/tail');
+		t.is(seen[1]?.url, '/admin-log/tail');
 	} finally {
 		server.close();
 	}

@@ -4,6 +4,7 @@ import {configAuth, delay} from '../utils/sitevision-api.js';
 import {resolveOAuth2AccessToken} from '../utils/oauth2-auth.js';
 import {LogTailAuthError, isFatalEnd, tailLog} from '../utils/log-tail.js';
 import {say} from '../utils/debug.js';
+import {baseEnvironment} from '../utils/environments.js';
 
 const YELLOW = '\x1b[33m';
 const RED = '\x1b[31m';
@@ -43,6 +44,7 @@ export const logsCommand: Command = {
 
 		const app = Boolean(flags['app']);
 		let connects = 0;
+		let emptyStreak = 0;
 		const options = {
 			domain: dev.domain,
 			useHTTP: dev.useHTTPForDevDeploy,
@@ -58,7 +60,7 @@ export const logsCommand: Command = {
 		};
 
 		say(
-			`${DIM}Tailing ${app ? 'app' : 'server'} log on ${dev.domain} (${dev.environmentName ?? 'dev'}, ${configAuth(dev).kind}). Ctrl+C to stop.${RESET}`,
+			`${DIM}Tailing ${app ? 'app' : 'server'} log on ${dev.domain} (${dev.environmentName ?? baseEnvironment(dev)}, ${configAuth(dev).kind}). Ctrl+C to stop.${RESET}`,
 		);
 
 		while (true) {
@@ -67,7 +69,8 @@ export const logsCommand: Command = {
 				const end = await tailLog(options, line => {
 					say(line);
 				});
-				if (isFatalEnd(end, connects)) {
+				emptyStreak = end === 'empty' ? emptyStreak + 1 : 0;
+				if (isFatalEnd(end, {connects, emptyStreak})) {
 					say(
 						`\n${RED}The server accepted the request and then sent no log page. The credential has no access to the log.${RESET}\n`,
 					);
@@ -76,6 +79,14 @@ export const logsCommand: Command = {
 				}
 
 				say(`${DIM}-- stream ${end}, reconnecting --${RESET}`);
+				// The server cuts a healthy tail every few minutes, and
+				// reconnecting at once is what keeps the log gapless. Any other
+				// ending may be failing immediately, so pace those instead of
+				// hammering the site.
+				if (end !== 'aborted') {
+					// eslint-disable-next-line no-await-in-loop
+					await delay(RETRY_DELAY_MS);
+				}
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				say(`${RED}${message}${RESET}`);
