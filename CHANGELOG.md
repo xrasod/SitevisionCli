@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.1.0-beta.1
+
+Log streaming! Tired of opening the Sitevision admin log, waiting for something
+to show up, and then realising it stopped polling halfway through your test
+run? No more. `svc logs` streams the server log straight into your terminal and
+stays there — Sitevision cuts the stream every five minutes or so, and svc just
+reconnects and carries on. `--app` follows the app log instead. `Ctrl+C` when
+you've seen enough.
+
+And logging in! Session expired, log page turns into a login form, and until
+now the way back in was... running a deploy. Now it's `svc login`: one site, one
+credential, straight into the OS keychain. `basic` asks for the deploy
+password, `oauth2` and `cookie` open the same browser login the shell runs on
+`l`. A tail that hits a dead session tells you exactly that instead of retrying
+into the void.
+
+Both take `-e <name>` to aim at a configured environment, and both work at a
+workspace root, not just inside an app — the log and the login belong to the
+site, not to any one addon. Everything else still runs on the base
+environment, and says so if you point `-e` at it.
+
 ## 1.1.0-beta.0
 
 - Production deploys ask whether to activate the new version or only upload
