@@ -659,8 +659,9 @@ I en produktionsmiljö:
   startar, sedan signerar och driftsätter den varje bygge. `svc dev` gör
   samma sak med `--signed`, och vägrar utan.
 
-Direktkommandon (`svc deploy` m.fl.) använder alltid basmiljön; att byta miljö
-går bara i skalet.
+Direktkommandon (`svc deploy` m.fl.) använder basmiljön. `svc logs` och
+`svc login` är de två som tar en annan miljö på kommandoraden, med
+`-e <namn>`; för allt annat går det bara att byta i skalet.
 
 ## 7. Bygga, signera, driftsätta
 
@@ -708,7 +709,10 @@ och `manifest.json` och bygger om vid ändring.
 
 ## 8. Direktkommandon och CI
 
-Alla kommandon körs i aktuell appkatalog och använder basmiljön.
+Alla kommandon körs i aktuell appkatalog och använder basmiljön, utom
+`svc logs` och `svc login`, som tar `-e <namn>` och dessutom kan köras i roten
+av en arbetsyta, eftersom loggen och inloggningen hör till webbplatsen och inte
+till en app.
 
 ```bash
 svc build [--no-zip]
@@ -717,19 +721,23 @@ svc deploy [--force] [--production] [--activate]
 svc dev [--signed]
 svc watch [--signed]
 svc info
+svc logs [--app] [-e <namn>]
+svc login [-e <namn>]
 svc setup-signing
 ```
 
-| Flagga         | Kort | Kommando        | Effekt                                                                     |
-| -------------- | ---- | --------------- | -------------------------------------------------------------------------- |
-| `--no-zip`     |      | `build`         | Bygg till `build/` och lämna ingen zip                                     |
-| `--force`      | `-f` | `deploy`        | Skriv över en befintlig version med samma nummer                           |
-| `--production` | `-p` | `deploy`        | Ladda upp den signerade zip-filen i stället för dev-zippen                 |
-| `--activate`   | `-a` | `deploy`        | Aktivera den uppladdade versionen                                          |
-| `--signed`     | `-s` | `dev`, `watch`  | Signera efter varje bygge                                                  |
-| `--minimal`    |      | (skalet)        | Kompakt layout, se [3](#3-skalet)                                          |
-| `--global`     |      | `setup-signing` | Spara för alla projekt, se [Globala inställningar](#globala-inställningar) |
-| `--debug`      |      | (alla)          | Skriv en felsökningslogg, se [Felsökningslogg](#felsökningslogg)           |
+| Flagga          | Kort | Kommando        | Effekt                                                                     |
+| --------------- | ---- | --------------- | -------------------------------------------------------------------------- |
+| `--no-zip`      |      | `build`         | Bygg till `build/` och lämna ingen zip                                     |
+| `--force`       | `-f` | `deploy`        | Skriv över en befintlig version med samma nummer                           |
+| `--production`  | `-p` | `deploy`        | Ladda upp den signerade zip-filen i stället för dev-zippen                 |
+| `--activate`    | `-a` | `deploy`        | Aktivera den uppladdade versionen                                          |
+| `--signed`      | `-s` | `dev`, `watch`  | Signera efter varje bygge                                                  |
+| `--app`         |      | `logs`          | Följ applikationsloggen i stället för serverloggen                         |
+| `--environment` | `-e` | `logs`, `login` | Vilken konfigurerad miljö som avses                                        |
+| `--minimal`     |      | (skalet)        | Kompakt layout, se [3](#3-skalet)                                          |
+| `--global`      |      | `setup-signing` | Spara för alla projekt, se [Globala inställningar](#globala-inställningar) |
+| `--debug`       |      | (alla)          | Skriv en felsökningslogg, se [Felsökningslogg](#felsökningslogg)           |
 
 En okänd flagga är ett fel, så ett felstavat `--production` blir aldrig en
 dev-driftsättning.
@@ -746,6 +754,51 @@ dev-driftsättning.
   hamnar de i den globala inställningsfilen i stället.
 - Build, sign och deploy skriver ut sin logg rad för rad och avslutar sedan
   själva. De kör samma steg som skalets `b`, `s` och `p`.
+
+### Följa loggen
+
+`svc logs` strömmar serverloggen till terminalen, samma logg som
+administrationsgränssnittet visar under `/admin/log`. Med `--app` följs
+applikationsloggen i stället.
+
+```bash
+svc logs                # serverloggen, basmiljön
+svc logs --app          # applikationsloggen
+svc logs -e prod        # en annan konfigurerad miljö
+```
+
+- Det körs i en app eller i roten av en arbetsyta. I roten hämtas adress och
+  inloggning från den gemensamma `.dev_properties.json`, se
+  [Gemensam konfiguration i en arbetsyta](#gemensam-konfiguration-i-en-arbetsyta).
+- Strömmen är direkt. Den innehåller det som loggas från och med att den
+  ansluter, så det finns ingen historik att hämta in.
+- Sitevision avslutar strömmen efter ungefär fem minuter. `svc` ansluter igen
+  och behåller samma serversession, så loggen fortsätter. `Ctrl+C` avbryter.
+- En avvisad eller utgången inloggning ger något annat än loggsidan tillbaka:
+  en omdirigering när det inte finns någon session, och på en webbplats med
+  enkel inloggning en sida som skickar webbläsaren vidare till
+  identitetsleverantören. I båda fallen säger kommandot det, berättar hur man
+  loggar in igen och avslutar med 1 i stället för att ansluta om.
+- Det behöver samma uppgifter som en driftsättning. `basic` och `cookie`
+  fungerar båda mot loggen; `oauth2` återanvänder token från en tidigare
+  inloggning men är inte testad mot de här adresserna.
+- `--debug` skriver varje anslutning och avbrott till felsökningsloggen.
+
+### Logga in
+
+`svc login` hämtar uppgifter för en webbplats och sparar dem i nyckelringen, så
+att en loggström eller en driftsättning slutar fråga. Det är vägen tillbaka in
+när en session har gått ut.
+
+```bash
+svc login              # basmiljön
+svc login -e prod      # en annan konfigurerad miljö
+```
+
+- Med `basic` frågas driftsättningslösenordet och sparas om du vill.
+- Med `oauth2` eller `cookie` öppnas webbläsarinloggningen, samma som skalet
+  kör på `l`, och det som kommer tillbaka sparas. Båda behöver en terminal.
+- Det kan köras i roten av en arbetsyta likaväl som i en app.
 
 **Slutkoder**
 

@@ -55,7 +55,7 @@ function createBasicAuth(username: string, password: string): string {
 	return `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
 }
 
-type RequestAuth =
+export type RequestAuth =
 	| {username: string; password: string}
 	| {token: string}
 	| {cookie: string};
@@ -138,6 +138,16 @@ function createMultipartFormData(
 /**
  * Make an HTTP/HTTPS request
  */
+export function authHeaders(auth: RequestAuth): Record<string, string> {
+	if ('cookie' in auth) {
+		// Session-authenticated state-changing calls typically need this to
+		// pass Sitevision's CSRF guard, unlike Basic-auth requests.
+		return {Cookie: auth.cookie, 'X-Requested-With': 'XMLHttpRequest'};
+	}
+	if ('token' in auth) return {Authorization: `Bearer ${auth.token}`};
+	return {Authorization: createBasicAuth(auth.username, auth.password)};
+}
+
 export function makeRequest(
 	url: string,
 	options: {
@@ -161,24 +171,9 @@ export function makeRequest(
 		const transport = isHttps ? https : http;
 
 		const headers: Record<string, string> = {
+			...(options.auth && authHeaders(options.auth)),
 			...options.headers,
 		};
-
-		if (options.auth) {
-			if ('cookie' in options.auth) {
-				headers['Cookie'] = options.auth.cookie;
-				// Session-authenticated state-changing calls typically need this to
-				// pass Sitevision's CSRF guard, unlike Basic-auth requests.
-				headers['X-Requested-With'] ??= 'XMLHttpRequest';
-			} else if ('token' in options.auth) {
-				headers['Authorization'] = `Bearer ${options.auth.token}`;
-			} else {
-				headers['Authorization'] = createBasicAuth(
-					options.auth.username,
-					options.auth.password,
-				);
-			}
-		}
 
 		const requestOptions: https.RequestOptions = {
 			hostname: parsedUrl.hostname,
@@ -245,7 +240,7 @@ export function isRetryableStatus(statusCode: number): boolean {
 /**
  * Sleep helper for backoff between retries.
  */
-async function delay(ms: number): Promise<void> {
+export async function delay(ms: number): Promise<void> {
 	return new Promise(resolve => {
 		setTimeout(resolve, ms);
 	});
