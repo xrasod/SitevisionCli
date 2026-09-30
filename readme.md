@@ -84,20 +84,23 @@ svc dev [--signed]                    # build + deploy on change
 svc watch [--signed]                  # build on change, no deploy
 svc info                              # project information
 svc logs [--app] [-e <env>]           # follow the server log (or the app log)
+svc login [-e <env>]                  # log in to a site and save the credential
 svc setup-signing [--global]          # save the signing username and certificate
 ```
 
 Short flags: `-f` force, `-p` production, `-a` activate, `-s` signed, `-e`
-environment. An unknown flag is an error.
+environment (`logs` and `login`). An unknown flag is an error.
 
 Direct commands use the base environment unless `-e` names another one, which
-only `svc logs` accepts. They run without a terminal and exit non-zero when a
+`svc logs` and `svc login` accept. They run without a terminal and exit non-zero when a
 step fails, so `svc build && svc sign && svc deploy -p -a` is safe in CI. `SITEVISION_DEPLOY_PASSWORD` and `SITEVISION_SIGNING_PASSWORD`
 supply the passwords; `SITEVISION_ACCESS_TOKEN` and `SITEVISION_SESSION_COOKIE`
 pass an OAuth2 token or session cookie for one run.
 
 `svc logs` follows the same server log the admin interface shows, reconnecting
-on its own when Sitevision cuts the stream after five minutes.
+on its own when Sitevision cuts the stream after five minutes. The log belongs
+to the site, so it runs at a workspace root too, not only inside an app, and so
+does `svc login` when a session has expired.
 
 ## Configuration
 

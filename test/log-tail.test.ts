@@ -42,31 +42,49 @@ test('parser reports the server abort marker', t => {
 	t.is(parser.end(), 'aborted');
 });
 
-test('a stream that carries nothing at all ends as empty', t => {
+test('a stream that carries nothing at all is not a log page', t => {
 	const parser = new LogTailParser(() => {});
-	t.is(parser.end(), 'empty');
+	t.is(parser.end(), 'nolog');
 });
 
-test('a stream cut part way through the page is a cut, not an empty one', t => {
+test('a sign-in bounce served with 200 is not a log page', t => {
+	// An expired session gets this instead of a redirect, which otherwise
+	// reads as a log stream that ended straight away.
+	const parser = new LogTailParser(() => {});
+	parser.push(
+		'<html><head><meta http-equiv="refresh" content="0;url=/sso/login"></head>' +
+			'<body>Signing in</body></html>',
+	);
+	t.is(parser.end(), 'nolog');
+	t.regex(parser.describe(), /log page no/);
+});
+
+test('a stream cut before the log page arrives is not a log page either', t => {
 	const parser = new LogTailParser(() => {});
 	parser.push('<!DOCTYPE html>\r\n<html><head><title>Log</title>');
+	t.is(parser.end(), 'nolog');
+});
+
+test('a log page that ends without the abort marker is a normal close', t => {
+	const parser = new LogTailParser(() => {});
+	parser.push(preamble + line);
 	t.is(parser.end(), 'closed');
 });
 
-test('an empty first connect is fatal, a later single one is not', t => {
-	t.true(isFatalEnd('empty', {connects: 1, emptyStreak: 1}));
+test('a first connect without the log page is fatal, a later single one is not', t => {
+	t.true(isFatalEnd('nolog', {connects: 1, nologStreak: 1}));
 	t.false(
-		isFatalEnd('empty', {connects: 2, emptyStreak: 1}),
-		'a tail that already worked reconnects through one empty stream',
+		isFatalEnd('nolog', {connects: 2, nologStreak: 1}),
+		'a tail that already worked reconnects through one bad stream',
 	);
-	t.false(isFatalEnd('aborted', {connects: 1, emptyStreak: 0}));
-	t.false(isFatalEnd('closed', {connects: 1, emptyStreak: 0}));
+	t.false(isFatalEnd('aborted', {connects: 1, nologStreak: 0}));
+	t.false(isFatalEnd('closed', {connects: 1, nologStreak: 0}));
 });
 
 test('a credential that stops working does not reconnect forever', t => {
-	// Two empty streams in a row is a credential that died mid-tail, not a
+	// Two such streams in a row is a credential that died mid-tail, not a
 	// hiccup, so the loop has to give up instead of spinning.
-	t.true(isFatalEnd('empty', {connects: 3, emptyStreak: 2}));
+	t.true(isFatalEnd('nolog', {connects: 3, nologStreak: 2}));
 });
 
 test('an out-of-range character escape is left alone instead of throwing', t => {
@@ -242,6 +260,26 @@ test('--app follows the app log endpoint', async t => {
 		t.is(await tailLog(options, () => {}), 'aborted');
 		t.is(seen[0]?.url, '/admin-log-app/tail');
 		t.is(seen[1]?.url, '/admin-log/tail');
+	} finally {
+		server.close();
+	}
+});
+
+test('an expired session is reported, not retried forever', async t => {
+	const {server, options} = await fakeLogServer([
+		(_req, res) => {
+			// A stale session gets a 200 whose body sends the browser to the
+			// login provider, not a redirect status.
+			res.writeHead(200, {'Content-Type': 'text/html;charset=UTF-8'});
+			res.end(
+				'<html><head><meta http-equiv="refresh" content="0;url=/sso/login"></head></html>',
+			);
+		},
+	]);
+
+	try {
+		const auth = {cookie: 'JSESSIONID=expired'};
+		t.is(await tailLog({...options, auth}, () => {}), 'nolog');
 	} finally {
 		server.close();
 	}

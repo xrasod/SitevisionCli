@@ -47,7 +47,7 @@ function htmlToText(html: string): string {
 	return (out + stripped.slice(last)).trim();
 }
 
-export type TailEnd = 'aborted' | 'closed' | 'empty';
+export type TailEnd = 'aborted' | 'closed' | 'nolog';
 
 /**
  * Incremental parser for the admin log tail stream. Feed it raw chunks; it
@@ -58,7 +58,8 @@ export class LogTailParser {
 	private buffer = '';
 	private inContainer = false;
 	private sawContainer = false;
-	private gotBytes = false;
+	private bytes = 0;
+	private head = '';
 	private aborted = false;
 	private readonly onLine: (line: string) => void;
 
@@ -67,7 +68,8 @@ export class LogTailParser {
 	}
 
 	push(chunk: string): void {
-		if (chunk.length > 0) this.gotBytes = true;
+		this.bytes += chunk.length;
+		if (this.head.length < 200) this.head += chunk.slice(0, 200);
 		this.buffer += chunk;
 		if (!this.inContainer) {
 			const i = this.buffer.indexOf(CONTAINER);
@@ -86,11 +88,17 @@ export class LogTailParser {
 		if (this.buffer.includes(ABORTED)) this.aborted = true;
 	}
 
+	/** What the response was, for the debug log when it was not a log page. */
+	describe(): string {
+		return `${this.bytes} bytes, log page ${this.sawContainer ? 'yes' : 'no'}: ${JSON.stringify(this.head.slice(0, 200))}`;
+	}
+
 	end(): TailEnd {
-		// A 200 that carries no bytes at all is how a rejected token looks
-		// here. A stream cut part way through the page is just a cut, so it
-		// stays 'closed' and the caller reconnects.
-		if (!this.gotBytes && !this.sawContainer) return 'empty';
+		// A response that never reaches the log page is not a log stream at
+		// all. An expired session is served the login page with a 200 rather
+		// than a redirect, and a rejected token gets an empty 200; both land
+		// here, as does a connection cut before the page arrived.
+		if (!this.sawContainer) return 'nolog';
 		return this.aborted ? 'aborted' : 'closed';
 	}
 }
@@ -172,7 +180,12 @@ function connectOnce(
 				});
 				body.on('end', () => {
 					const end = parser.end();
-					debug('log-tail', `stream ${end}`);
+					debug(
+						'log-tail',
+						end === 'nolog'
+							? `stream ${end} (${parser.describe()})`
+							: `stream ${end}`,
+					);
 					resolve(end);
 				});
 				body.on('error', reject);
@@ -191,10 +204,10 @@ function connectOnce(
  */
 export function isFatalEnd(
 	end: TailEnd,
-	{connects, emptyStreak}: {connects: number; emptyStreak: number},
+	{connects, nologStreak}: {connects: number; nologStreak: number},
 ): boolean {
-	if (end !== 'empty') return false;
-	return connects <= 1 || emptyStreak >= 2;
+	if (end !== 'nolog') return false;
+	return connects <= 1 || nologStreak >= 2;
 }
 
 /** Stream one tail session; resolves when the server ends it. */

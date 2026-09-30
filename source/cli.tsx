@@ -15,7 +15,7 @@ import {
 	migrateLegacyPassword,
 	type ProjectInfo,
 } from './utils/project-detection.js';
-import {discoverApps} from './utils/workspace.js';
+import {discoverApps, workspaceProject} from './utils/workspace.js';
 import {environmentNames, environmentProject} from './utils/environments.js';
 import {type Command} from './commands/types.js';
 import {promptYesNo} from './utils/password-prompt.js';
@@ -59,6 +59,7 @@ const cli = meow(
 	  deploy        Deploy the application
 	  info          Show project information
 	  logs          Tail the server log (--app for the app log)
+	  login         Log in to a site and save the credential
 	  setup-signing Store the signing username and certificate
 
 	Options
@@ -69,7 +70,7 @@ const cli = meow(
 	  --no-zip          build: skip the zip archive
 	  --global          setup-signing: save for every project on this machine
 	  --app             logs: tail the app log instead of the server log
-	  --environment, -e logs: which configured environment to target
+	  --environment, -e logs/login: which configured environment to target
 	  --minimal         Shell: compact layout for small terminals
 	  --debug           Write a log of every action to debug.log (or SVC_DEBUG=1)
 	  --help            Show this help message
@@ -92,6 +93,8 @@ const cli = meow(
 	  $ svc logs
 	  $ svc logs --app
 	  $ svc logs -e prod
+	  $ svc login
+	  $ svc login -e prod
 `,
 	{
 		importMeta: import.meta,
@@ -459,18 +462,6 @@ async function main() {
 		return;
 	}
 
-	// Check if we're in a Sitevision project
-	const detected = (() => {
-		try {
-			return requireProject();
-		} catch (error) {
-			return fail(
-				(error as Error).message,
-				"Make sure you're in a Sitevision project directory",
-			);
-		}
-	})();
-
 	// Get the command
 	const command = getCommand(commandName);
 
@@ -486,6 +477,23 @@ async function main() {
 		);
 		process.exit(1);
 	}
+
+	// A command that talks to the site rather than to an app also runs at a
+	// workspace root, where the shared config supplies the domain and login.
+	const detected = (() => {
+		try {
+			if (!command.requiresProject) {
+				return detectProject() ?? workspaceProject(process.cwd());
+			}
+
+			return requireProject();
+		} catch (error) {
+			return fail(
+				(error as Error).message,
+				"Make sure you're in a Sitevision project directory",
+			);
+		}
+	})();
 
 	const project = withEnvironmentFlag(detected, command);
 

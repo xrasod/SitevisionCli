@@ -7,6 +7,7 @@ import {infoCommand} from './info.js';
 import {setupSigningCommand} from './setup-signing.js';
 import {signCommand} from './sign.js';
 import {logsCommand} from './logs.js';
+import {loginCommand} from './login.js';
 
 export const commands: Command[] = [
 	devCommand,
@@ -16,6 +17,7 @@ export const commands: Command[] = [
 	deployCommand,
 	infoCommand,
 	logsCommand,
+	loginCommand,
 	setupSigningCommand,
 ];
 

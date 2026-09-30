@@ -710,7 +710,9 @@ och `manifest.json` och bygger om vid ändring.
 ## 8. Direktkommandon och CI
 
 Alla kommandon körs i aktuell appkatalog och använder basmiljön, utom
-`svc logs -e <namn>`.
+`svc logs` och `svc login`, som tar `-e <namn>` och dessutom kan köras i roten
+av en arbetsyta, eftersom loggen och inloggningen hör till webbplatsen och inte
+till en app.
 
 ```bash
 svc build [--no-zip]
@@ -720,6 +722,7 @@ svc dev [--signed]
 svc watch [--signed]
 svc info
 svc logs [--app] [-e <namn>]
+svc login [-e <namn>]
 svc setup-signing
 ```
 
@@ -731,7 +734,7 @@ svc setup-signing
 | `--activate`    | `-a` | `deploy`        | Aktivera den uppladdade versionen                                          |
 | `--signed`      | `-s` | `dev`, `watch`  | Signera efter varje bygge                                                  |
 | `--app`         |      | `logs`          | Följ applikationsloggen i stället för serverloggen                         |
-| `--environment` | `-e` | `logs`          | Vilken konfigurerad miljö som ska följas                                   |
+| `--environment` | `-e` | `logs`, `login` | Vilken konfigurerad miljö som avses                                        |
 | `--minimal`     |      | (skalet)        | Kompakt layout, se [3](#3-skalet)                                          |
 | `--global`      |      | `setup-signing` | Spara för alla projekt, se [Globala inställningar](#globala-inställningar) |
 | `--debug`       |      | (alla)          | Skriv en felsökningslogg, se [Felsökningslogg](#felsökningslogg)           |
@@ -764,17 +767,38 @@ svc logs --app          # applikationsloggen
 svc logs -e prod        # en annan konfigurerad miljö
 ```
 
+- Det körs i en app eller i roten av en arbetsyta. I roten hämtas adress och
+  inloggning från den gemensamma `.dev_properties.json`, se
+  [Gemensam konfiguration i en arbetsyta](#gemensam-konfiguration-i-en-arbetsyta).
 - Strömmen är direkt. Den innehåller det som loggas från och med att den
   ansluter, så det finns ingen historik att hämta in.
 - Sitevision avslutar strömmen efter ungefär fem minuter. `svc` ansluter igen
   och behåller samma serversession, så loggen fortsätter. `Ctrl+C` avbryter.
-- Fel uppgifter, eller en användare utan behörigheten `developer`, ger en
-  omdirigering till inloggningssidan. Kommandot rapporterar det och avslutar
-  med 1.
-- Det behöver samma uppgifter som en driftsättning. `basic` är den metod som
-  är verifierad mot loggadresserna; `oauth2` återanvänder token från en
-  tidigare inloggning och `cookie` den sparade kakan.
+- En avvisad eller utgången inloggning ger något annat än loggsidan tillbaka:
+  en omdirigering när det inte finns någon session, och på en webbplats med
+  enkel inloggning en sida som skickar webbläsaren vidare till
+  identitetsleverantören. I båda fallen säger kommandot det, berättar hur man
+  loggar in igen och avslutar med 1 i stället för att ansluta om.
+- Det behöver samma uppgifter som en driftsättning. `basic` och `cookie`
+  fungerar båda mot loggen; `oauth2` återanvänder token från en tidigare
+  inloggning men är inte testad mot de här adresserna.
 - `--debug` skriver varje anslutning och avbrott till felsökningsloggen.
+
+### Logga in
+
+`svc login` hämtar uppgifter för en webbplats och sparar dem i nyckelringen, så
+att en loggström eller en driftsättning slutar fråga. Det är vägen tillbaka in
+när en session har gått ut.
+
+```bash
+svc login              # basmiljön
+svc login -e prod      # en annan konfigurerad miljö
+```
+
+- Med `basic` frågas driftsättningslösenordet och sparas om du vill.
+- Med `oauth2` eller `cookie` öppnas webbläsarinloggningen, samma som skalet
+  kör på `l`, och det som kommer tillbaka sparas. Båda behöver en terminal.
+- Det kan köras i roten av en arbetsyta likaväl som i en app.
 
 **Slutkoder**
 

@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
 	detectProject,
+	findDevPropertiesPath,
+	getProjectPaths,
 	readWorkspaceDevProperties,
 	type ProjectInfo,
 } from './project-detection.js';
@@ -120,4 +122,33 @@ export function needsOnboarding(root: string, apps: ProjectInfo[]): boolean {
 		configIncomplete(readWorkspaceDevProperties(root)) &&
 		apps.some(app => configIncomplete(app.devProperties))
 	);
+}
+
+/**
+ * A stand-in project for a workspace root, so a command that talks to the site
+ * rather than to an app can run above the apps instead of inside one. It
+ * carries the shared dev properties and an empty manifest, so a command that
+ * sets `requiresProject: false` must not read the manifest.
+ */
+export function workspaceProject(root: string): ProjectInfo {
+	const devProperties = readWorkspaceDevProperties(root) as DevProperties;
+	return {
+		root,
+		manifest: {id: '', name: '', version: '', type: 'WebApp'},
+		hasDevProperties: Boolean(devProperties.domain),
+		hasSigningProperties: false,
+		// A plaintext password in the shared file is still used, but migrating
+		// it belongs to the app flow that owns the file.
+		hasLegacyPassword: false,
+		devProperties,
+		inheritedKeys: [],
+		packageJson: {},
+		hasSitevisionScripts: false,
+		hasNodeModules: false,
+		paths: getProjectPaths(
+			root,
+			path.join(root, 'src', 'manifest.json'),
+			findDevPropertiesPath(root),
+		),
+	};
 }

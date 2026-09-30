@@ -444,3 +444,207 @@ test('logs --app asks the server for the app log', async t => {
 		server.close();
 	}
 });
+
+test('logs runs at a workspace root, using the shared config', async t => {
+	// A repo that holds apps below it, with the site config only at the root.
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-ws-'));
+	fs.mkdirSync(path.join(root, '.git'));
+	fs.writeFileSync(path.join(root, 'package.json'), '{"name":"workspace"}');
+	const app = path.join(root, 'webapps', 'one');
+	fs.mkdirSync(path.join(app, 'src'), {recursive: true});
+	fs.writeFileSync(
+		path.join(app, 'src', 'manifest.json'),
+		JSON.stringify(plainApp),
+	);
+
+	const paths: string[] = [];
+	const server = http.createServer((req, res) => {
+		paths.push(String(req.url));
+		res.writeHead(302, {Location: '/login.html'});
+		res.end();
+	});
+	await new Promise<void>(resolve => {
+		server.listen(0, '127.0.0.1', resolve);
+	});
+	const {port} = server.address() as AddressInfo;
+
+	fs.writeFileSync(
+		path.join(root, '.dev_properties.json'),
+		JSON.stringify({
+			domain: `127.0.0.1:${port}`,
+			siteName: 'Site',
+			username: 'me',
+			useHTTPForDevDeploy: true,
+		}),
+	);
+
+	try {
+		const {code, output} = await svc(root, ['logs'], '', {
+			SITEVISION_DEPLOY_PASSWORD: 'pw',
+		});
+		t.is(code, 1, `output: ${output}`);
+		t.deepEqual(paths, ['/admin-log/tail'], 'reached the site from the root');
+		t.notRegex(output, /Not a Sitevision project/);
+	} finally {
+		server.close();
+	}
+});
+
+test('a command that needs an app still says so at a workspace root', async t => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-ws-'));
+	fs.mkdirSync(path.join(root, '.git'));
+	fs.writeFileSync(path.join(root, 'package.json'), '{"name":"workspace"}');
+	const {code, output} = await svc(root, ['build']);
+	t.is(code, 1, `output: ${output}`);
+	t.regex(output, /Not a Sitevision project/);
+});
+
+test('logs at a workspace root with no shared config says what is missing', async t => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-ws-'));
+	fs.mkdirSync(path.join(root, '.git'));
+	fs.writeFileSync(path.join(root, 'package.json'), '{"name":"workspace"}');
+	const {code, output} = await svc(root, ['logs']);
+	t.is(code, 1, `output: ${output}`);
+	t.regex(output, /missing "domain"/);
+});
+
+test('an expired cookie session exits with how to log in, instead of looping', async t => {
+	const root = makeApp(plainApp);
+	let hits = 0;
+	const server = http.createServer((_req, res) => {
+		hits++;
+		// An expired session gets a 200 that bounces the browser to the login
+		// provider, not a redirect status.
+		res.writeHead(200, {'Content-Type': 'text/html;charset=UTF-8'});
+		res.end(
+			'<html><head><meta http-equiv="refresh" content="0;url=/sso/login"></head></html>',
+		);
+	});
+	await new Promise<void>(resolve => {
+		server.listen(0, '127.0.0.1', resolve);
+	});
+	const {port} = server.address() as AddressInfo;
+
+	fs.writeFileSync(
+		path.join(root, '.dev_properties.json'),
+		JSON.stringify({
+			domain: `127.0.0.1:${port}`,
+			siteName: 'Site',
+			addonName: 'Addon',
+			username: 'me',
+			authMethod: 'cookie',
+			useHTTPForDevDeploy: true,
+		}),
+	);
+
+	try {
+		const {code, output} = await svc(root, ['logs'], '', {
+			SITEVISION_SESSION_COOKIE: 'JSESSIONID=expired',
+		});
+		t.is(code, 1, `output: ${output}`);
+		t.is(hits, 1, 'gave up instead of reconnecting');
+		t.regex(output, /other than the log page/);
+		t.regex(output, /svc login/);
+	} finally {
+		server.close();
+	}
+});
+
+test('login without a terminal says what to set instead of hanging', async t => {
+	const root = makeApp(plainApp);
+	fs.writeFileSync(
+		path.join(root, '.dev_properties.json'),
+		JSON.stringify({
+			domain: 'site.example',
+			siteName: 'Site',
+			addonName: 'Addon',
+			username: 'me',
+			authMethod: 'cookie',
+		}),
+	);
+	const {code, output} = await svc(root, ['login']);
+	t.is(code, 1, `output: ${output}`);
+	t.regex(output, /needs a terminal and a browser/);
+	t.regex(output, /SITEVISION_SESSION_COOKIE/);
+});
+
+test('login runs at a workspace root and reports missing config there', async t => {
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-ws-'));
+	fs.mkdirSync(path.join(root, '.git'));
+	fs.writeFileSync(path.join(root, 'package.json'), '{"name":"workspace"}');
+	const {code, output} = await svc(root, ['login']);
+	t.is(code, 1, `output: ${output}`);
+	t.notRegex(output, /Not a Sitevision project/);
+	t.regex(output, /missing "domain"/);
+});
+
+test('login -e targets the environment named on the command line', async t => {
+	const root = makeApp(plainApp);
+	fs.writeFileSync(
+		path.join(root, '.dev_properties.json'),
+		JSON.stringify({
+			domain: 'dev.example',
+			siteName: 'Site',
+			addonName: 'Addon',
+			username: 'me',
+			environments: {prod: {domain: 'prod.example', authMethod: 'cookie'}},
+		}),
+	);
+	const {code, output} = await svc(root, ['login', '-e', 'prod']);
+	t.is(code, 1, `output: ${output}`);
+	// Reached the cookie branch for prod, not the basic branch of the base.
+	t.regex(output, /needs a terminal and a browser/);
+});
+
+test('the logs failure points at svc login, not at deploying', async t => {
+	const root = makeApp(plainApp);
+	const server = http.createServer((_req, res) => {
+		res.writeHead(200, {'Content-Type': 'text/html;charset=UTF-8'});
+		res.end(
+			'<html><head><meta http-equiv="refresh" content="0;url=/sso/login"></head></html>',
+		);
+	});
+	await new Promise<void>(resolve => {
+		server.listen(0, '127.0.0.1', resolve);
+	});
+	const {port} = server.address() as AddressInfo;
+	fs.writeFileSync(
+		path.join(root, '.dev_properties.json'),
+		JSON.stringify({
+			domain: `127.0.0.1:${port}`,
+			siteName: 'Site',
+			addonName: 'Addon',
+			username: 'me',
+			authMethod: 'cookie',
+			useHTTPForDevDeploy: true,
+		}),
+	);
+
+	try {
+		const {output} = await svc(root, ['logs'], '', {
+			SITEVISION_SESSION_COOKIE: 'JSESSIONID=expired',
+		});
+		t.regex(output, /svc login/);
+		t.notRegex(output, /svc deploy/);
+	} finally {
+		server.close();
+	}
+});
+
+test('a cookie login without a username says so instead of saving nothing', async t => {
+	// The keychain stores a session cookie under the username, so without one
+	// the login would look like it worked and keep nothing.
+	const root = makeApp(plainApp);
+	fs.writeFileSync(
+		path.join(root, '.dev_properties.json'),
+		JSON.stringify({
+			domain: 'site.example',
+			siteName: 'Site',
+			addonName: 'Addon',
+			authMethod: 'cookie',
+		}),
+	);
+	const {code, output} = await svc(root, ['login']);
+	t.is(code, 1, `output: ${output}`);
+	t.regex(output, /missing "username"/);
+});

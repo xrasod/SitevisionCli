@@ -704,7 +704,9 @@ Both build once, then watch `src`, `static`, `i18n`, `resource`, `config` and
 ## 8. Direct commands and CI
 
 Every command runs in the current app directory and uses the base environment,
-except `svc logs -e <name>`.
+except `svc logs` and `svc login`, which take `-e <name>` and also run at a
+workspace root, since the log and the login belong to the site rather than to
+an app.
 
 ```bash
 svc build [--no-zip]
@@ -714,6 +716,7 @@ svc dev [--signed]
 svc watch [--signed]
 svc info
 svc logs [--app] [-e <name>]
+svc login [-e <name>]
 svc setup-signing
 ```
 
@@ -725,7 +728,7 @@ svc setup-signing
 | `--activate`    | `-a`  | `deploy`        | Activate the uploaded version                                   |
 | `--signed`      | `-s`  | `dev`, `watch`  | Sign after each build                                           |
 | `--app`         |       | `logs`          | Follow the app log instead of the server log                    |
-| `--environment` | `-e`  | `logs`          | Which configured environment to follow                          |
+| `--environment` | `-e`  | `logs`, `login` | Which configured environment to target                          |
 | `--minimal`     |       | (shell)         | Compact layout, see [3](#3-the-shell)                           |
 | `--global`      |       | `setup-signing` | Save for every project, see [Global settings](#global-settings) |
 | `--debug`       |       | (any)           | Write a debug log, see [Debug log](#debug-log)                  |
@@ -757,16 +760,37 @@ svc logs --app          # app log
 svc logs -e prod        # another configured environment
 ```
 
+- It runs inside an app or at a workspace root. At a root the domain and
+  login come from the shared `.dev_properties.json`, see
+  [Shared config in a workspace](#shared-config-in-a-workspace).
 - The stream is live. It carries what is logged from the moment it connects,
   so there is no history to catch up on.
 - Sitevision ends the stream after about five minutes. `svc` reconnects and
   keeps the same server session, so the log simply continues. `Ctrl+C` stops.
-- Wrong credentials, or a user without the `developer` permission, gets a
-  redirect to the login page. The command reports that and exits 1.
-- It needs the same credentials as a deploy. `basic` is the method verified
-  against the log endpoints; `oauth2` reuses the token from an earlier login
-  and `cookie` the stored cookie.
+- A rejected or expired login gets something other than the log page back: a
+  redirect when there is no session, and on a single sign-on site a page that
+  bounces the browser to the identity provider. Either way the command says so,
+  names how to log in again, and exits 1 rather than reconnecting.
+- It needs the same credentials as a deploy. `basic` and `cookie` both work
+  against the log; `oauth2` reuses the token from an earlier login but has not
+  been tested against these endpoints.
 - `--debug` records every connect and disconnect in the debug log.
+
+### Logging in
+
+`svc login` gets a credential for one site and saves it in the OS keychain, so
+a tail or a deploy stops asking for it. It is the way back in when a session
+has expired.
+
+```bash
+svc login              # base environment
+svc login -e prod      # another configured environment
+```
+
+- With `basic` it asks for the deploy password and offers to save it.
+- With `oauth2` or `cookie` it opens the browser login, the same one the shell
+  runs on `l`, and saves what comes back. Both need a terminal.
+- It runs at a workspace root as well as inside an app.
 
 **Exit codes**
 

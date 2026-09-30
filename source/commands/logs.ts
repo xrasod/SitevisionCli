@@ -16,7 +16,8 @@ const RETRY_DELAY_MS = 3000;
 export const logsCommand: Command = {
 	name: 'logs',
 	description: 'Tail the server log (or the app log with --app)',
-	requiresProject: true,
+	// The log belongs to the site, so this also runs at a workspace root.
+	requiresProject: false,
 	supportsEnvironment: true,
 	async execute({project, flags}) {
 		const dev = project.devProperties;
@@ -43,12 +44,17 @@ export const logsCommand: Command = {
 		if (!(await resolveDeployPasswordForCli(dev))) return;
 
 		const app = Boolean(flags['app']);
+		const {auth, kind} = configAuth(dev);
+		const reLogin =
+			kind === 'basic'
+				? 'Run svc login to store the password, and check that the user has the developer permission.'
+				: 'Run svc login to log in again.';
 		let connects = 0;
-		let emptyStreak = 0;
+		let nologStreak = 0;
 		const options = {
 			domain: dev.domain,
 			useHTTP: dev.useHTTPForDevDeploy,
-			auth: configAuth(dev).auth,
+			auth,
 			app,
 			session: {},
 			onConnect() {
@@ -60,7 +66,7 @@ export const logsCommand: Command = {
 		};
 
 		say(
-			`${DIM}Tailing ${app ? 'app' : 'server'} log on ${dev.domain} (${dev.environmentName ?? baseEnvironment(dev)}, ${configAuth(dev).kind}). Ctrl+C to stop.${RESET}`,
+			`${DIM}Tailing ${app ? 'app' : 'server'} log on ${dev.domain} (${dev.environmentName ?? baseEnvironment(dev)}, ${kind}). Ctrl+C to stop.${RESET}`,
 		);
 
 		while (true) {
@@ -69,11 +75,15 @@ export const logsCommand: Command = {
 				const end = await tailLog(options, line => {
 					say(line);
 				});
-				emptyStreak = end === 'empty' ? emptyStreak + 1 : 0;
-				if (isFatalEnd(end, {connects, emptyStreak})) {
+				nologStreak = end === 'nolog' ? nologStreak + 1 : 0;
+				if (isFatalEnd(end, {connects, nologStreak})) {
 					say(
-						`\n${RED}The server accepted the request and then sent no log page. The credential has no access to the log.${RESET}\n`,
+						`\n${RED}The server answered with something other than the log page.${RESET}`,
 					);
+					say(
+						`${YELLOW}The ${kind === 'basic' ? 'credentials were' : `${kind} login has`} most likely expired or been rejected. ${reLogin}${RESET}`,
+					);
+					say(`${DIM}Run with --debug to see what the server sent.${RESET}\n`);
 					process.exitCode = 1;
 					return;
 				}
