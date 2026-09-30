@@ -654,8 +654,9 @@ On a production environment:
   starts, then signs and deploys every build. `svc dev` does the same with
   `--signed`, and refuses without it.
 
-Direct commands (`svc deploy` etc.) always use the base environment; switching
-environments is only available in the shell.
+Direct commands (`svc deploy` etc.) use the base environment. `svc logs -e
+<name>` is the one that takes another environment on the command line;
+switching for everything else is only available in the shell.
 
 ## 7. Build, sign, deploy
 
@@ -702,7 +703,8 @@ Both build once, then watch `src`, `static`, `i18n`, `resource`, `config` and
 
 ## 8. Direct commands and CI
 
-Every command runs in the current app directory and uses the base environment.
+Every command runs in the current app directory and uses the base environment,
+except `svc logs -e <name>`.
 
 ```bash
 svc build [--no-zip]
@@ -711,19 +713,22 @@ svc deploy [--force] [--production] [--activate]
 svc dev [--signed]
 svc watch [--signed]
 svc info
+svc logs [--app] [-e <name>]
 svc setup-signing
 ```
 
-| Flag           | Short | Command         | Effect                                                          |
-| -------------- | ----- | --------------- | --------------------------------------------------------------- |
-| `--no-zip`     |       | `build`         | Build into `build/` and leave no zip                            |
-| `--force`      | `-f`  | `deploy`        | Overwrite an existing version with the same number              |
-| `--production` | `-p`  | `deploy`        | Upload the signed zip instead of the dev zip                    |
-| `--activate`   | `-a`  | `deploy`        | Activate the uploaded version                                   |
-| `--signed`     | `-s`  | `dev`, `watch`  | Sign after each build                                           |
-| `--minimal`    |       | (shell)         | Compact layout, see [3](#3-the-shell)                           |
-| `--global`     |       | `setup-signing` | Save for every project, see [Global settings](#global-settings) |
-| `--debug`      |       | (any)           | Write a debug log, see [Debug log](#debug-log)                  |
+| Flag            | Short | Command         | Effect                                                          |
+| --------------- | ----- | --------------- | --------------------------------------------------------------- |
+| `--no-zip`      |       | `build`         | Build into `build/` and leave no zip                            |
+| `--force`       | `-f`  | `deploy`        | Overwrite an existing version with the same number              |
+| `--production`  | `-p`  | `deploy`        | Upload the signed zip instead of the dev zip                    |
+| `--activate`    | `-a`  | `deploy`        | Activate the uploaded version                                   |
+| `--signed`      | `-s`  | `dev`, `watch`  | Sign after each build                                           |
+| `--app`         |       | `logs`          | Follow the app log instead of the server log                    |
+| `--environment` | `-e`  | `logs`          | Which configured environment to follow                          |
+| `--minimal`     |       | (shell)         | Compact layout, see [3](#3-the-shell)                           |
+| `--global`      |       | `setup-signing` | Save for every project, see [Global settings](#global-settings) |
+| `--debug`       |       | (any)           | Write a debug log, see [Debug log](#debug-log)                  |
 
 An unknown flag is an error, so a misspelt `--production` never turns into a
 dev deploy.
@@ -740,6 +745,28 @@ dev deploy.
   With `--global` they go to the global settings file instead.
 - Build, sign and deploy print their log line by line and then exit by
   themselves. They run the same steps as the shell's `b`, `s` and `p`.
+
+### Following the log
+
+`svc logs` streams the server log to the terminal, the same log the admin
+interface shows under `/admin/log`. `--app` follows the app log instead.
+
+```bash
+svc logs                # server log, base environment
+svc logs --app          # app log
+svc logs -e prod        # another configured environment
+```
+
+- The stream is live. It carries what is logged from the moment it connects,
+  so there is no history to catch up on.
+- Sitevision ends the stream after about five minutes. `svc` reconnects and
+  keeps the same server session, so the log simply continues. `Ctrl+C` stops.
+- Wrong credentials, or a user without the `developer` permission, gets a
+  redirect to the login page. The command reports that and exits 1.
+- It needs the same credentials as a deploy. `basic` is the method verified
+  against the log endpoints; `oauth2` reuses the token from an earlier login
+  and `cookie` the stored cookie.
+- `--debug` records every connect and disconnect in the debug log.
 
 **Exit codes**
 

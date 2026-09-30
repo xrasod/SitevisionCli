@@ -16,6 +16,8 @@ import {
 	type ProjectInfo,
 } from './utils/project-detection.js';
 import {discoverApps} from './utils/workspace.js';
+import {environmentNames, environmentProject} from './utils/environments.js';
+import {type Command} from './commands/types.js';
 import {promptYesNo} from './utils/password-prompt.js';
 import {checkForUpdate} from './utils/version-check.js';
 import {
@@ -67,6 +69,7 @@ const cli = meow(
 	  --no-zip          build: skip the zip archive
 	  --global          setup-signing: save for every project on this machine
 	  --app             logs: tail the app log instead of the server log
+	  --environment, -e logs: which configured environment to target
 	  --minimal         Shell: compact layout for small terminals
 	  --debug           Write a log of every action to debug.log (or SVC_DEBUG=1)
 	  --help            Show this help message
@@ -88,6 +91,7 @@ const cli = meow(
 	  $ svc info
 	  $ svc logs
 	  $ svc logs --app
+	  $ svc logs -e prod
 `,
 	{
 		importMeta: import.meta,
@@ -124,6 +128,10 @@ const cli = meow(
 			app: {
 				type: 'boolean',
 				default: false,
+			},
+			environment: {
+				type: 'string',
+				shortFlag: 'e',
 			},
 			global: {
 				type: 'boolean',
@@ -239,6 +247,35 @@ async function playIntro(art: string[]): Promise<void> {
 // Run the full-screen shell on the alternate screen buffer so the scrollback
 // is untouched, and restore it on exit. The animated wordmark plays first,
 // inside the same buffer, when the terminal is wide enough for it.
+/**
+ * Apply -e/--environment. The flag is global because meow rejects unknown
+ * flags, so a command that ignores it has to say so instead of quietly
+ * running against the base environment.
+ */
+function withEnvironmentFlag(
+	project: ProjectInfo,
+	command: Command,
+): ProjectInfo {
+	const name = cli.flags.environment;
+	if (!name) return project;
+	if (!command.supportsEnvironment) {
+		return fail(
+			`${commandName ?? 'this command'} does not support --environment`,
+			'Only svc logs targets an environment; other commands use the base environment.',
+		);
+	}
+
+	const names = environmentNames(project.devProperties);
+	if (!names.includes(name)) {
+		return fail(
+			`Unknown environment "${name}"`,
+			`Configured environments: ${names.join(', ')}`,
+		);
+	}
+
+	return environmentProject(project, name);
+}
+
 async function runShell(
 	apps: ProjectInfo[],
 	workspaceRoot?: string,
@@ -363,6 +400,13 @@ async function main() {
 	// No command: the shell. Inside an app it is single-app mode; anywhere
 	// above one or more apps it is workspace mode.
 	if (!commandName) {
+		if (cli.flags.environment) {
+			fail(
+				'The shell does not take --environment',
+				'Start it with svc and press v to switch environment.',
+			);
+		}
+
 		let project: ProjectInfo | null = null;
 		try {
 			project = detectProject();
@@ -416,7 +460,7 @@ async function main() {
 	}
 
 	// Check if we're in a Sitevision project
-	const project = (() => {
+	const detected = (() => {
 		try {
 			return requireProject();
 		} catch (error) {
@@ -442,6 +486,8 @@ async function main() {
 		);
 		process.exit(1);
 	}
+
+	const project = withEnvironmentFlag(detected, command);
 
 	// Offer to migrate a legacy plaintext password into the OS keychain.
 	// Skip on non-TTY stdin (e.g. CI) where prompting would fail — the

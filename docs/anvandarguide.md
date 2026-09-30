@@ -659,8 +659,9 @@ I en produktionsmiljö:
   startar, sedan signerar och driftsätter den varje bygge. `svc dev` gör
   samma sak med `--signed`, och vägrar utan.
 
-Direktkommandon (`svc deploy` m.fl.) använder alltid basmiljön; att byta miljö
-går bara i skalet.
+Direktkommandon (`svc deploy` m.fl.) använder basmiljön. `svc logs -e <namn>`
+är det enda som tar en annan miljö på kommandoraden; för allt annat går det
+bara att byta i skalet.
 
 ## 7. Bygga, signera, driftsätta
 
@@ -708,7 +709,8 @@ och `manifest.json` och bygger om vid ändring.
 
 ## 8. Direktkommandon och CI
 
-Alla kommandon körs i aktuell appkatalog och använder basmiljön.
+Alla kommandon körs i aktuell appkatalog och använder basmiljön, utom
+`svc logs -e <namn>`.
 
 ```bash
 svc build [--no-zip]
@@ -717,19 +719,22 @@ svc deploy [--force] [--production] [--activate]
 svc dev [--signed]
 svc watch [--signed]
 svc info
+svc logs [--app] [-e <namn>]
 svc setup-signing
 ```
 
-| Flagga         | Kort | Kommando        | Effekt                                                                     |
-| -------------- | ---- | --------------- | -------------------------------------------------------------------------- |
-| `--no-zip`     |      | `build`         | Bygg till `build/` och lämna ingen zip                                     |
-| `--force`      | `-f` | `deploy`        | Skriv över en befintlig version med samma nummer                           |
-| `--production` | `-p` | `deploy`        | Ladda upp den signerade zip-filen i stället för dev-zippen                 |
-| `--activate`   | `-a` | `deploy`        | Aktivera den uppladdade versionen                                          |
-| `--signed`     | `-s` | `dev`, `watch`  | Signera efter varje bygge                                                  |
-| `--minimal`    |      | (skalet)        | Kompakt layout, se [3](#3-skalet)                                          |
-| `--global`     |      | `setup-signing` | Spara för alla projekt, se [Globala inställningar](#globala-inställningar) |
-| `--debug`      |      | (alla)          | Skriv en felsökningslogg, se [Felsökningslogg](#felsökningslogg)           |
+| Flagga          | Kort | Kommando        | Effekt                                                                     |
+| --------------- | ---- | --------------- | -------------------------------------------------------------------------- |
+| `--no-zip`      |      | `build`         | Bygg till `build/` och lämna ingen zip                                     |
+| `--force`       | `-f` | `deploy`        | Skriv över en befintlig version med samma nummer                           |
+| `--production`  | `-p` | `deploy`        | Ladda upp den signerade zip-filen i stället för dev-zippen                 |
+| `--activate`    | `-a` | `deploy`        | Aktivera den uppladdade versionen                                          |
+| `--signed`      | `-s` | `dev`, `watch`  | Signera efter varje bygge                                                  |
+| `--app`         |      | `logs`          | Följ applikationsloggen i stället för serverloggen                         |
+| `--environment` | `-e` | `logs`          | Vilken konfigurerad miljö som ska följas                                   |
+| `--minimal`     |      | (skalet)        | Kompakt layout, se [3](#3-skalet)                                          |
+| `--global`      |      | `setup-signing` | Spara för alla projekt, se [Globala inställningar](#globala-inställningar) |
+| `--debug`       |      | (alla)          | Skriv en felsökningslogg, se [Felsökningslogg](#felsökningslogg)           |
 
 En okänd flagga är ett fel, så ett felstavat `--production` blir aldrig en
 dev-driftsättning.
@@ -746,6 +751,30 @@ dev-driftsättning.
   hamnar de i den globala inställningsfilen i stället.
 - Build, sign och deploy skriver ut sin logg rad för rad och avslutar sedan
   själva. De kör samma steg som skalets `b`, `s` och `p`.
+
+### Följa loggen
+
+`svc logs` strömmar serverloggen till terminalen, samma logg som
+administrationsgränssnittet visar under `/admin/log`. Med `--app` följs
+applikationsloggen i stället.
+
+```bash
+svc logs                # serverloggen, basmiljön
+svc logs --app          # applikationsloggen
+svc logs -e prod        # en annan konfigurerad miljö
+```
+
+- Strömmen är direkt. Den innehåller det som loggas från och med att den
+  ansluter, så det finns ingen historik att hämta in.
+- Sitevision avslutar strömmen efter ungefär fem minuter. `svc` ansluter igen
+  och behåller samma serversession, så loggen fortsätter. `Ctrl+C` avbryter.
+- Fel uppgifter, eller en användare utan behörigheten `developer`, ger en
+  omdirigering till inloggningssidan. Kommandot rapporterar det och avslutar
+  med 1.
+- Det behöver samma uppgifter som en driftsättning. `basic` är den metod som
+  är verifierad mot loggadresserna; `oauth2` återanvänder token från en
+  tidigare inloggning och `cookie` den sparade kakan.
+- `--debug` skriver varje anslutning och avbrott till felsökningsloggen.
 
 **Slutkoder**
 

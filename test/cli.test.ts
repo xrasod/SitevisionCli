@@ -335,3 +335,76 @@ test('a settings file that does not parse is reported and left alone', async t =
 	t.regex(output, /does not parse/);
 	t.is(fs.readFileSync(file, 'utf8'), '{"language": "sv",,}');
 });
+
+test('--environment is refused for a command that does not honor it', async t => {
+	const root = makeApp(plainApp);
+	const {code, output} = await svc(root, ['build', '-e', 'prod']);
+	t.is(code, 1, `output: ${output}`);
+	t.regex(output, /build does not support --environment/);
+});
+
+test('logs names the configured environments when given an unknown one', async t => {
+	const root = makeApp(plainApp);
+	fs.writeFileSync(
+		path.join(root, '.dev_properties.json'),
+		JSON.stringify({
+			domain: 'site.example',
+			siteName: 'Site',
+			addonName: 'Addon',
+			username: 'me',
+			environments: {test: {domain: 'test.example'}},
+		}),
+	);
+	const {code, output} = await svc(root, ['logs', '-e', 'nope']);
+	t.is(code, 1, `output: ${output}`);
+	t.regex(output, /Unknown environment "nope"/);
+	t.regex(output, /dev, test/);
+});
+
+test('logs -e tails the chosen environment and reports a login redirect', async t => {
+	const root = makeApp(plainApp);
+	let hits = 0;
+	const server = http.createServer((req, res) => {
+		hits++;
+		t.is(req.url, '/admin-log/tail');
+		t.regex(String(req.headers.authorization), /^Basic /);
+		res.writeHead(302, {Location: '/login.html'});
+		res.end();
+	});
+	await new Promise<void>(resolve => {
+		server.listen(0, '127.0.0.1', resolve);
+	});
+	const {port} = server.address() as AddressInfo;
+
+	fs.writeFileSync(
+		path.join(root, '.dev_properties.json'),
+		JSON.stringify({
+			domain: 'unused.example',
+			siteName: 'Site',
+			addonName: 'Addon',
+			username: 'me',
+			environments: {
+				test: {domain: `127.0.0.1:${port}`, useHTTPForDevDeploy: true},
+			},
+		}),
+	);
+
+	try {
+		const {code, output} = await svc(root, ['logs', '-e', 'test'], '', {
+			SITEVISION_DEPLOY_PASSWORD: 'pw',
+		});
+		t.is(code, 1, `output: ${output}`);
+		t.is(hits, 1);
+		t.regex(output, /Redirected to login/);
+		t.regex(output, /Tailing server log on 127\.0\.0\.1/);
+	} finally {
+		server.close();
+	}
+});
+
+test('--environment is refused for the shell, which switches with a key', async t => {
+	const root = makeApp(plainApp);
+	const {code, output} = await svc(root, ['-e', 'prod']);
+	t.is(code, 1, `output: ${output}`);
+	t.regex(output, /shell does not take --environment/);
+});
