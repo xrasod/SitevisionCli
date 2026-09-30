@@ -264,7 +264,7 @@ function withEnvironmentFlag(
 	if (!command.supportsEnvironment) {
 		return fail(
 			`${commandName ?? 'this command'} does not support --environment`,
-			'Only svc logs targets an environment; other commands use the base environment.',
+			'Only svc logs and svc login target an environment; other commands use the base environment.',
 		);
 	}
 

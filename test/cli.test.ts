@@ -648,3 +648,44 @@ test('a cookie login without a username says so instead of saving nothing', asyn
 	t.is(code, 1, `output: ${output}`);
 	t.regex(output, /missing "username"/);
 });
+
+test('logs at a workspace root uses a session cookie from the environment', async t => {
+	// The shared config resolves only the password on its own, so a root run
+	// would otherwise report no credential with one already available.
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-ws-'));
+	fs.mkdirSync(path.join(root, '.git'));
+	fs.writeFileSync(path.join(root, 'package.json'), '{"name":"workspace"}');
+
+	const seen: Array<string | undefined> = [];
+	const server = http.createServer((req, res) => {
+		seen.push(req.headers.cookie);
+		res.writeHead(302, {Location: '/login.html'});
+		res.end();
+	});
+	await new Promise<void>(resolve => {
+		server.listen(0, '127.0.0.1', resolve);
+	});
+	const {port} = server.address() as AddressInfo;
+
+	fs.writeFileSync(
+		path.join(root, '.dev_properties.json'),
+		JSON.stringify({
+			domain: `127.0.0.1:${port}`,
+			siteName: 'Site',
+			username: 'me',
+			authMethod: 'cookie',
+			useHTTPForDevDeploy: true,
+		}),
+	);
+
+	try {
+		const {code, output} = await svc(root, ['logs'], '', {
+			SITEVISION_SESSION_COOKIE: 'JSESSIONID=fromenv',
+		});
+		t.is(code, 1, `output: ${output}`);
+		t.deepEqual(seen, ['JSESSIONID=fromenv'], 'sent the cookie it was given');
+		t.notRegex(output, /No cookie credential/);
+	} finally {
+		server.close();
+	}
+});

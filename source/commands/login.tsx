@@ -1,10 +1,10 @@
-import {useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {render, Box, Text} from 'ink';
 import {type Command} from './types.js';
 import {useFinish} from './use-finish.js';
 import {AuthLoginScreen} from '../components/AuthLoginScreen.js';
 import {promptPassword, promptYesNo} from '../utils/password-prompt.js';
-import {setDeployPassword} from '../utils/keychain.js';
+import {onKeychainSaveFailed, setDeployPassword} from '../utils/keychain.js';
 import {baseEnvironment} from '../utils/environments.js';
 import {say} from '../utils/debug.js';
 import type {DevProperties} from '../types/index.js';
@@ -13,6 +13,27 @@ const YELLOW = '\x1b[33m';
 const GREEN = '\x1b[32m';
 const DIM = '\x1b[2m';
 const RESET = '\x1b[0m';
+
+/** The variable that carries this credential for one run, when nothing stuck. */
+const envVarFor = (method: string) =>
+	method === 'oauth2' ? 'SITEVISION_ACCESS_TOKEN' : 'SITEVISION_SESSION_COOKIE';
+
+/**
+ * What to report once a login has run. The browser flows store the credential
+ * themselves and do not return whether that worked, so a refused keychain is
+ * heard through `onKeychainSaveFailed` and must not be reported as saved.
+ */
+export function loginResultMessage(
+	domain: string,
+	method: string,
+	stored: boolean,
+): string {
+	if (stored) {
+		return `✓ Logged in to ${domain}. The ${method} login is saved in the OS keychain.`;
+	}
+
+	return `Logged in to ${domain}, but the OS keychain would not store the ${method} login. Set ${envVarFor(method)} to carry it into the next run.`;
+}
 
 /** The browser login for `oauth2` and `cookie`, as a standalone command. */
 function LoginScreen({
@@ -24,6 +45,14 @@ function LoginScreen({
 }) {
 	const [result, setResult] = useState<'success' | 'error'>();
 	const [message, setMessage] = useState('');
+	// The keychain reports a refused save through this hook, which the auth
+	// helpers themselves swallow.
+	const stored = useRef(true);
+	useEffect(() => {
+		onKeychainSaveFailed(() => {
+			stored.current = false;
+		});
+	}, []);
 	useFinish(result);
 
 	if (result) {
@@ -39,10 +68,8 @@ function LoginScreen({
 			method={method}
 			devProperties={dev}
 			onComplete={() => {
-				setMessage(
-					`✓ Logged in to ${dev.domain} as ${method}. The login is saved in the OS keychain.`,
-				);
-				setResult('success');
+				setMessage(loginResultMessage(dev.domain, method, stored.current));
+				setResult(stored.current ? 'success' : 'error');
 			}}
 			onError={error => {
 				setMessage(error);
@@ -104,8 +131,14 @@ export const loginCommand: Command = {
 			}
 
 			if (await promptYesNo('Save it to the OS keychain? (Y/n): ', true)) {
-				setDeployPassword(dev.domain, dev.username, password);
-				say(`${GREEN}✓ Saved for ${dev.username}@${dev.domain}.${RESET}`);
+				if (setDeployPassword(dev.domain, dev.username, password)) {
+					say(`${GREEN}✓ Saved for ${dev.username}@${dev.domain}.${RESET}`);
+				} else {
+					say(
+						`${YELLOW}The OS keychain would not store it. Set SITEVISION_DEPLOY_PASSWORD instead.${RESET}`,
+					);
+					process.exitCode = 1;
+				}
 			} else {
 				say(
 					`${DIM}Not saved. Pass it as SITEVISION_DEPLOY_PASSWORD for one run.${RESET}`,

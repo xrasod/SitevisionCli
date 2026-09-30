@@ -654,9 +654,10 @@ On a production environment:
   starts, then signs and deploys every build. `svc dev` does the same with
   `--signed`, and refuses without it.
 
-Direct commands (`svc deploy` etc.) use the base environment. `svc logs -e
-<name>` is the one that takes another environment on the command line;
-switching for everything else is only available in the shell.
+Direct commands (`svc deploy` etc.) use the base environment. `svc logs` and
+`svc login` are the two that take another environment on the command line,
+with `-e <name>`; switching for everything else is only available in the
+shell.
 
 ## 7. Build, sign, deploy
 

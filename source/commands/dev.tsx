@@ -134,7 +134,7 @@ export const devCommand: Command = {
 		}
 
 		// The standalone command only prompts for a basic password; OAuth2/cookie
-		// logins are interactive and live in the shell (`svc`) or `svc deploy`.
+		// logins are interactive and live in `svc login` or the shell (`svc`).
 		if (
 			(dev.authMethod ?? 'basic') !== 'basic' &&
 			!dev.accessToken &&

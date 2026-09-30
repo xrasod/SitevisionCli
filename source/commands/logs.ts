@@ -35,7 +35,7 @@ export const logsCommand: Command = {
 
 		if (method !== 'basic' && !dev.accessToken && !dev.sessionCookie) {
 			say(
-				`\n${YELLOW}No ${method} credential for ${dev.domain}. Log in with svc deploy, or set SITEVISION_ACCESS_TOKEN or SITEVISION_SESSION_COOKIE.${RESET}\n`,
+				`\n${YELLOW}No ${method} credential for ${dev.domain}. Run svc login, or set ${method === 'oauth2' ? 'SITEVISION_ACCESS_TOKEN' : 'SITEVISION_SESSION_COOKIE'}.${RESET}\n`,
 			);
 			process.exitCode = 1;
 			return;

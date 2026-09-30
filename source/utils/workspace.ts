@@ -5,6 +5,7 @@ import {
 	findDevPropertiesPath,
 	getProjectPaths,
 	readWorkspaceDevProperties,
+	resolveRuntimeSecrets,
 	type ProjectInfo,
 } from './project-detection.js';
 import type {DeployConfig, DevProperties} from '../types/index.js';
@@ -131,7 +132,13 @@ export function needsOnboarding(root: string, apps: ProjectInfo[]): boolean {
  * sets `requiresProject: false` must not read the manifest.
  */
 export function workspaceProject(root: string): ProjectInfo {
-	const devProperties = readWorkspaceDevProperties(root) as DevProperties;
+	const merged = readWorkspaceDevProperties(root) as DevProperties;
+	// The shared file only resolves the password on its own; a saved session
+	// cookie or token has to be looked up the same way an app's config does,
+	// or a root run reports no credential when one is sitting in the keychain.
+	const fromFile = merged.password;
+	const devProperties = resolveRuntimeSecrets(merged);
+	devProperties.password ??= fromFile;
 	return {
 		root,
 		manifest: {id: '', name: '', version: '', type: 'WebApp'},

@@ -659,9 +659,9 @@ I en produktionsmiljö:
   startar, sedan signerar och driftsätter den varje bygge. `svc dev` gör
   samma sak med `--signed`, och vägrar utan.
 
-Direktkommandon (`svc deploy` m.fl.) använder basmiljön. `svc logs -e <namn>`
-är det enda som tar en annan miljö på kommandoraden; för allt annat går det
-bara att byta i skalet.
+Direktkommandon (`svc deploy` m.fl.) använder basmiljön. `svc logs` och
+`svc login` är de två som tar en annan miljö på kommandoraden, med
+`-e <namn>`; för allt annat går det bara att byta i skalet.
 
 ## 7. Bygga, signera, driftsätta
 

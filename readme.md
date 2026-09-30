@@ -92,8 +92,9 @@ Short flags: `-f` force, `-p` production, `-a` activate, `-s` signed, `-e`
 environment (`logs` and `login`). An unknown flag is an error.
 
 Direct commands use the base environment unless `-e` names another one, which
-`svc logs` and `svc login` accept. They run without a terminal and exit non-zero when a
-step fails, so `svc build && svc sign && svc deploy -p -a` is safe in CI. `SITEVISION_DEPLOY_PASSWORD` and `SITEVISION_SIGNING_PASSWORD`
+`svc logs` and `svc login` accept. Apart from `svc login`, which needs a
+terminal and a browser, they run unattended and exit non-zero when a step
+fails, so `svc build && svc sign && svc deploy -p -a` is safe in CI. `SITEVISION_DEPLOY_PASSWORD` and `SITEVISION_SIGNING_PASSWORD`
 supply the passwords; `SITEVISION_ACCESS_TOKEN` and `SITEVISION_SESSION_COOKIE`
 pass an OAuth2 token or session cookie for one run.
 
