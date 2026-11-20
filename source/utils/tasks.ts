@@ -86,9 +86,21 @@ const emitter = new EventEmitter();
 let tasks: Task[] = [];
 let nextId = 1;
 
+// Every change re-renders the whole shell, and build or npm output can bring
+// thousands of log lines a second, so log lines are batched into one change
+// per LOG_NOTIFY_MS. Status and phase changes still show at once.
+const LOG_NOTIFY_MS = 50;
+let pendingNotify: NodeJS.Timeout | undefined;
+
 function notify() {
+	clearTimeout(pendingNotify);
+	pendingNotify = undefined;
 	tasks = [...tasks];
 	emitter.emit('change');
+}
+
+function notifySoon() {
+	pendingNotify ??= setTimeout(notify, LOG_NOTIFY_MS);
 }
 
 export function getTasks(): Task[] {
@@ -172,7 +184,7 @@ export function createTask(
 			task.lines.splice(0, task.lines.length - MAX_LINES);
 		}
 
-		notify();
+		notifySoon();
 	};
 
 	const finish = (status: TaskStatus, error?: string) => {

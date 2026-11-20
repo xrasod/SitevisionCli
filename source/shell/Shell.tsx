@@ -284,13 +284,6 @@ export function Shell({
 	const ring = single ? matches : [...matches, apps.length];
 	const running = runningTasks();
 
-	// Re-render once a second while something runs so elapsed times move.
-	useEffect(() => {
-		if (running.length === 0) return;
-		const timer = setInterval(tick, 1000);
-		return () => clearInterval(timer);
-	}, [running.length]);
-
 	const reload = useCallback(() => {
 		setApps(current =>
 			current.map(app => {
