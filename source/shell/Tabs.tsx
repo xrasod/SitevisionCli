@@ -10,7 +10,7 @@ import {
 import {checkSitevisionScriptsCompatibility} from '../utils/sitevision-scripts-runner.js';
 import {type Task, type LogLine} from '../utils/tasks.js';
 import {type Executable} from '../utils/sitevision-api.js';
-import {ACCENT, elapsed} from './Frame.js';
+import {ACCENT, Elapsed} from './Frame.js';
 import {type Tab} from './actions.js';
 import {t} from '../utils/i18n.js';
 import {getGlobalSigning} from '../utils/config.js';
@@ -247,7 +247,7 @@ export function Overview({
 						<Text key={task.id} wrap="truncate">
 							<Text dimColor>{time(task.endedAt ?? task.startedAt)} </Text>
 							{STATUS_GLYPH[task.status]} {task.label}{' '}
-							<Text dimColor>{task.error ?? elapsed(task)}</Text>
+							<Text dimColor>{task.error ?? <Elapsed task={task} />}</Text>
 						</Text>
 					))}
 				</Box>
@@ -372,7 +372,7 @@ export function Log({
 			<Text>
 				{STATUS_GLYPH[task.status]} {task.label} {task.appName}{' '}
 				<Text dimColor>
-					{task.phase} · {elapsed(task)}
+					{task.phase} · <Elapsed task={task} />
 					{scroll > 0 ? ` · ↑${scroll}` : t(' · following')}
 				</Text>
 			</Text>

@@ -1,4 +1,4 @@
-import {type ReactNode} from 'react';
+import {type ReactNode, useEffect, useReducer} from 'react';
 import {Box, Text} from 'ink';
 import Spinner from 'ink-spinner';
 import type {ProjectInfo} from '../types/index.js';
@@ -319,7 +319,10 @@ export function Navigator({
 							<Text color={ACCENT}>
 								<Spinner type="dots" />
 							</Text>{' '}
-							{task.label} {task.appName} <Text dimColor>{elapsed(task)}</Text>
+							{task.label} {task.appName}{' '}
+							<Text dimColor>
+								<Elapsed task={task} />
+							</Text>
 						</Text>
 					))}
 				</Box>
@@ -380,6 +383,23 @@ export function elapsed(task: Task): string {
 	const ms = (task.endedAt ?? Date.now()) - task.startedAt;
 	const s = Math.round(ms / 1000);
 	return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+/**
+ * A task's elapsed time, ticking once a second while it runs. Only this
+ * re-renders each second, not the whole shell: dev and watch never end.
+ */
+export function Elapsed({task}: {task: Task}) {
+	const [, tick] = useReducer((n: number) => n + 1, 0);
+	const running = task.endedAt === undefined;
+	useEffect(() => {
+		if (!running) return;
+		const timer = setInterval(tick, 1000);
+		return () => {
+			clearInterval(timer);
+		};
+	}, [running]);
+	return <>{elapsed(task)}</>;
 }
 
 export interface Hint {
